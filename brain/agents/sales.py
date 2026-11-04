@@ -118,7 +118,8 @@ def complaint(s: Session, mail_id: str) -> Draft:
         trips = server.call(s, me, "ts.list_trips", family_id=m.family_id) if m.family_id else []
         trip = complained_trip(trips)
         fam = server.call(s, me, "ts.read_relation", family_id=m.family_id) if m.family_id else {"contact_name": ""}
-        ctx = {"mail": {"subject": mail["subject"], "body": mail["body"]}, "family": {"name": fam["contact_name"]},
+        ctx = {"mail": {"subject": mail["subject"], "body": mail["body"]},
+               "family": {"name": fam["contact_name"], "first_name": (fam["contact_name"] or "").split(" ")[0]},
                "trip": {"destination": DESTINATIONS[trip["destination"]]["nl"], "depart_date": trip["depart_date"],
                         "status": trip["status"]} if trip else None,
                "emergency_line": "+31 20 000 0000 (sandbox)", "specialist": _spec(s, trip) if trip else "Travelnauts"}

@@ -90,7 +90,8 @@ def write_proposal(s: Session, request_id: str) -> Draft:
                 seen.add(h["id"])
                 knowledge.append({"id": h["id"], "title": h["title"], "text": h["body"], "outdated": h["outdated"]})
         ctx = {
-            "family": {"name": fam["contact_name"], "surname": fam["surname"], "adults": fam["adults"], "child_ages": fam["child_ages"],
+            "family": {"name": fam["contact_name"], "first_name": (fam["contact_name"] or "").split(" ")[0],
+                       "surname": fam["surname"], "adults": fam["adults"], "child_ages": fam["child_ages"],
                        "history": fam.get("history", {})},
             "house_rules": __import__("brain.learning", fromlist=["x"]).house_rules(s, tr.get("team_id"), "proposal"),
             "trip": {"destination": d["nl"], "days": tr["days"], "month": tr["depart_month"], "budget_eur": tr["budget_eur"],

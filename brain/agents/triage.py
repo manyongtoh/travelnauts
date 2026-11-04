@@ -138,6 +138,10 @@ def triage_mail(s: Session, mail_id: str) -> dict:
         if res.confidence < 0.6 or res.category == "complaint":
             res, _ = run_step(s, "triage", TriageResult, INSTRUCTIONS, ctx, tier="large", escalated=True)
             escalated = True
+        if res.destination and res.destination not in DESTINATIONS:
+            # a real model often answers with the name ("Sri Lanka", "Bali") instead of our key: translate, never guess
+            from ..knowledge.concepts import destination_in
+            res.destination = destination_in(res.destination)
         team = team_for(s, res.destination)
         out = res.model_dump() | {"team_id": team.id if team else None, "escalated": escalated}
         if not m.family_id and not m.partner_id:  # a partner writing from their own address or domain
