@@ -36,6 +36,10 @@ def approve_draft(s: Session, draft_id: int, by: str, final_body: str | None = N
     if d.kind == "proposal" and tr:
         tr.status = "proposal_sent"
         tr.proposal_sent_at = d.decided_at
+    if d.kind == "change" and tr:
+        tr.status = "proposal_sent"
+        tr.days = d.data.get("days_after", tr.days)
+        tr.proposal_sent_at = d.decided_at
     if d.kind == "partner_request" and d.partner_request_id:
         mark_sent(s, d.partner_request_id, d.decided_at)
     if d.edit_share > HEAVY_REWRITE and tr:
@@ -73,7 +77,7 @@ def teamlead_overview(s: Session) -> dict:
                  if d.kind == "proposal" and r.mail_id]
         out[tid] = {
             "team": name,
-            "open_requests": sum(r.status in ("new", "proposal_draft", "proposal_sent") for r in tr),
+            "open_requests": sum(r.status in ("new", "proposal_draft", "proposal_sent", "change_requested") for r in tr),
             "status": dict(Counter(r.status for r in tr)),
             "proposals_drafted": len(props),
             "proposals_approved": len(decided),

@@ -27,11 +27,12 @@ async function init() {
   app.start();
 }
 function setWho() { const p = people.find(p => p.id === me); $("#av").textContent = initials(p.name); $("#tb-left").textContent = `Team ${TEAMS[p.team_id]}`; }
+const kids = n => `${n} ${n === 1 ? "child" : "children"}`;
 const myName = () => people.find(p => p.id === me).name;
 
 async function loadReqs() {
   reqs = await api(`/api/requests?specialist=${me}`);
-  const waiting = reqs.filter(r => r.status === "new" || r.status === "proposal_draft");
+  const waiting = reqs.filter(r => ["new", "proposal_draft", "change_requested"].includes(r.status));
   badge("today", waiting.length);
   return waiting;
 }
@@ -41,7 +42,7 @@ function itemHtml(r) {
   return `<li><button class="ditem" data-id="${r.id}" aria-current="${r.id === current}">
     <span class="label ${cls}">${esc(lbl)}</span>
     <span class="fam">Family ${esc(r.family.split(" ").slice(-1)[0])} · ${esc(r.destination_name)}</span>
-    <span class="why">${r.days} days, ${r.adults} ${r.adults === 1 ? "adult" : "adults"} and ${r.child_ages.length} children (${r.child_ages.join(", ")}), ${esc(r.depart_month)}</span>
+    <span class="why">${r.days} days, ${r.adults} ${r.adults === 1 ? "adult" : "adults"} and ${kids(r.child_ages.length)} (${r.child_ages.join(", ")}), ${esc(r.depart_month)}</span>
   </button></li>`;
 }
 
@@ -82,7 +83,7 @@ function bindList() { $$(".ditem").forEach(b => b.onclick = () => openReq(b.data
 function tags(q, f, triage) {
   const t = [];
   if (triage && triage.urgent) t.push(["Urgent", "terra"]); else t.push(["Normal priority", "sea"]);
-  t.push([q.destination_name, "sea"], [`${q.days} days`, ""], [`${f.adults} ${f.adults === 1 ? "adult" : "adults"}, ${f.child_ages.length} children (${f.child_ages.join(", ")})`, ""]);
+  t.push([q.destination_name, "sea"], [`${q.days} days`, ""], [`${f.adults} ${f.adults === 1 ? "adult" : "adults"}, ${kids(f.child_ages.length)} (${f.child_ages.join(", ")})`, ""]);
   if (q.budget_eur) t.push([`Budget ${eur(q.budget_eur)}`, ""]);
   t.push([q.depart_month, ""]);
   (q.wishes || []).forEach(w => t.push([w, ""]));
@@ -90,13 +91,17 @@ function tags(q, f, triage) {
 }
 
 function draftHtml(d) {
-  const kindLabel = {proposal: "Draft travel proposal", followup: "Draft follow-up", galileo: "Galileo commands", answer: "Draft answer"}[d.kind] || d.kind;
+  const kindLabel = {proposal: "Draft travel proposal", change: "Draft reply with the changed proposal", followup: "Draft follow-up", galileo: "Galileo commands", answer: "Draft answer"}[d.kind] || d.kind;
   const price = d.data && d.data.price, route = d.data && d.data.route;
   const warns = [...((price && price.warnings) || []), ...((d.data && d.data.warnings) || [])];
   const approveLabel = d.kind === "galileo" ? "Checked, I will run these in Galileo" : "Approve and send";
   return `
-    ${route ? `<p class="label sect">Draft itinerary · ${route.length} stops</p><div class="concept"><table class="itin">${route.map(r =>
-      `<tr><td><b>${esc(r.stop)}</b></td><td class="n">${r.nights} ${r.nights === 1 ? "night" : "nights"}</td><td>${esc(r.hotel)}<br><span style="color:var(--muted)">${esc((r.activities || []).join(", "))}</span></td></tr>`).join("")}</table></div>` : ""}
+    ${d.kind === "change" ? `<div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:18px 0 0">
+      <div class="kpi"><span class="label">Applied</span><b>${d.data.applied.length}</b><p class="sub">${esc(d.data.applied.map(o => o.op.replace("_", " ") + " " + (o.stop || "")).join(", ") || "nothing automatic")}</p></div>
+      <div class="kpi ${d.data.manual.length ? "hot" : ""}"><span class="label">For you</span><b>${d.data.manual.length}</b><p class="sub">${esc(d.data.manual.map(o => o.note || o.op.replace("_", " ")).join(", ") || "nothing")}</p></div>
+      <div class="kpi"><span class="label">Price</span><b>${eur(d.data.price.sell_eur)}</b><p class="sub">was ${eur(d.data.price_before.sell_eur)} · ${d.data.days_before} → ${d.data.days_after} days</p></div></div>` : ""}
+    ${route ? `<p class="label sect">${d.kind === "change" ? "Changed itinerary" : "Draft itinerary"} · ${route.length} stops</p><div class="concept"><table class="itin">${route.map(r =>
+      `<tr><td><b>${esc(r.stop)}</b></td><td class="n">${r.nights} ${r.nights === 1 ? "night" : "nights"}${(() => { if (d.kind !== "change") return ""; const b = d.data.route_before.find(x => x.stop === r.stop); const delta = r.nights - (b ? b.nights : 0); return delta ? ` <span class="pchip ${delta > 0 ? "sea" : "terra"}">${delta > 0 ? "+" : ""}${delta}</span>` : ""; })()}</td><td>${esc(r.hotel)}<br><span style="color:var(--muted)">${esc((r.activities || []).join(", "))}</span></td></tr>`).join("")}</table></div>` : ""}
     ${price ? `<p class="label sect">Calculation · ${price.persons} persons</p><details class="concept calc"><summary><span>Total for the family${price.warnings.length ? ` · <span style="color:var(--terra-ink)">${price.warnings.length} to check</span>` : ""}</span><span><b>${eur(price.sell_eur)}</b> <span style="color:var(--muted)">· margin ${eur(price.margin_eur)} · show lines</span></span></summary><table class="itin">${price.lines.map(l =>
       `<tr><td>${esc(l.name)}${l.valid ? "" : ` <span class="pchip terra">price expired</span>`}</td><td class="n">× ${l.qty}</td><td class="num">${eur(l.cost)}</td><td class="num">${eur(l.sell)}</td></tr>`).join("")}
       <tr class="tot"><td>Total</td><td></td><td class="num">${eur(price.cost_eur)}</td><td class="num">${eur(price.sell_eur)}</td></tr>
@@ -119,16 +124,19 @@ async function openReq(id) {
   $$(".ditem").forEach(b => b.setAttribute("aria-current", b.dataset.id === id));
   const r = await api(`/api/requests/${id}`);
   const q = r.request, f = r.family;
-  const latest = r.drafts.filter(d => d.kind === "proposal").slice(-1)[0];
+  const latest = r.drafts.filter(d => d.kind === "proposal" || d.kind === "change").slice(-1)[0];
+  const pending = (r.changes || []).filter(m => m.status === "triaged");
   const others = r.drafts.filter(d => d !== latest).reverse();
   const [lbl] = REQ_STATUS[q.status] || [q.status];
   $("#detail").innerHTML = `<div class="detail">
     <span class="label">${esc(lbl)} · Team ${esc(TEAMS[q.team_id] || "")}</span>
     <h2 class="d-title">Family ${esc(f.surname)} · ${esc(q.destination_name)}</h2>
-    <p class="d-sum">${f.adults} ${f.adults === 1 ? "adult" : "adults"}, ${f.child_ages.length} children (${f.child_ages.join(" and ")}) · ${q.days} days · ${q.budget_eur ? "budget " + eur(q.budget_eur) : "no budget given"} · ${esc(q.depart_month)}</p>
+    <p class="d-sum">${f.adults} ${f.adults === 1 ? "adult" : "adults"}, ${kids(f.child_ages.length)} (${f.child_ages.join(" and ")}) · ${q.days} days · ${q.budget_eur ? "budget " + eur(q.budget_eur) : "no budget given"} · ${esc(q.depart_month)}</p>
     ${r.mail ? `<p class="label sect">Incoming email</p><div class="concept"><dl class="mailhead"><dt>From</dt><dd>${esc(f.contact_name)}</dd><dt>Subject</dt><dd>${esc(r.mail.subject)}</dd>
       <dt>Received</dt><dd>${esc(new Date(r.mail.received_at).toLocaleString("en-GB", {dateStyle: "medium", timeStyle: "short"}))}</dd></dl><pre class="c-text">${esc(r.mail.body)}</pre></div>
       <p class="label sect">Triage tags</p>${tags(q, f, r.mail.triage)}` : ""}
+    ${pending.map(m => `<p class="label sect hot" style="color:var(--terra-ink)">Change request</p><div class="concept"><dl class="mailhead"><dt>From</dt><dd>${esc(f.contact_name)}</dd><dt>Subject</dt><dd>${esc(m.subject)}</dd></dl>
+      <pre class="c-text">${esc(m.body)}</pre></div><div class="actions"><button class="btn btn-primary btn-lg" onclick="applyChange('${m.id}')">${icon("bolt")} Let the agent apply the change</button></div>`).join("")}
     ${latest ? draftHtml(latest) : `<div class="actions"><button class="btn btn-primary btn-lg" onclick="act('proposal')">${icon("bolt")} Write travel proposal</button></div>`}
     <div class="actions">
       ${latest ? `<button class="btn btn-outline" onclick="act('proposal')">New version</button>` : ""}
@@ -141,7 +149,7 @@ async function openReq(id) {
         <table class="itin">${r.partners.map(p => `<tr><td><b>${esc(p.partner)}</b><br><span style="color:var(--muted)">${esc(p.what)}</span></td>
         <td><span class="status ${p.status === "answered" ? "go" : p.status === "to_send" ? "me" : "wait"}">${esc(p.status.replace("_", " "))}</span></td>
         <td>${p.available === false ? "Not available" : esc(p.note || "")}</td><td class="num">${p.price_eur ? eur(p.price_eur) : ""}</td></tr>`).join("")}</table></div></details>` : ""}
-      ${others.map(d => `<details><summary>${esc({galileo: "Galileo commands", followup: "Follow-up", proposal: "Earlier version", answer: "Answer"}[d.kind] || d.kind)}
+      ${others.map(d => `<details><summary>${esc({galileo: "Galileo commands", followup: "Follow-up", proposal: "Earlier version", change: "Earlier change", answer: "Answer"}[d.kind] || d.kind)}
         <span class="hint">${esc(d.title)} · ${esc(d.status)}</span></summary><div class="inner">${draftHtml(d)}</div></details>`).join("")}
     </div></div>`;
   $$("textarea.c-text").forEach(t => { const fit = () => { t.style.height = "auto"; t.style.height = t.scrollHeight + 4 + "px"; }; t.oninput = fit; fit(); });
@@ -149,6 +157,10 @@ async function openReq(id) {
 
 async function act(kind) {
   try { await post(`/api/requests/${current}/${kind}`); toast(kind === "partners" ? "Partner requests drafted for the back office" : "Draft ready"); openReq(current); loadReqs(); }
+  catch (e) { toast(e.message); }
+}
+async function applyChange(mid) {
+  try { await post(`/api/mails/${mid}/change`); toast("Changed proposal ready to check"); openReq(current); }
   catch (e) { toast(e.message); }
 }
 async function approve(id) {

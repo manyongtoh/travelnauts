@@ -99,7 +99,10 @@ def request_detail(rid: str):
         drafts = [as_dict(d) for d in s.scalars(select(Draft).where(Draft.request_id == rid).order_by(Draft.id)).all()]
         mail = s.get(Mail, r.mail_id) if r.mail_id else None
         return {"request": as_dict(r) | {"destination_name": DESTINATIONS[r.destination]["name"]}, "family": as_dict(f),
-                "drafts": [d for d in drafts if d["kind"] in ("proposal", "followup", "galileo", "answer")],
+                "drafts": [d for d in drafts if d["kind"] in ("proposal", "change", "followup", "galileo", "answer")],
+                "changes": [{k: v for k, v in as_dict(m).items() if k != "truth"} for m in s.scalars(
+                    select(Mail).where(Mail.family_id == r.family_id).order_by(Mail.received_at)).all()
+                    if (m.triage or {}).get("category") == "change" and (m.triage or {}).get("request_id") == rid],
                 "mail": {k: v for k, v in as_dict(mail).items() if k != "truth"} if mail else None,
                 "partners": partner_desk.compare_offers(s, rid)}
 
@@ -108,6 +111,16 @@ def request_detail(rid: str):
 def make_proposal(rid: str):
     with db.session() as s:
         return as_dict(proposal.write_proposal(s, rid))
+
+
+@app.post("/api/mails/{mail_id}/change")
+def apply_change(mail_id: str):
+    from ..agents.change import handle_change
+    with db.session() as s:
+        try:
+            return as_dict(handle_change(s, mail_id))
+        except ValueError as e:
+            raise HTTPException(400, str(e))
 
 
 @app.post("/api/requests/{rid}/galileo")

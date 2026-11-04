@@ -63,7 +63,7 @@ function shell({role, nav, links, who, onNav}) {
 }
 function badge(id, n) { const b = $("#badge-" + id); if (!b) return; b.hidden = !n; b.textContent = n; }
 
-const REQ_STATUS = {new: ["New request", "hot"], proposal_draft: ["Draft ready", "hot"], proposal_sent: ["Proposal sent", ""],
+const REQ_STATUS = {new: ["New request", "hot"], proposal_draft: ["Draft ready", "hot"], change_requested: ["Change requested", "hot"], proposal_sent: ["Proposal sent", ""],
                     booked: ["Booked", "ok"], lost: ["Lost", ""]};
 function sourcesList(sources) {
   const k = (sources || []).filter(s => s.title);

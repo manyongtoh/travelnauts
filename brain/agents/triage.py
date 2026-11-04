@@ -50,7 +50,7 @@ def team_for(s: Session, destination: str | None) -> Team | None:
 
 def least_loaded_specialist(s: Session, team_id: str) -> Employee | None:
     open_count = (select(TripRequest.specialist_id, func.count().label("n"))
-                  .where(TripRequest.status.in_(["new", "proposal_draft", "proposal_sent"]))
+                  .where(TripRequest.status.in_(["new", "proposal_draft", "proposal_sent", "change_requested"]))
                   .group_by(TripRequest.specialist_id).subquery())
     q = (select(Employee).outerjoin(open_count, open_count.c.specialist_id == Employee.id)
          .where(Employee.team_id == team_id, Employee.role == "specialist")
@@ -79,6 +79,22 @@ def triage_mail(s: Session, mail_id: str) -> dict:
             s.add(tr)
             out["request_id"] = tr.id
             out["specialist_id"] = tr.specialist_id
+        if res.category == "change" and m.family_id:
+            from .change import latest_version
+            trips = s.scalars(select(TripRequest).where(TripRequest.family_id == m.family_id)
+                              .order_by(TripRequest.created_at.desc())).all()
+            cands = [t for t in trips if latest_version(s, t.id)]
+            cands.sort(key=lambda t: (t.status not in ("proposal_sent", "change_requested"),
+                                      t.destination != res.destination, -t.created_at.timestamp()))
+            tr = cands[0] if cands else None
+            if len(cands) > 1 and cands[1].status == tr.status and cands[1].destination == tr.destination:
+                out["ambiguous_trip"] = True
+            if tr:
+                out["request_id"] = tr.id
+                out["team_id"] = tr.team_id
+                out["specialist_id"] = tr.specialist_id
+                tr.status = "change_requested"
+                tr.last_customer_contact = m.received_at
         m.triage = out
         m.status = "triaged"
         s.commit()

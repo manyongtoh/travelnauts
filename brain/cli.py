@@ -16,6 +16,8 @@ def main(argv: list[str] | None = None) -> None:
     bn = sub.add_parser("bench", help="run the test bench (rebuilds the database)")
     bn.add_argument("--seed", type=int, default=None)
     sub.add_parser("triage", help="triage all new mail")
+    ig = sub.add_parser("ingest", help="load a TravelSpirit export through the anonymiser (anonymised stage)")
+    ig.add_argument("path")
     ak = sub.add_parser("ask", help="ask the brain a question")
     ak.add_argument("question")
     a = p.parse_args(argv)
@@ -37,6 +39,11 @@ def main(argv: list[str] | None = None) -> None:
         with db.session() as s:
             for r in triage_inbox(s):
                 print(r["category"], r.get("destination"), r.get("team_id"), r["summary"])
+    elif a.cmd == "ingest":
+        from . import db
+        from .ingest import ingest
+        db.create_all()
+        print(json.dumps(ingest(a.path), indent=2))
     elif a.cmd == "ask":
         from . import db
         from .agents.knowledge_desk import ask

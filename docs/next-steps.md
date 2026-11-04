@@ -21,8 +21,9 @@ The proposal's route is synthetic, then anonymised, then live. This sandbox is t
 2. **Postgres and vector search.** The tables are written for Postgres too (docker compose), but not yet
    tested against a Postgres server. Then replace the
    TF-IDF search in `knowledge/store.py` with embeddings in pgvector behind the same `search()`.
-3. **Anonymiser.** Scrub names, mails, phone numbers, IBANs and passport numbers before anything from
-   TravelSpirit enters the brain, with a check that fails closed.
+3. **Anonymiser: built.** `brain ingest` loads a TravelSpirit export through it. Before the first real
+   export, test it on a sample of 200 real mails with a person checking the output, and extend the
+   patterns for anything it misses.
 4. **Measurement.** Baseline the minutes per request with the pilot group before go-live, then compare.
    The edit share per draft and the gap list are already recorded.
 5. **Azure.** Container on Azure, Entra ID login for the screens, secrets in Key Vault, logs to the

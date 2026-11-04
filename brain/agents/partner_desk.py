@@ -34,8 +34,8 @@ CHASE_INSTRUCTIONS = (
 def plan_partner_requests(s: Session, request_id: str) -> list[PartnerRequest]:
     """Open one request per partner needed: the local agent plus every hotel on the route."""
     tr = s.get(TripRequest, request_id)
-    proposal = s.scalars(select(Draft).where(Draft.request_id == request_id, Draft.kind == "proposal")
-                         .order_by(Draft.id.desc())).first()
+    from .change import latest_version
+    proposal = latest_version(s, request_id)
     if proposal is None:
         raise ValueError(f"No proposal for {request_id}")
     route = proposal.data["route"]
@@ -64,7 +64,8 @@ def draft_request_mail(s: Session, partner_request_id: int) -> Draft:
     tr = s.get(TripRequest, pr.request_id)
     fam = s.get(Family, tr.family_id)
     partner = s.get(Partner, pr.partner_id)
-    proposal = s.scalars(select(Draft).where(Draft.request_id == tr.id, Draft.kind == "proposal").order_by(Draft.id.desc())).first()
+    from .change import latest_version
+    proposal = latest_version(s, tr.id)
     nights = next((r["nights"] for r in (proposal.data["route"] if proposal else []) if r["hotel"] == partner.name), None)
     with audit(s, "partner_desk", f"{tr.id}/{partner.id}", "request") as box:
         ctx = {"partner": {"name": partner.name, "kind": partner.kind}, "reference": f"TN-{tr.id.upper()}",

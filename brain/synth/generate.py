@@ -5,6 +5,8 @@ from __future__ import annotations
 import random
 from datetime import date, datetime, timedelta
 
+from sqlalchemy import select
+
 from .. import db
 from ..db import (AgentRun, Draft, Employee, Family, KnowledgeGap, KnowledgeItem, Mail, Partner, PartnerRequest,
                   PastProposal, PriceItem, Team, TripRequest)
@@ -65,7 +67,7 @@ def past_proposal_text(dest: str, route: list[dict], party: str, rng: random.Ran
     return "\n".join(lines)
 
 
-def build(seed: int = 42, n_families: int = 200) -> dict:
+def build(seed: int = 42, n_families: int = 200, hard: bool = True) -> dict:
     rng = random.Random(seed)
     today = datetime.utcnow().replace(hour=9, minute=0, second=0, microsecond=0)
     counts: dict[str, int] = {}
@@ -271,16 +273,7 @@ def build(seed: int = 42, n_families: int = 200) -> dict:
                  body=f"Beste mensen,\n\n{q}\n\nAlvast bedankt, {fam.contact_name}", family_id=fam.id,
                  truth={"category": "question", "destination": dest, "knowledge_id": None, "team": team_for(dest)})
 
-        # Changes and complaints on existing trips
-        for i in range(12):
-            fam = rng.choice(families)
-            dest = rng.choice(list(DESTINATIONS))
-            mail(received_at=today - timedelta(hours=rng.randint(1, 60)), sender=fam.email, subject="Wijziging in ons voorstel",
-                 body=rng.choice(["Hoi,\n\nKunnen we de route in het voorstel wijzigen en twee nachten langer aan het strand blijven?",
-                                  "Hallo,\n\nWe willen graag een dag later vertrekken. Kan dat nog in het voorstel?",
-                                  "Beste,\n\nIn het voorstel staat een binnenlandse vlucht. Kunnen we in plaats daarvan met de trein?"])
-                 + f"\n\nGroet, {fam.contact_name}", family_id=fam.id,
-                 truth={"category": "change", "destination": dest, "team": team_for(dest)})
+        # Complaints (change requests are added below, linked to trips in progress)
         for i in range(5):
             fam = rng.choice(families)
             dest = rng.choice(list(DESTINATIONS))
@@ -298,8 +291,7 @@ def build(seed: int = 42, n_families: int = 200) -> dict:
 
         # Trips already in progress, for the follow-up agent and the partner desk
         trips = []
-        for i in range(30):
-            fam = rng.choice(families)
+        for i, fam in enumerate(rng.sample(families, 30)):
             dest = rng.choice(list(DESTINATIONS))
             t = team_for(dest)
             sent = today - timedelta(days=rng.randint(1, 12))
@@ -328,6 +320,60 @@ def build(seed: int = 42, n_families: int = 200) -> dict:
                                      what="Room availability and price" if p.kind == "hotel" else "Transfers and excursions",
                                      status=st, sent_at=sent_at, answered_at=today if st == "answered" else None,
                                      chased_at=today - timedelta(days=1) if st == "chased" else None, offer=offer))
+        # Earlier proposals for trips already sent, and change requests on some of them
+        from ..pricing import calculate
+        fam_by_id = {f.id: f for f in families}
+        spec_name = {e.id: e.name for e in employees}
+        sent_trips = []
+        for tr in trips:
+            if tr.status not in ("proposal_sent", "booked"):
+                continue
+            fam = fam_by_id[tr.family_id]
+            route = route_for(rng, tr.destination, tr.days)
+            youngest = min(fam.child_ages) if fam.child_ages else 18
+            for r in route:
+                stop = next(st for st in DESTINATIONS[tr.destination]["stops"] if st[0] == r["stop"])
+                acts = [a for a in stop[3] if not ("vanaf" in a and int("".join(c for c in a.split("vanaf")[1] if c.isdigit()) or 0) > youngest)]
+                r["activities"] = acts[:1]
+            price = calculate(s, tr.destination, route, fam.adults, fam.child_ages, [a for r in route for a in r["activities"]]).as_dict()
+            s.add(Draft(kind="proposal", request_id=tr.id, title=f"Jullie reis naar {DESTINATIONS[tr.destination]['nl']}",
+                        body=past_proposal_text(tr.destination, route, "jullie kinderen", rng), data={"route": route, "price": price},
+                        sources=[], status="approved", final_body=None, edit_share=round(rng.uniform(0.04, 0.45), 3),
+                        created_at=tr.proposal_sent_at - timedelta(hours=20), decided_at=tr.proposal_sent_at,
+                        decided_by=spec_name.get(tr.specialist_id)))
+            if tr.status == "proposal_sent":
+                sent_trips.append((tr, fam, route))
+        n_before = len(mails)
+        used = rng.sample(sent_trips, min(10, len(sent_trips)))
+        for tr, fam, route in used:
+            mid_stops = [r["stop"] for r in route[1:-1]] or [route[0]["stop"]]
+            kind = rng.choice(["extend_beach", "extend_stop", "shorten", "skip", "dates", "train"])
+            if kind == "extend_beach":
+                txt, ops = "Kunnen we twee nachten langer aan het strand blijven?", [{"op": "extend_stop", "stop": route[-1]["stop"], "nights": 2}]
+            elif kind == "extend_stop":
+                st = rng.choice(mid_stops)
+                txt, ops = f"Het voorstel ziet er mooi uit. Kunnen we een nacht langer in {st} blijven?", [{"op": "extend_stop", "stop": st, "nights": 1}]
+            elif kind == "shorten":
+                st = max(route, key=lambda r: r["nights"])["stop"]
+                txt, ops = f"Kunnen we een nacht korter in {st}? Dan komen we beter uit met school.", [{"op": "shorten_stop", "stop": st, "nights": 1}]
+            elif kind == "skip" and len(route) > 2:
+                st = rng.choice(mid_stops)
+                txt, ops = f"We twijfelen over {st}. Kunnen we {st} overslaan?", [{"op": "remove_stop", "stop": st, "nights": 0}]
+            elif kind == "dates":
+                txt, ops = "We willen graag een dag later vertrekken. Kan dat nog?", [{"op": "shift_dates", "stop": None, "nights": 0}]
+            else:
+                txt, ops = "In het voorstel staat een binnenlandse vlucht. Kunnen we in plaats daarvan met de trein?", [{"op": "swap_transport", "stop": None, "nights": 0}]
+            mail(received_at=today - timedelta(hours=rng.randint(1, 20)), sender=fam.email, subject="Wijziging in ons voorstel",
+                 body=f"Hoi,\n\n{txt}\n\nGroet, {fam.contact_name}", family_id=fam.id,
+                 truth={"category": "change", "destination": tr.destination, "team": tr.team_id, "request_id": tr.id, "ops": ops})
+        if hard:
+            from .hard import add_hard_mails
+            s.flush()
+            spare = [t for t in sent_trips if t not in used] + [t for t in used]
+            prs = list(s.scalars(select(PartnerRequest).where(PartnerRequest.status.in_(["waiting", "chased"]))).all())
+            add_hard_mails(rng, families, spare, prs, {p.id: p for v in partners.values() for p in v} | {air.id: air}, mail, today)
+        s.add_all(mails[n_before:])
+        counts["mails"] = len(mails)
         counts["trips"] = len(trips)
         counts["partner_requests"] = pr_n
         s.commit()

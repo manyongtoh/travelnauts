@@ -12,7 +12,7 @@ def world(tmp_path):
     from brain import db
     from brain.synth.generate import build
     db.reset_engine(f"sqlite:///{tmp_path / 'test.db'}")
-    build(seed=7, n_families=60)
+    build(seed=7, n_families=60, hard=False)
     with db.session() as s:
         yield s
     db.reset_engine()

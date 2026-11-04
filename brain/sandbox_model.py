@@ -46,7 +46,7 @@ def triage(ctx: dict) -> dict:
         if nl.lower() in low:
             dest = key
             break
-    if "news@" in m["from"] or "afmelden" in low or "factuur" in low:
+    if "news" in m["from"].lower() or "afmelden" in low or "factuur" in low:
         cat = "other"
     elif any(w in low for w in ["teleurgesteld", "niet tevreden", "echt niet goed", "kwam niet opdagen", "klacht"]):
         cat = "complaint"
@@ -199,7 +199,57 @@ def answer(ctx: dict) -> dict:
     return {"answer": text, "cited": [best["id"]], "confident": True}
 
 
-HANDLERS = {"triage": triage, "proposal": proposal, "followup": followup, "partner_request": partner_request,
+NUMW = {"een": 1, "one": 1, "a": 1, "twee": 2, "two": 2, "drie": 3, "three": 3, "vier": 4, "four": 4}
+
+
+def _num(w: str) -> int:
+    return int(w) if w.isdigit() else NUMW.get(w, 1)
+
+
+def change_plan(ctx: dict) -> dict:
+    text = (ctx["mail"]["subject"] + "\n" + ctx["mail"]["body"]).lower()
+    stops = [r["stop"] for r in ctx["route"]]
+    def stop_in(fragment: str) -> str | None:
+        if any(w in fragment for w in ("strand", "beach", "eiland", "island")):
+            return stops[-1]
+        return next((st for st in stops if st.lower() in fragment), None)
+    ops = []
+    for m in re.finditer(r"(\w+) (?:nacht|nachten|night|nights) (langer|extra|meer|korter|minder|longer|more|less|fewer)([^.?!\n]*)", text):
+        n, how, rest = _num(m.group(1)), m.group(2), m.group(3)
+        st = stop_in(rest) or stop_in(text[max(0, m.start() - 40):m.start()])
+        ops.append({"op": "shorten_stop" if how in ("korter", "minder", "less", "fewer") else "extend_stop", "stop": st, "nights": n})
+    for st in stops:
+        if re.search(rf"{re.escape(st.lower())}[^.?!\n]{{0,20}}(overslaan|skippen|eruit|laten vallen)|(skip|overslaan|zonder) {re.escape(st.lower())}", text):
+            ops.append({"op": "remove_stop", "stop": st, "nights": 0})
+    if re.search(r"(dag|dagen|week) (later|eerder) vertrekken|later vertrekken|eerder vertrekken|leave (a day )?(later|earlier)|other dates", text):
+        ops.append({"op": "shift_dates", "stop": None, "nights": 0, "note": "andere vertrekdatum"})
+    if re.search(r"trein in plaats van|met de trein|by train|instead of (the )?(flight|plane)", text):
+        ops.append({"op": "swap_transport", "stop": None, "nights": 0, "note": "trein in plaats van binnenlandse vlucht"})
+    if not ops:
+        ops.append({"op": "other", "stop": None, "nights": 0, "note": "wens niet automatisch te verwerken"})
+    return {"ops": ops}
+
+
+def change_reply(ctx: dict) -> dict:
+    first = ctx["family"]["name"].split()[0]
+    lines = [f"Beste {first},", "", "Dank voor je bericht. Ik heb het voorstel aangepast:"]
+    for o in ctx["applied"]:
+        lines.append({"extend_stop": f"- {o['nights']} {'nacht' if o['nights'] == 1 else 'nachten'} extra in {o['stop']}",
+                      "shorten_stop": f"- {o['nights']} {'nacht' if o['nights'] == 1 else 'nachten'} minder in {o['stop']}",
+                      "remove_stop": f"- {o['stop']} valt uit de route"}[o["op"]])
+    lines += ["", f"De reis duurt nu {ctx['days_after']} dagen: " + ", ".join(f"{r['stop']} ({r['nights']})" for r in ctx["route_after"]) + "."]
+    before, after = int(ctx["price_before"]), int(ctx["price_after"])
+    fmt = lambda x: f"{x:,}".replace(",", ".")
+    lines.append(f"De nieuwe indicatieprijs is {fmt(after)} euro voor het hele gezin (was {fmt(before)} euro).")
+    if ctx["manual"]:
+        lines.append("Op " + " en ".join(o["note"] or o["op"].replace("_", " ") for o in ctx["manual"]) + " kom ik nog bij je terug.")
+    lines += ["We checken de beschikbaarheid nog bij onze partners.", "", "Hartelijke groet,", ctx["specialist"]]
+    if not ctx["applied"]:
+        lines[2] = "Dank voor je bericht. Ik kijk er persoonlijk naar."
+    return {"subject": f"Aangepast voorstel {ctx['trip']['destination']}", "body": "\n".join(lines)}
+
+
+HANDLERS = {"change_plan": change_plan, "change_reply": change_reply, "triage": triage, "proposal": proposal, "followup": followup, "partner_request": partner_request,
             "partner_chase": partner_chase, "galileo": galileo, "answer": answer}
 
 
