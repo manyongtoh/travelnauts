@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Team lead · Company brain</title><link rel="stylesheet" href="brain.css"></head>
+<body>
+<main>
+  <div class="row"><label class="small muted">Team</label><select id="team"></select>
+    <button class="ghost" id="fu">Run follow-up check</button>
+    <span class="small muted">Figures are per team, never per person.</span></div>
+  <div class="tiles" id="tiles"></div>
+  <div class="cols" style="grid-template-columns:1fr 1fr">
+    <div class="card"><h2>Knowledge gaps</h2><div id="gaps"></div></div>
+    <div class="card"><h2>Knowledge to check</h2><div id="review"></div></div>
+  </div>
+  <div class="card"><h2>Follow-ups waiting for approval</h2><div id="followups"></div></div>
+  <div class="card"><h2>Agent activity</h2><div id="audit"></div></div>
+</main>
+<script src="brain.js"></script>
+<script>
+header("Team lead");
+let data;
+async function load() {
+  data = await api("/api/teamlead");
+  const sel = $("#team");
+  if (!sel.options.length) {
+    sel.innerHTML = Object.entries(data.teams).map(([id, t]) => `<option value="${id}">${esc(t.team)}</option>`).join("");
+    sel.onchange = render;
+  }
+  render();
+  const runs = await api("/api/audit?limit=12");
+  $("#audit").innerHTML = `<table><tr><th>Agent</th><th>Subject</th><th>Result</th><th class="num">ms</th><th>Sources</th></tr>${runs.map(a =>
+    `<tr><td>${esc(a.agent)}</td><td>${esc(a.subject)}</td><td class="small">${esc(a.output_summary)}</td><td class="num">${a.ms}</td><td class="num">${a.sources.length}</td></tr>`).join("")}</table>`;
+}
+function render() {
+  const t = data.teams[$("#team").value];
+  const tiles = [["Open requests", t.open_requests], ["Proposals drafted", t.proposals_drafted],
+    ["Proposals approved", t.proposals_approved],
+    ["Avg. edited", t.avg_edit_share == null ? "n/a" : Math.round(t.avg_edit_share * 100) + "%"],
+    ["Mail to first draft", t.avg_minutes_to_first_draft == null ? "n/a" : t.avg_minutes_to_first_draft + " min"],
+    ["Follow-ups due", t.followups_due]];
+  $("#tiles").innerHTML = tiles.map(([l, v]) => `<div class="tile"><div class="v">${esc(v)}</div><div class="l">${esc(l)}</div></div>`).join("");
+  $("#gaps").innerHTML = t.gaps.length ? `<table>${t.gaps.map(g => `<tr><td>${esc(g.question)}</td><td>${chip(g.reason)}</td><td class="num">${g.count}×</td></tr>`).join("")}</table>`
+    : `<p class="muted small">No open gaps for this team. Ask the brain something it cannot answer to see one appear.</p>`;
+  const tid = $("#team").value, mine = k => !k.team_id || k.team_id === tid;
+  $("#followups").innerHTML = t.followups_waiting.length ? `<table>${t.followups_waiting.map(d => `<tr><td>${esc(d.request_id)}</td><td>${esc(d.title)}</td><td class="small muted">${d.days_since} days since proposal</td></tr>`).join("")}</table>`
+    : `<p class="muted small">None for this team. Run the follow-up check.</p>`;
+  $("#review").innerHTML = `<b class="small">Past review date</b><table>${data.review_due.filter(mine).slice(0, 8).map(k => `<tr><td>${esc(k.title)}</td><td class="small muted">${esc(k.review_by)}</td></tr>`).join("")}</table>
+    <b class="small" style="display:block;margin-top:10px">Waiting for approval</b><table>${data.proposed_knowledge.filter(mine).slice(0, 8).map(k =>
+    `<tr><td>${esc(k.title)}</td><td><button class="ghost" onclick="approveK('${k.id}')">Approve</button></td></tr>`).join("")}</table>`;
+}
+async function approveK(id) { await post(`/api/knowledge/${id}/approve`, {by: "Team lead"}); toast("Approved: agents can use it now"); load(); }
+$("#fu").onclick = async () => { const r = await post("/api/jobs/followups"); toast(`${r.length} follow-ups drafted`); load(); };
+load();
+</script>
+</body></html>

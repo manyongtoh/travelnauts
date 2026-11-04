@@ -1,0 +1,23 @@
+# Full local stack: app + Postgres (with pgvector) + Ollama for Gemma.
+# After `docker compose up`, pull the model once:  docker compose exec ollama ollama pull gemma4
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment: {POSTGRES_USER: brain, POSTGRES_PASSWORD: brain, POSTGRES_DB: brain}
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+  ollama:
+    image: ollama/ollama:latest
+    ports: ["11434:11434"]
+    volumes: [ollama:/root/.ollama]
+  app:
+    build: .
+    depends_on: [db, ollama]
+    ports: ["8000:8000"]
+    environment:
+      BRAIN_DATABASE_URL: postgresql+psycopg://brain:brain@db:5432/brain
+      BRAIN_MODEL: ${BRAIN_MODEL:-sandbox}
+      BRAIN_TRIAGE_MODEL: ${BRAIN_TRIAGE_MODEL:-sandbox}
+      BRAIN_MODEL_BASE_URL: http://ollama:11434/v1
+      BRAIN_DATA_STAGE: synthetic
+volumes: {pgdata: {}, ollama: {}}
