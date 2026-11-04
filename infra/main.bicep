@@ -17,10 +17,16 @@ param pgPassword string
 param image string = 'mcr.microsoft.com/k8se/quickstart:latest'
 param entraTenantId string
 param entraClientId string
+@description('Who gets alert mails (outage, audit chain, critical brain alerts). Defaults to the budget contact.')
+param alertEmail string = budgetContact
+@secure()
+@description('Optional Teams incoming webhook for brain alerts. Empty: alerts go by mail only.')
+param alertWebhook string = ''
 
 var name = '${prefix}-${env}'
 var isLive = env == 'live'
 var dataStage = env == 'test' ? 'synthetic' : (env == 'pilot' ? 'anonymised' : 'live')
+var hasHook = !empty(alertWebhook)
 var tsWrite = env == 'live' ? 'drafts' : (env == 'pilot' ? 'off' : 'drafts')
 
 resource logs 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
@@ -149,6 +155,15 @@ var commonEnv = [
   { name: 'BRAIN_DATABASE_URL', secretRef: 'database-url' }
 ]
 
+// Workers run the alert check, so only they get the webhook.
+resource hookSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (hasHook) {
+  parent: kv
+  name: 'alert-webhook'
+  properties: { value: alertWebhook }
+}
+var hookSecretRef = hasHook ? [{ name: 'alert-webhook', keyVaultUrl: '${kv.properties.vaultUri}secrets/alert-webhook', identity: idWorker.id }] : []
+var workerEnv = concat(commonEnv, hasHook ? [{ name: 'BRAIN_ALERT_WEBHOOK', secretRef: 'alert-webhook' }] : [])
+
 resource api 'Microsoft.App/containerApps@2024-03-01' = {
   name: 'ca-${name}-api'
   location: location
@@ -196,17 +211,17 @@ resource drain 'Microsoft.App/jobs@2024-03-01' = {
       replicaTimeout: 1800
       replicaRetryLimit: 1
       registries: [{ server: acr.properties.loginServer, identity: idWorker.id }]
-      secrets: [
+      secrets: concat([
         { name: 'database-url', keyVaultUrl: '${kv.properties.vaultUri}secrets/database-url', identity: idWorker.id }
         { name: 'database-conn', keyVaultUrl: '${kv.properties.vaultUri}secrets/database-conn', identity: idWorker.id }
-      ]
+      ], hookSecretRef)
     }
     template: {
-      containers: [{ name: 'worker', image: image, env: commonEnv, resources: { cpu: json('0.5'), memory: '1Gi' }
+      containers: [{ name: 'worker', image: image, env: workerEnv, resources: { cpu: json('0.5'), memory: '1Gi' }
         command: ['brain', 'worker', '--drain'] }]
     }
   }
-  dependsOn: [kvRoles, acrRoles, pgSecret, pgConn]
+  dependsOn: [kvRoles, acrRoles, pgSecret, pgConn, hookSecret]
 }
 
 resource pgConn 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
@@ -227,14 +242,14 @@ resource worker 'Microsoft.App/jobs@2024-03-01' = {
       replicaTimeout: 600
       replicaRetryLimit: 1
       registries: [{ server: acr.properties.loginServer, identity: idWorker.id }]
-      secrets: [{ name: 'database-url', keyVaultUrl: '${kv.properties.vaultUri}secrets/database-url', identity: idWorker.id }]
+      secrets: concat([{ name: 'database-url', keyVaultUrl: '${kv.properties.vaultUri}secrets/database-url', identity: idWorker.id }], hookSecretRef)
     }
     template: {
-      containers: [{ name: 'worker', image: image, env: commonEnv, resources: { cpu: json('0.5'), memory: '1Gi' }
+      containers: [{ name: 'worker', image: image, env: workerEnv, resources: { cpu: json('0.5'), memory: '1Gi' }
         command: ['brain', 'worker', '--once'] }]
     }
   }
-  dependsOn: [kvRoles, acrRoles, pgSecret]
+  dependsOn: [kvRoles, acrRoles, pgSecret, hookSecret]
 }
 
 resource budget 'Microsoft.Consumption/budgets@2023-05-01' = {
@@ -248,6 +263,126 @@ resource budget 'Microsoft.Consumption/budgets@2023-05-01' = {
       at80: { enabled: true, operator: 'GreaterThan', threshold: 80, contactEmails: [budgetContact] }
       at100: { enabled: true, operator: 'GreaterThan', threshold: 100, contactEmails: [budgetContact] }
     }
+  }
+}
+
+// Alerts outside the brain, so someone hears about it even when the brain itself is down.
+resource ag 'Microsoft.Insights/actionGroups@2023-01-01' = {
+  name: 'ag-${name}'
+  location: 'global'
+  properties: {
+    groupShortName: take('brain${env}', 12)
+    enabled: true
+    emailReceivers: [{ name: 'admin', emailAddress: alertEmail, useCommonAlertSchema: true }]
+  }
+}
+
+// 1. The site answers: /readyz checked every 5 minutes from three European locations.
+resource readyTest 'Microsoft.Insights/webtests@2022-06-15' = {
+  name: 'wt-${name}-ready'
+  location: location
+  tags: { 'hidden-link:${insights.id}': 'Resource' }
+  kind: 'standard'
+  properties: {
+    SyntheticMonitorId: 'wt-${name}-ready'
+    Name: 'readyz ${env}'
+    Enabled: true
+    Frequency: 300
+    Timeout: 30
+    Kind: 'standard'
+    RetryEnabled: true
+    Locations: [{ Id: 'emea-nl-ams-azr' }, { Id: 'emea-gb-db3-azr' }, { Id: 'emea-fr-pra-edge' }]
+    Request: { RequestUrl: 'https://${api.properties.configuration.ingress.fqdn}/readyz', HttpVerb: 'GET', ParseDependentRequests: false }
+    ValidationRules: { ExpectedHttpStatusCode: 200, SSLCheck: true, SSLCertRemainingLifetimeCheck: 7 }
+  }
+}
+
+resource readyAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: 'alert-${name}-ready'
+  location: 'global'
+  properties: {
+    description: 'The brain does not answer, or its database is unreachable (runbook: database restarts).'
+    severity: 1
+    enabled: true
+    scopes: [readyTest.id, insights.id]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT5M'
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.WebtestLocationAvailabilityCriteria'
+      webTestId: readyTest.id
+      componentId: insights.id
+      failedLocationCount: 2
+    }
+    actions: [{ actionGroupId: ag.id }]
+  }
+}
+
+// 2. Critical alerts from the brain's own check, and an alert channel that fails.
+var logAlerts = [
+  {
+    key: 'critical'
+    sev: 1
+    text: 'A critical brain alert (see Maintenance and the runbook).'
+    q: 'ContainerAppConsoleLogs_CL | where Log_s contains "BRAIN_ALERT env=" and Log_s contains "[CRITICAL]"'
+  }
+  {
+    key: 'delivery'
+    sev: 2
+    text: 'The Teams webhook for brain alerts is failing.'
+    q: 'ContainerAppConsoleLogs_CL | where Log_s contains "BRAIN_ALERT_DELIVERY_FAILED"'
+  }
+]
+resource logAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = [for a in logAlerts: {
+  name: 'alert-${name}-${a.key}'
+  location: location
+  properties: {
+    displayName: 'Brain ${a.key} (${env})'
+    description: a.text
+    severity: a.sev
+    enabled: true
+    scopes: [logs.id]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT15M'
+    criteria: {
+      allOf: [
+        {
+          query: a.q
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 0
+          failingPeriods: { numberOfEvaluationPeriods: 1, minFailingPeriodsToAlert: 1 }
+        }
+      ]
+    }
+    actions: { actionGroups: [ag.id] }
+  }
+}]
+
+// 3. Dead man's switch: the check writes a heartbeat every 15 minutes. No heartbeat for 45 minutes means the
+//    scheduler or the workers are down, which the brain cannot report about itself.
+resource heartbeat 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
+  name: 'alert-${name}-heartbeat'
+  location: location
+  properties: {
+    displayName: 'Brain scheduler silent (${env})'
+    description: 'No alert check has run for 45 minutes: restart the worker job (runbook: worker stops).'
+    severity: 1
+    enabled: true
+    scopes: [logs.id]
+    evaluationFrequency: 'PT15M'
+    windowSize: 'PT45M'
+    criteria: {
+      allOf: [
+        {
+          query: 'ContainerAppConsoleLogs_CL | where Log_s contains "BRAIN_ALERT_HEARTBEAT"'
+          timeAggregation: 'Count'
+          operator: 'LessThan'
+          threshold: 1
+          failingPeriods: { numberOfEvaluationPeriods: 1, minFailingPeriodsToAlert: 1 }
+        }
+      ]
+    }
+    actions: { actionGroups: [ag.id] }
   }
 }
 

@@ -4,7 +4,34 @@ For the administrator at Myt (myt-beheer) and, later, Travelnauts' own administr
 tested in the sandbox, either in the two-week simulation (`brain simulate`), the backup drill
 (`scripts/backup_drill.sh`) or the test suite. The column "Tested in" says where.
 
+## Alerts: the system checks itself
+
+You do not have to look for problems: the brain checks every 15 minutes and tells you.
+
+| Alert | Level | Raised when |
+|---|---|---|
+| Audit chain broken | critical | a log row was changed or removed outside the application |
+| Failed jobs | warning, critical from 5 | a job used up its retries |
+| Queue behind | warning, critical from 50 | jobs wait more than 30 minutes |
+| Scheduler stopped | critical | no inbox poll for 30 minutes |
+| Model budget | warning at 80%, critical at 100% | today's model spend |
+| Model errors | warning | over 20% of model calls failed in the last hour |
+| Agent failing often | warning | one agent failed over 30% of its runs in the last hour (not counting budget waits or a model outage, which have their own alert) |
+| Requests without an owner | warning | open requests of someone who is no longer active |
+
+Where they go:
+- **Maintenance screen:** open alerts at the top, with what to do.
+- **Teams:** new and resolved alerts, once each, if `BRAIN_ALERT_WEBHOOK` is set (a Teams incoming webhook, https only).
+- **Mail through Azure Monitor:** every critical alert; the site not answering on `/readyz` from two of three
+  locations; the Teams webhook failing; and no alert check at all for 45 minutes. That last one is the dead
+  man's switch: it fires when the workers themselves are down, which the brain cannot report.
+
+Alerts contain counts, job kinds and ids only, never customer names or mail text. From a terminal:
+`brain check` (exit code 2 critical, 1 warning, 0 none).
+
 ## Every working morning (five minutes)
+
+If there was no alert overnight, this is a quick look.
 
 1. Open **Maintenance**. Check four things:
    - Queue at night was empty, and no job is in `failed`.
@@ -33,7 +60,7 @@ Each incident lists what you see, what the system already does on its own, and w
 - **The system:** switches to the fallback model; if that also fails, the circuit breaker opens and jobs wait.
   No mail is lost: it stays in the queue.
 - **You do:** nothing while the fallback works. If both are down for more than an hour, tell the team leads that
-  drafts are delayed. When it is back, **Retry** on each failed job in **Maintenance**.
+  drafts are delayed. When it is back, **Maintenance > Queue > Retry all failed**.
 - **Tested in:** simulation day 5 (0 failures with the fallback; 13 waiting without it, all recovered after retry).
 
 ### A worker stops or hangs
@@ -82,7 +109,7 @@ Each incident lists what you see, what the system already does on its own, and w
 - **Tested in:** simulation day 13; test `test_an_edited_note_keeps_its_approved_text_until_the_change_is_approved`.
 
 ### The audit chain is broken
-- **You see:** Maintenance or `brain verify` says "audit chain broken at entry N".
+- **You see:** a critical alert, or Maintenance or `brain verify` says "audit chain broken at entry N".
 - **This means:** someone changed or deleted a log row directly in the database. The application cannot do this.
 - **You do:** do not repair it. Export the database (pg_dump), note the time, and tell the Travelnauts privacy
   contact and Myt the same day. Compare with the last backup to see what was changed. Treat it as a possible

@@ -753,6 +753,25 @@ def set_budget(b: Budget, user: Principal = Depends(need("maintenance"))):
         return {"cap_eur": b.cap_eur}
 
 
+@app.get("/api/admin/alerts")
+def open_alerts(user: Principal = Depends(need("maintenance"))):
+    from ..alerts import as_json, checks
+    with db.session() as s:
+        return as_json(checks(s))
+
+
+@app.post("/api/admin/jobs/retry-failed")
+def retry_all_failed(user: Principal = Depends(need("maintenance"))):
+    """After an outage: put every failed job back in the queue in one go. Logged in the audit chain."""
+    from sqlalchemy import update
+    with db.session() as s:
+        n = s.execute(update(Job).where(Job.status == "failed")
+                      .values(status="queued", attempts=0, error=None, run_after=utcnow())).rowcount
+        auditchain.append(s, user.id, "retry_failed_jobs", "job", "all", ref=str(n))
+        s.commit()
+        return {"requeued": n}
+
+
 @app.post("/api/admin/jobs/{jid}/retry")
 def retry_job(jid: int, user: Principal = Depends(need("maintenance"))):
     with db.session() as s:

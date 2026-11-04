@@ -41,6 +41,7 @@ jobs:
           PG_PASSWORD: ${{ secrets.PG_PASSWORD }}
           ENTRA_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           ENTRA_CLIENT_ID: ${{ secrets.ENTRA_API_CLIENT_ID }}
+          BRAIN_ALERT_WEBHOOK: ${{ secrets.BRAIN_ALERT_WEBHOOK }}
         run: |
           az deployment group create -g rg-brain-${{ inputs.env }} \
             --template-file infra/main.bicep --parameters infra/params/${{ inputs.env }}.bicepparam \
@@ -51,3 +52,14 @@ jobs:
           az acr build -r ${REG%%.*} -t brain:${{ github.sha }} .
           az containerapp update -g rg-brain-${{ inputs.env }} -n ca-brain-${{ inputs.env }}-api --image $REG/brain:${{ github.sha }}
           az containerapp job update -g rg-brain-${{ inputs.env }} -n cj-brain-${{ inputs.env }}-worker --image $REG/brain:${{ github.sha }}
+          # the drain workers run the same code; without this they keep the old release
+          az containerapp job update -g rg-brain-${{ inputs.env }} -n cj-brain-${{ inputs.env }}-drain --image $REG/brain:${{ github.sha }}
+      - name: Smoke check, the new release answers
+        run: |
+          URL=$(jq -r .apiUrl.value out.json)
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$URL/readyz" || true)
+            [ "$code" = "200" ] && { echo "ready after $((i*10))s"; exit 0; }
+            sleep 10
+          done
+          echo "release not ready after 5 minutes: roll back with az containerapp revision activate"; exit 1

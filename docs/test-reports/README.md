@@ -7,19 +7,20 @@ each change, so this report can be reproduced with the commands at the bottom.
 
 | Area | Result |
 |---|---|
-| Test suite on SQLite | 116 passed |
-| Test suite on Postgres 16 | 115 passed, 1 skipped (a SQLite-only schema test) |
+| Test suite on SQLite | 127 passed |
+| Test suite on Postgres 16 | 126 passed, 1 skipped (a SQLite-only schema test) |
 | Quality bench (`brain bench --gate`) | all 11 limits met |
 | Security tests | 17 passed (16 API tests, 1 browser test on 7 screens) |
 | Dependency scan (pip-audit) | no known vulnerabilities |
 | Code scan (bandit, medium and high) | no findings |
 | Two weeks of simulated operation on Postgres, with 6 incidents | 0 failed jobs, 0 lost or doubled mails, audit chain ok every day |
+| Alerts during the two weeks | the right alert on each incident that needs a person, none on incidents that heal themselves, none on quiet days |
 | Backup and restore drill | passed: counts and audit chain identical, newest migration runs on the restored data |
 | Load test, 8 workers | 1,613 mails, none handled twice, none left |
 
 ## What the tests found, and what was fixed
 
-Ten problems surfaced. All are fixed and each now has a test, so they cannot come back unnoticed.
+Thirteen problems surfaced. All are fixed and each now has a test, so they cannot come back unnoticed.
 
 | # | Found by | Problem | Fix |
 |---|---|---|---|
@@ -32,6 +33,9 @@ Ten problems surfaced. All are fixed and each now has a test, so they cannot com
 | 7 | Simulation | When the daily model budget ran out, jobs failed for good. | They now wait 15 minutes and try again, without using up their retries. |
 | 8 | Simulation | Open requests of someone who left had no owner and nobody was told. | Admin sees the count when deactivating; team leads get a reassign list. |
 | 9 | Simulation | Editing an approved knowledge note took it offline for agents until re-approval. | Agents keep the approved text; the edit waits for approval as a change. |
+| 11 | Alert simulation | A daily budget of 0 did not count as reached, so the budget alert stayed silent. | A cap of 0 now counts as reached. |
+| 12 | Alert simulation | "Agent failing often" fired during the model outage and the budget stop, repeating the real cause. | Budget waits and pauses are not counted; with a model alert open it is not raised. |
+| 13 | Code scan | The alert webhook would accept any address scheme, such as file:. | Only https (and local http for tests). |
 | 10 | Backup drill | `brain migrate` failed on a database that was built without migrations. | It now adopts such a database only if it matches the code exactly, and otherwise stops without changing anything. |
 
 Two code scan warnings (a fixed temporary folder in the simulation, a table name in a query) were low risk in
@@ -67,14 +71,15 @@ Two simulated weeks on Postgres: 25 family mails a day plus partner replies, sta
 scheduler every hour and the night jobs at 02:00. One incident on six of the days. Full table:
 [operations-simulation.md](operations-simulation.md).
 
-| Day | Incident | Outcome |
-|---|---|---|
-| 3 | A worker dies holding a job | Picked up by another worker within 20 minutes. |
-| 5 | The model is down for three hours | With the fallback: 0 failures. Without: 13 jobs waited, all done after retry. |
-| 7 | The database restarts | Ready again straight away; nothing half saved. |
-| 9 | The daily model budget runs out | 39 jobs waited, 0 failed, all done when the budget was raised. |
-| 11 | A specialist leaves | Access gone at once; 11 requests listed to reassign. |
-| 13 | An approved note is edited | Agents keep the approved text; the edit waits for approval. |
+| Day | Incident | Outcome | Alert raised |
+|---|---|---|---|
+| 3 | A worker dies holding a job | Picked up by another worker within 20 minutes. | none: it healed itself |
+| 5 | The model is down for three hours | With the fallback: 0 failures. Without: jobs waited, all done after retry. | model errors (warning) |
+| 7 | The database restarts | Ready again straight away; nothing half saved. | none from the brain; Azure watches /readyz |
+| 9 | The daily model budget runs out | 42 jobs waited, 0 failed, all done when the budget was raised. | budget (critical) |
+| 11 | A specialist leaves | Access gone at once; 12 requests listed to reassign. | requests without an owner (warning) |
+| 12 | The team lead reassigns them | 12 of 12 reassigned. | the alert clears |
+| 13 | An approved note is edited | Agents keep the approved text; the edit waits for approval. | none: nothing is wrong |
 
 Across all 14 days: 0 failed jobs, the queue empty every night, no mail left untriaged or triaged twice, the
 audit chain intact every day, and the log size stable at about 3,500 rows with 7-day retention.
@@ -101,8 +106,8 @@ broken at entry 201" and exited with an error, so tampering with a backup or the
 
 - **The real model.** All of this ran with the stand-in model. Quality and cost with the real model are measured
   in the first pilot week with the same bench.
-- **Real Azure.** Point-in-time restore, failover, Entra sign-in and KEDA scaling are configured but only
-  testable in Travelnauts' subscription. Repeat the backup drill there before live.
+- **Real Azure.** Point-in-time restore, failover, Entra sign-in, KEDA scaling and the Azure Monitor alerts are
+  configured but only testable in Travelnauts' subscription. CI compiles the templates on every change. Repeat the backup drill there before live.
 - **An outside penetration test.** These tests check what we thought of. Before live, have an independent party
   test the pilot environment.
 - **Real TravelSpirit.** Its behaviour under errors and load is simulated, not measured.

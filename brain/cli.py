@@ -6,6 +6,9 @@ import json
 
 
 def main(argv: list[str] | None = None) -> None:
+    import logging
+    if not logging.getLogger().handlers:  # one line per event on stdout, picked up by Azure Monitor
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     p = argparse.ArgumentParser(prog="brain", description="Travelnauts company brain sandbox (synthetic data only)")
     sub = p.add_subparsers(dest="cmd", required=True)
     sd = sub.add_parser("seed", help="(re)build the synthetic database")
@@ -27,6 +30,7 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("migrate", help="bring the database schema up to date (Alembic)")
     n8 = sub.add_parser("n8n", help="inventory of exported n8n workflows")
     n8.add_argument("paths", nargs="+")
+    sub.add_parser("check", help="the morning check: open alerts (exit 2 critical, 1 warning, 0 none)")
     sub.add_parser("verify", help="row counts, audit chain and schema version (use after a restore)")
     sub.add_parser("envcheck", help="check this environment's configuration (test, pilot, live)")
     sm = sub.add_parser("simulate", help="two weeks of daily operation with incidents (clock fast-forwarded)")
@@ -108,6 +112,16 @@ def main(argv: list[str] | None = None) -> None:
     elif a.cmd == "n8n":
         from .n8n_inventory import main as n8n_main
         n8n_main(a.paths)
+    elif a.cmd == "check":
+        import sys
+        from . import db as _db
+        from .alerts import as_json, checks
+        with _db.session() as s:
+            al = as_json(checks(s))
+        for x in al:
+            print(f"[{x['level'].upper()}] {x['title']}: {x['detail']}\n    {x['action']}")
+        print("no open alerts" if not al else f"{len(al)} open alert(s)")
+        sys.exit(2 if any(x["level"] == "critical" for x in al) else 1 if al else 0)
     elif a.cmd == "verify":
         import sys
         from .ops_verify import verify_database

@@ -203,3 +203,9 @@ details.calc[open] summary{border-bottom:1px solid var(--sand-soft)}
 @media (max-width:760px){.filters{flex-direction:column;align-items:flex-start}.filters .fchips[style]{margin-left:0!important}
   .tb-right .pill{display:none}.row{grid-template-columns:1fr!important;gap:4px}.row-head{display:none}
   .detail{padding:20px 16px}.banner{font-size:10px}.whoami{display:none}.side-links{flex-direction:row}}
+
+.alerts{display:grid;gap:8px;margin-bottom:18px}
+.alert{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border:1px solid var(--sand);border-radius:10px;background:var(--sand-soft)}
+.alert.critical{border-color:var(--terra);background:color-mix(in srgb,var(--terra) 8%,transparent)}
+.alert.warning{border-color:var(--gold)}
+.alert p{margin:2px 0 0;font-size:13px;color:var(--muted)} .alert p.act{color:inherit}

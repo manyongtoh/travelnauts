@@ -43,6 +43,7 @@ brain worker --once           # scheduler tick and one pass (the 5 minute job)
 brain worker --drain          # work the queue until empty (the scaled workers)
 brain loadtest --mails 600 --workers 4
 brain simulate --days 14      # two weeks of operation with incidents, clock fast-forwarded
+brain check                   # open alerts; exit 2 critical, 1 warning, 0 none
 brain verify                  # row counts, audit chain, schema version (daily, and after a restore)
 scripts/backup_drill.sh URL   # backup, restore to a new database, compare, migrate (monthly)
 curl /healthz  /readyz        # liveness and readiness probes
@@ -56,4 +57,4 @@ What to do day to day and in an incident: [runbook.md](runbook.md). Latest resul
 - Search by meaning uses local embeddings; with a large vault, move vectors to pgvector or Azure AI Search.
 - Microsoft sign-in in the screens is written (MSAL) but needs Travelnauts' Entra app registrations to try.
 - The backup drill and the runbook are tested in the sandbox; repeat the drill on Azure point-in-time restore before live, and fill in the contact table in the runbook with Travelnauts.
-- Alerts: the runbook's morning check is manual. Before live, add Azure Monitor alerts on failed jobs, budget at 80% and /readyz.
+- Alerts are built (brain check every 15 minutes, Teams webhook, Azure Monitor mail with a dead man's switch); confirm in the pilot that the mails arrive and agree who receives them.

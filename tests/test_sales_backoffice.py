@@ -1,3 +1,4 @@
+from brain.clock import utcnow
 from datetime import datetime
 from pathlib import Path
 
@@ -51,7 +52,7 @@ def test_complaint_reply_never_promises_money(world):
 
 def test_high_priority_complaint_needs_the_team_lead(world):
     from brain.api.app import app
-    m = Mail(id="cx1", received_at=datetime.utcnow(), sender="x@example.org", subject="!!!",
+    m = Mail(id="cx1", received_at=utcnow(), sender="x@example.org", subject="!!!",
              body="We staan nu op het vliegveld en de transfer is er niet!! Niemand neemt op.\n\nAnouk", family_id="fam001", truth={})
     world.add(m)
     world.commit()

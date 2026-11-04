@@ -1,4 +1,5 @@
 """Stored XSS: hostile text in mails, names and knowledge must never run in a colleague's browser."""
+from brain.clock import utcnow
 import os
 import socket
 import subprocess
@@ -31,14 +32,15 @@ from brain import db
 from brain.db import Mail, Family, KnowledgeItem
 from brain.agents import triage, proposal
 from datetime import datetime, date, timedelta
+from brain.clock import utcnow
 build(seed=5, n_families=40, hard=False)
 P = {PAYLOADS!r}
 with db.session() as s:
     f = s.get(Family, "fam001"); f.contact_name = P[0] + " " + P[1]; f.surname = P[2]
-    s.add(Mail(id="xss1", received_at=datetime.utcnow(), sender="a@example.org", subject=P[1] + " Thailand",
+    s.add(Mail(id="xss1", received_at=utcnow(), sender="a@example.org", subject=P[1] + " Thailand",
                body="Hallo,\\n\\nWij willen in juli naar Thailand, 21 dagen. We zijn met 2 volwassenen en 1 kinderen (6 jaar).\\n" + P[0] + P[1] + P[3],
                family_id="fam001", truth={{}}))
-    s.add(Mail(id="xss2", received_at=datetime.utcnow(), sender="b@example.org", subject=P[2] + P[4], body=" ".join(P),
+    s.add(Mail(id="xss2", received_at=utcnow(), sender="b@example.org", subject=P[2] + P[4], body=" ".join(P),
                family_id="fam002", truth={{}}))  # this one is flagged as suspicious and shown to the team lead
     s.add(KnowledgeItem(id="k-xss", title="Reistijd Thailand " + P[0], body="Beste reistijd Thailand " + " ".join(P), destination="thailand",
                topic="season", owner_id="noor-visser", status="approved", review_by=date.today() + timedelta(days=30)))

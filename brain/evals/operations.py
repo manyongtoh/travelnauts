@@ -58,8 +58,10 @@ def run(days: int = 14, seed: int = 7, mails_per_day: int = 25) -> dict:
     os.environ["BRAIN_RETENTION_DAYS"] = "7"
     report = {"database": "postgres" if "postgresql" in url else "sqlite", "days": []}
     mail_no = 0
+    day_alerts: dict[str, str] = {}
 
     def tick(hour_dt: datetime) -> list[dict]:
+        from .. import alerts
         clock.set_now(hour_dt)
         with db.session() as s:
             jobs.schedule_tick(s)
@@ -69,6 +71,8 @@ def run(days: int = 14, seed: int = 7, mails_per_day: int = 25) -> dict:
                 out += done
                 if not done:
                     break
+            for a in alerts.checks(s):  # the 15-minute check, after this tick's work (ticks here are hourly)
+                day_alerts.setdefault(a.key, a.level)
             return out
 
     def new_mails(s, day: datetime, n: int) -> int:
@@ -213,6 +217,23 @@ def run(days: int = 14, seed: int = 7, mails_per_day: int = 25) -> dict:
                 checks["open_requests_of_leaver"] = s.query(TripRequest).filter(
                     TripRequest.specialist_id == e.id, TripRequest.status.in_(["new", "proposal_draft", "change_requested"])).count()
             events.append(f"{e.name} left; access removed")
+        if n == 11:  # the team lead reassigns the leaver's requests from Team lead > Insight
+            from fastapi.testclient import TestClient
+            from ..api.app import app
+            from ..alerts import OPEN_REQUEST_STATUSES
+            with db.session() as s:
+                gone = {e.id for e in s.scalars(select(Employee).where(Employee.active.is_(False))).all()}
+                todo = s.scalars(select(TripRequest).where(TripRequest.specialist_id.in_(gone),
+                                                           TripRequest.status.in_(OPEN_REQUEST_STATUSES))).all()
+                lead = {e.team_id: e.id for e in s.scalars(select(Employee).where(Employee.role == "team_lead")).all()}
+                pick = {}
+                for e in s.scalars(select(Employee).where(Employee.role == "specialist", Employee.active.is_(True))).all():
+                    pick.setdefault(e.team_id, e.id)
+                todo = [(r.id, r.team_id) for r in todo]
+            c = TestClient(app)
+            ok = sum(c.post(f"/api/requests/{rid}/reassign", json={"specialist_id": pick[t]},
+                            headers={"X-Brain-User": lead[t]}).status_code == 200 for rid, t in todo)
+            events.append(f"team lead reassigned {ok} of {len(todo)} requests")
         if n == 12:  # someone edits the vault
             with db.session() as s:
                 approved = {k.id for k in s.scalars(select(KnowledgeItem).where(KnowledgeItem.status == "approved")).all()}
@@ -251,18 +272,22 @@ def run(days: int = 14, seed: int = 7, mails_per_day: int = 25) -> dict:
                 "drafts_waiting": s.query(Draft).filter(Draft.status == "draft").count(),
                 "rows": {"tool_calls": s.query(ToolCall).count(), "model_calls": s.query(ModelCall).count(), "agent_runs": s.query(AgentRun).count()},
                 "audit_chain_ok": auditchain.verify(s)["ok"],
+                "alerts": dict(day_alerts),
+                "alerts_open_at_night": [a.key for a in __import__("brain.alerts", fromlist=["checks"]).checks(s)],
             })
+        day_alerts.clear()
     clock.reset()
     return report
 
 
 def to_markdown(rep: dict) -> str:
     lines = ["# Two weeks of simulated operation", "", f"Database: {rep['database']}. Stand-in model. Clock fast-forwarded.", "",
-             "| Day | Date | Jobs run | Failed (total) | Queue at night | Untriaged | Triaged twice | Drafts waiting | Log rows | Audit chain | What happened |",
-             "|---|---|---|---|---|---|---|---|---|---|---|"]
+             "| Day | Date | Jobs run | Failed (total) | Queue at night | Untriaged | Triaged twice | Drafts waiting | Log rows | Audit chain | Alerts raised | What happened |",
+             "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for d in rep["days"]:
         ev = "; ".join(d["events"] + [f"{k.replace('_', ' ')}: {v}" for k, v in d["checks"].items()])
         lines.append(f"| {d['day']} | {d['weekday']} {d['date']} | {d['jobs_run']} | {d['failed_jobs_total']} | {d['queued_end_of_day']} | "
                      f"{d['mails_untriaged']} | {d['triaged_twice']} | {d['drafts_waiting']} | {sum(d['rows'].values())} | "
-                     f"{'ok' if d['audit_chain_ok'] else 'BROKEN'} | {ev} |")
+                     f"{'ok' if d['audit_chain_ok'] else 'BROKEN'} | "
+                     f"{', '.join(f'{k} ({v})' for k, v in d.get('alerts', {}).items()) or 'none'} | {ev} |")
     return "\n".join(lines) + "\n"

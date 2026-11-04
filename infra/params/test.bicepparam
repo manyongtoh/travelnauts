@@ -7,3 +7,4 @@ param budgetContact = 'it@travelnauts.example'
 param pgPassword = readEnvironmentVariable('PG_PASSWORD')
 param entraTenantId = readEnvironmentVariable('ENTRA_TENANT_ID', '')
 param entraClientId = readEnvironmentVariable('ENTRA_CLIENT_ID', '')
+param alertWebhook = readEnvironmentVariable('BRAIN_ALERT_WEBHOOK', '')

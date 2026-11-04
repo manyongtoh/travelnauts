@@ -1,0 +1,597 @@
+{
+  "database": "postgres",
+  "days": [
+    {
+      "day": 1,
+      "date": "2026-11-09",
+      "weekday": "Mon",
+      "events": [],
+      "checks": {},
+      "jobs_run": 179,
+      "staff": {
+        "proposals_written": 30,
+        "drafts_approved": 36,
+        "partner_mails_sent": 34
+      },
+      "jobs_by_kind": {
+        "poll_inbox": 10,
+        "chase_partners": 1,
+        "followups": 1,
+        "supplier_watch": 1,
+        "customer_insight": 1,
+        "team_insight": 7,
+        "trip_monitor": 7,
+        "reindex_knowledge": 1,
+        "knowledge_review_reminders": 1,
+        "booking_check": 1,
+        "next_trips": 1,
+        "retention": 1,
+        "alerts": 10,
+        "triage_mail": 130,
+        "complaint": 5,
+        "invoice": 1
+      },
+      "failed_jobs_total": 0,
+      "queued_end_of_day": 0,
+      "mails_untriaged": 0,
+      "triaged_twice": 0,
+      "drafts_waiting": 21,
+      "rows": {
+        "tool_calls": 532,
+        "model_calls": 227,
+        "agent_runs": 239
+      },
+      "audit_chain_ok": true,
+      "alerts": {},
+      "alerts_open_at_night": []
+    },
+    {
+      "day": 2,
+      "date": "2026-11-10",
+      "weekday": "Tue",
+      "events": [],
+      "checks": {},
+      "jobs_run": 101,
+      "staff": {
+        "proposals_written": 30,
+        "drafts_approved": 36,
+        "partner_mails_sent": 5
+      },
+      "jobs_by_kind": {
+        "poll_inbox": 10,
+        "team_insight": 7,
+        "trip_monitor": 7,
+        "alerts": 10,
+        "triage_mail": 42,
+        "partner_reply": 17,
+        "chase_partners": 1,
+        "followups": 1,
+        "supplier_watch": 1,
+        "customer_insight": 1,
+        "reindex_knowledge": 1,
+        "knowledge_review_reminders": 1,
+        "booking_check": 1,
+        "retention": 1
+      },
+      "failed_jobs_total": 0,
+      "queued_end_of_day": 0,
+      "mails_untriaged": 0,
+      "triaged_twice": 0,
+      "drafts_waiting": 16,
+      "rows": {
+        "tool_calls": 940,
+        "model_calls": 322,
+        "agent_runs": 351
+      },
+      "audit_chain_ok": true,
+      "alerts": {},
+      "alerts_open_at_night": []
+    },
+    {
+      "day": 3,
+      "date": "2026-11-11",
+      "weekday": "Wed",
+      "events": [
+        "worker died holding 1 jobs at 09:00"
+      ],
+      "checks": {
+        "jobs_still_stuck_after_5_min": 1,
+        "jobs_stuck_after_20_min": 0
+      },
+      "jobs_run": 87,
+      "staff": {
+        "proposals_written": 30,
+        "drafts_approved": 34,
+        "partner_mails_sent": 0
+      },
+      "jobs_by_kind": {
+        "poll_inbox": 12,
+        "team_insight": 6,
+        "trip_monitor": 6,
+        "alerts": 10,
+        "triage_mail": 35,
+        "partner_reply": 10,
+        "chase_partners": 1,
+        "followups": 1,
+        "supplier_watch": 1,
+        "customer_insight": 1,
+        "reindex_knowledge": 1,
+        "knowledge_review_reminders": 1,
+        "booking_check": 1,
+        "retention": 1
+      },
+      "failed_jobs_total": 0,
+      "queued_end_of_day": 0,
+      "mails_untriaged": 0,
+      "triaged_twice": 0,
+      "drafts_waiting": 12,
+      "rows": {
+        "tool_calls": 1336,
+        "model_calls": 397,
+        "agent_runs": 441
+      },
+      "audit_chain_ok": true,
+      "alerts": {},
+      "alerts_open_at_night": []
+    },
+    {
+      "day": 4,
+      "date": "2026-11-12",
+      "weekday": "Thu",
+      "events": [],
+      "checks": {},
+      "jobs_run": 73,
+      "staff": {
+        "proposals_written": 30,
+        "drafts_approved": 26,
+        "partner_mails_sent": 24
+      },
+      "jobs_by_kind": {
+        "poll_inbox": 10,
+        "team_insight": 7,
+        "trip_monitor": 7,
+        "alerts": 10,
+        "triage_mail": 28,
+        "partner_reply": 3,
+        "chase_partners": 1,
+        "followups": 1,
+        "supplier_watch": 1,
+        "customer_insight": 1,
+        "reindex_knowledge": 1,
+        "knowledge_review_reminders": 1,
+        "booking_check": 1,
+        "retention": 1
+      },
+      "failed_jobs_total": 0,
+      "queued_end_of_day": 0,
+      "mails_untriaged": 0,
+      "triaged_twice": 0,
+      "drafts_waiting": 17,
+      "rows": {
+        "tool_calls": 1721,
+        "model_calls": 483,
+        "agent_runs": 544
+      },
+      "audit_chain_ok": true,
+      "alerts": {},
+      "alerts_open_at_night": []
+    },
+    {
+      "day": 5,
+      "date": "2026-11-13",
+      "weekday": "Fri",
+      "events": [
+        "model down 09:00 to 12:00 (fallback for the first hour only)",
+        "admin retried 0 failed jobs at 12:00"
+      ],
+      "checks": {
+        "failed_jobs_with_fallback": 0,
+        "failed_or_waiting_without_fallback": 15
+      },
+      "jobs_run": 123,
+      "staff": {
+        "proposals_written": 30,
+        "drafts_approved": 28,
+        "partner_mails_sent": 0
+      },
+      "jobs_by_kind": {
+        "poll_inbox": 10,
+        "team_insight": 6,
+        "trip_monitor": 6,
+        "alerts": 10,
+        "triage_mail": 74,
+        "partner_reply": 9,
+        "chase_partners": 1,
+        "followups": 1,
+        "supplier_watch": 1,
+        "customer_insight": 1,
+        "reindex_knowledge": 1,
+        "knowledge_review_reminders": 1,
+        "booking_check": 1,
+        "retention": 1
+      },
+      "failed_jobs_total": 0,
+      "queued_end_of_day": 0,
+      "mails_untriaged": 0,
+      "triaged_twice": 0,
+      "drafts_waiting": 20,
+      "rows": {
+        "tool_calls": 2134,
+        "model_calls": 602,
+        "agent_runs": 672
+      },
+      "audit_chain_ok": true,
+      "alerts": {
+        "model_errors": "warning"
+      },
+      "alerts_open_at_night": []
+    },
+    {
+      "day": 6,
+      "date": "2026-11-14",
+      "weekday": "Sat",
+      "events": [],
+      "checks": {},
+      "jobs_run": 12,
+      "staff": {},
+      "jobs_by_kind": {
+        "poll_inbox": 1,
+        "chase_partners": 1,
+        "followups": 1,
+        "supplier_watch": 1,
+        "customer_insight": 1,
+        "team_insight": 1,
+        "trip_monitor": 1,
+        "reindex_knowledge": 1,
+        "knowledge_review_reminders": 1,
+        "booking_check": 1,
+        "retention": 1,
+        "alerts": 1
+      },
+      "failed_jobs_total": 0,
+      "queued_end_of_day": 0,
+      "mails_untriaged": 0,
+      "triaged_twice": 0,
+      "drafts_waiting": 27,
+      "rows": {
+        "tool_calls": 2152,
+        "model_calls": 609,
+        "agent_runs": 684
+      },
+      "audit_chain_ok": true,
+      "alerts": {},
+      "alerts_open_at_night": []
+    },
+    {
+      "day": 7,
+      "date": "2026-11-15",
+      "weekday": "Sun",
+      "events": [
+        "database restarted at 11:00"
+      ],
+      "checks": {
+        "ready_after_restart": 200
+      },
+      "jobs_run": 12,
+      "staff": {},
+      "jobs_by_kind": {
+        "poll_inbox": 1,
+        "chase_partners": 1,
+        "followups": 1,
+        "supplier_watch": 1,
+        "customer_insight": 1,
+        "team_insight": 1,
+        "trip_monitor": 1,
+        "reindex_knowledge": 1,
+        "knowledge_review_reminders": 1,
+        "booking_check": 1,
+        "retention": 1,
+        "alerts": 1
+      },
+      "failed_jobs_total": 0,
+      "queued_end_of_day": 0,
+      "mails_untriaged": 0,
+      "triaged_twice": 0,
+      "drafts_waiting": 54,
+      "rows": {
+        "tool_calls": 2181,
+        "model_calls": 636,
+        "agent_runs": 716
+      },
+      "audit_chain_ok": true,
+      "alerts": {},
+      "alerts_open_at_night": []
+    },
+    {
+      "day": 8,
+      "date": "2026-11-16",
+      "weekday": "Mon",
+      "events": [],
+      "checks": {},
+      "jobs_run": 70,
+      "staff": {
+        "proposals_written": 30,
+        "drafts_approved": 52,
+        "partner_mails_sent": 19
+      },
+      "jobs_by_kind": {
+        "poll_inbox": 10,
+        "team_insight": 7,
+        "trip_monitor": 7,
+        "alerts": 10,
+        "triage_mail": 30,
+        "partner_reply": 5,
+        "next_trips": 1
+      },
+      "failed_jobs_total": 0,
+      "queued_end_of_day": 0,
+      "mails_untriaged": 0,
+      "triaged_twice": 0,
+      "drafts_waiting": 24,
+      "rows": {
+        "tool_calls": 2629,
+        "model_calls": 712,
+        "agent_runs": 806
+      },
+      "audit_chain_ok": true,
+      "alerts": {},
+      "alerts_open_at_night": []
+    },
+    {
+      "day": 9,
+      "date": "2026-11-17",
+      "weekday": "Tue",
+      "events": [
+        "daily model budget reached at 10:00, raised again at 10:30"
+      ],
+      "checks": {
+        "jobs_waiting_for_budget": 42,
+        "jobs_failed_on_budget": 0
+      },
+      "jobs_run": 134,
+      "staff": {
+        "proposals_written": 30,
+        "drafts_approved": 50,
+        "partner_mails_sent": 0
+      },
+      "jobs_by_kind": {
+        "poll_inbox": 9,
+        "chase_partners": 1,
+        "followups": 2,
+        "supplier_watch": 1,
+        "customer_insight": 1,
+        "team_insight": 7,
+        "trip_monitor": 7,
+        "reindex_knowledge": 1,
+        "knowledge_review_reminders": 1,
+        "booking_check": 1,
+        "retention": 1,
+        "alerts": 9,
+        "triage_mail": 82,
+        "partner_reply": 11
+      },
+      "failed_jobs_total": 0,
+      "queued_end_of_day": 0,
+      "mails_untriaged": 0,
+      "triaged_twice": 0,
+      "drafts_waiting": 30,
+      "rows": {
+        "tool_calls": 2405,
+        "model_calls": 526,
+        "agent_runs": 662
+      },
+      "audit_chain_ok": true,
+      "alerts": {
+        "budget": "critical"
+      },
+      "alerts_open_at_night": []
+    },
+    {
+      "day": 10,
+      "date": "2026-11-18",
+      "weekday": "Wed",
+      "events": [],
+      "checks": {},
+      "jobs_run": 75,
+      "staff": {
+        "proposals_written": 30,
+        "drafts_approved": 43,
+        "partner_mails_sent": 12
+      },
+      "jobs_by_kind": {
+        "poll_inbox": 10,
+        "team_insight": 7,
+        "trip_monitor": 7,
+        "alerts": 10,
+        "triage_mail": 29,
+        "partner_reply": 4,
+        "chase_partners": 1,
+        "followups": 1,
+        "supplier_watch": 1,
+        "customer_insight": 1,
+        "reindex_knowledge": 1,
+        "knowledge_review_reminders": 1,
+        "booking_check": 1,
+        "retention": 1
+      },
+      "failed_jobs_total": 0,
+      "queued_end_of_day": 0,
+      "mails_untriaged": 0,
+      "triaged_twice": 0,
+      "drafts_waiting": 25,
+      "rows": {
+        "tool_calls": 2377,
+        "model_calls": 524,
+        "agent_runs": 664
+      },
+      "audit_chain_ok": true,
+      "alerts": {},
+      "alerts_open_at_night": []
+    },
+    {
+      "day": 11,
+      "date": "2026-11-19",
+      "weekday": "Thu",
+      "events": [
+        "Sanne de Vries left; access removed"
+      ],
+      "checks": {
+        "reassign_list_given_to_admin": 12,
+        "open_requests_of_leaver": 3,
+        "leaver_requests_flagged_by_team_insight": 12
+      },
+      "jobs_run": 78,
+      "staff": {
+        "proposals_written": 30,
+        "drafts_approved": 42,
+        "partner_mails_sent": 5
+      },
+      "jobs_by_kind": {
+        "team_insight": 8,
+        "poll_inbox": 10,
+        "trip_monitor": 7,
+        "alerts": 10,
+        "triage_mail": 30,
+        "partner_reply": 5,
+        "chase_partners": 1,
+        "followups": 1,
+        "supplier_watch": 1,
+        "customer_insight": 1,
+        "reindex_knowledge": 1,
+        "knowledge_review_reminders": 1,
+        "booking_check": 1,
+        "retention": 1
+      },
+      "failed_jobs_total": 0,
+      "queued_end_of_day": 0,
+      "mails_untriaged": 0,
+      "triaged_twice": 0,
+      "drafts_waiting": 27,
+      "rows": {
+        "tool_calls": 2403,
+        "model_calls": 525,
+        "agent_runs": 661
+      },
+      "audit_chain_ok": true,
+      "alerts": {
+        "ownerless": "warning"
+      },
+      "alerts_open_at_night": [
+        "ownerless"
+      ]
+    },
+    {
+      "day": 12,
+      "date": "2026-11-20",
+      "weekday": "Fri",
+      "events": [
+        "team lead reassigned 12 of 12 requests"
+      ],
+      "checks": {},
+      "jobs_run": 75,
+      "staff": {
+        "proposals_written": 30,
+        "drafts_approved": 31,
+        "partner_mails_sent": 1
+      },
+      "jobs_by_kind": {
+        "poll_inbox": 10,
+        "team_insight": 8,
+        "trip_monitor": 8,
+        "alerts": 10,
+        "triage_mail": 28,
+        "partner_reply": 3,
+        "chase_partners": 1,
+        "followups": 1,
+        "supplier_watch": 1,
+        "customer_insight": 1,
+        "reindex_knowledge": 1,
+        "knowledge_review_reminders": 1,
+        "booking_check": 1,
+        "retention": 1
+      },
+      "failed_jobs_total": 0,
+      "queued_end_of_day": 0,
+      "mails_untriaged": 0,
+      "triaged_twice": 0,
+      "drafts_waiting": 27,
+      "rows": {
+        "tool_calls": 2504,
+        "model_calls": 484,
+        "agent_runs": 629
+      },
+      "audit_chain_ok": true,
+      "alerts": {},
+      "alerts_open_at_night": []
+    },
+    {
+      "day": 13,
+      "date": "2026-11-21",
+      "weekday": "Sat",
+      "events": [
+        "note beste-reistijd-costa-rica.md (approved) changed in the vault"
+      ],
+      "checks": {
+        "changed_note_status_after_reindex": "approved, change waiting: True",
+        "changed_note_findable_by_agents": true
+      },
+      "jobs_run": 12,
+      "staff": {},
+      "jobs_by_kind": {
+        "poll_inbox": 1,
+        "chase_partners": 1,
+        "followups": 1,
+        "supplier_watch": 1,
+        "customer_insight": 1,
+        "team_insight": 1,
+        "trip_monitor": 1,
+        "reindex_knowledge": 1,
+        "knowledge_review_reminders": 1,
+        "booking_check": 1,
+        "retention": 1,
+        "alerts": 1
+      },
+      "failed_jobs_total": 0,
+      "queued_end_of_day": 0,
+      "mails_untriaged": 0,
+      "triaged_twice": 0,
+      "drafts_waiting": 51,
+      "rows": {
+        "tool_calls": 2309,
+        "model_calls": 465,
+        "agent_runs": 600
+      },
+      "audit_chain_ok": true,
+      "alerts": {},
+      "alerts_open_at_night": []
+    },
+    {
+      "day": 14,
+      "date": "2026-11-22",
+      "weekday": "Sun",
+      "events": [],
+      "checks": {},
+      "jobs_run": 4,
+      "staff": {},
+      "jobs_by_kind": {
+        "poll_inbox": 1,
+        "team_insight": 1,
+        "trip_monitor": 1,
+        "alerts": 1
+      },
+      "failed_jobs_total": 0,
+      "queued_end_of_day": 0,
+      "mails_untriaged": 0,
+      "triaged_twice": 0,
+      "drafts_waiting": 51,
+      "rows": {
+        "tool_calls": 2323,
+        "model_calls": 465,
+        "agent_runs": 602
+      },
+      "audit_chain_ok": true,
+      "alerts": {},
+      "alerts_open_at_night": []
+    }
+  ]
+}

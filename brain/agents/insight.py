@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
+from ..alerts import OPEN_REQUEST_STATUSES
 from ..db import Setting
 from ..identity import agent
 from ..synth.world import DESTINATIONS
@@ -68,7 +69,7 @@ def team_insight(s: Session) -> dict:
                 "stuck": sorted(stuck, key=lambda x: -x["days"])[:10],
                 # requests whose specialist has left: they need a new owner today
                 "ownerless": [r["id"] for r in rs if r.get("specialist_id") and r["specialist_id"] not in active
-                              and r["status"] in ("new", "proposal_draft", "proposal_sent", "change_requested")],
+                              and r["status"] in OPEN_REQUEST_STATUSES],
             }
         s.merge(Setting(key="report:team_insight", value=report))
         s.commit()

@@ -55,6 +55,7 @@ jobs:
           psql postgresql://brain:brain@localhost:5432/brain -c "create database brain_ops"
           BRAIN_DATABASE_URL=postgresql+psycopg://brain:brain@localhost:5432/brain_ops brain simulate --days 14
           python -c "import json; d=json.load(open('data/ops/simulation.json')); bad=[x for x in d['days'] if x['failed_jobs_total'] or x['mails_untriaged'] or x['triaged_twice'] or not x['audit_chain_ok']]; assert not bad, bad"
+          python -c "import json; d=json.load(open('data/ops/simulation.json')); noisy=[x['day'] for x in d['days'] if not x['events'] and not x['checks'] and x['alerts']]; assert not noisy, f'alerts on quiet days: {noisy}'"
           scripts/backup_drill.sh postgresql://brain:brain@localhost:5432/brain_ops
           cat data/ops/simulation.md >> "$GITHUB_STEP_SUMMARY"
   security:
@@ -72,3 +73,8 @@ jobs:
           pip-audit -r req.txt
       - name: No medium or high findings in our code
         run: bandit -q -r brain -ll
+      - name: Azure templates compile (infrastructure and alerts)
+        run: |
+          az bicep install
+          az bicep build --file infra/main.bicep --stdout > /dev/null
+          for p in infra/params/*.bicepparam; do az bicep build-params --file "$p" --stdout > /dev/null; done

@@ -13,14 +13,19 @@ const app = shell({
 });
 $("#tb-left").textContent = "Admin · no customer content";
 let H = null;
-const load = async () => (H = await api("/api/admin/health"));
+let A = [];
+const load = async () => { [H, A] = await Promise.all([api("/api/admin/health"), api("/api/admin/alerts")]); return H; };
+const alertsBox = () => A.length ? `<div class="alerts">${A.map(a => `<div class="alert ${a.level}">
+    <span class="status ${a.level === "critical" ? "me" : "wait"}">${esc(a.level)}</span>
+    <div><b>${esc(a.title)}</b><p>${esc(a.detail)}</p><p class="act">${esc(a.action)}</p></div></div>`).join("")}</div>`
+  : `<div class="alerts"><div class="alert clear"><span class="status go">ok</span><div><b>No open alerts</b><p>The morning check runs every 15 minutes.</p></div></div></div>`;
 const okDot = ok => `<span class="status ${ok ? "go" : "me"}">${ok ? "ok" : "problem"}</span>`;
 
 async function viewHealth() {
   await load();
   const b = H.budget, q = H.queue;
   badge("queue", q.failed);
-  $("#view").innerHTML = `<div class="hello"><span class="label">${esc(today())} · release ${esc(H.release.version)} · ${esc(H.release.data_stage)} data</span><h1>Maintenance</h1>
+  $("#view").innerHTML = alertsBox() + `<div class="hello"><span class="label">${esc(today())} · release ${esc(H.release.version)} · ${esc(H.release.data_stage)} data</span><h1>Maintenance</h1>
     <div class="strip"><span class="stat">${icon("bolt")}<b>${Object.values(H.agents).reduce((a, x) => a + x.runs, 0)}</b> agent runs, 24 h</span>
     <span class="stat">${icon("alert")}<b class="${Object.values(H.agents).some(x => x.errors) ? "hot" : ""}">${Object.values(H.agents).reduce((a, x) => a + x.errors, 0)}</b> errors</span>
     <span class="stat">${icon("clock")}<b>${q.queued}</b> queued, <b class="${q.failed ? "hot" : ""}">${q.failed}</b> failed</span>
@@ -57,13 +62,15 @@ async function viewQueue() {
   await load();
   const cols = "grid-template-columns:80px 180px minmax(0,1fr) 110px";
   $("#view").innerHTML = `<div class="vhead"><span class="label">Work queue</span><h1>Queue</h1><p>${Object.entries(H.queue).map(([k, v]) => `${v} ${k}`).join(" · ")}</p></div>
-    <p class="label sect">Failed jobs</p>
+    <p class="label sect">Failed jobs ${H.failed_jobs.length ? `<button class="btn btn-sm" id="retry-all">Retry all failed</button>` : ""}</p>
     <ul class="list"><li class="row row-head label" style="${cols}"><span>Job</span><span>Kind</span><span>Error</span><span></span></li>
     ${H.failed_jobs.map(j => `<li class="row" style="${cols}"><span class="mono">#${j.id}</span><b>${esc(j.kind)}</b><span class="mono">${esc(j.error)}</span>
       <span><button class="btn btn-outline btn-sm" data-retry="${j.id}">Retry</button></span></li>`).join("") || `<li class="empty"><b>No failed jobs</b></li>`}</ul>
     <p class="label sect">Stuck for more than an hour</p>
     <ul class="list">${H.stuck_jobs.map(j => `<li class="row" style="${cols}"><span class="mono">#${j.id}</span><b>${esc(j.kind)}</b><span>${esc(j.status)}</span><span></span></li>`).join("") || `<li class="empty"><b>Nothing stuck</b></li>`}</ul>`;
   $$("[data-retry]").forEach(b => b.onclick = async () => { await post(`/api/admin/jobs/${b.dataset.retry}/retry`); toast("Queued again"); viewQueue(); });
+  const ra = $("#retry-all");
+  if (ra) ra.onclick = async () => { const r = await post("/api/admin/jobs/retry-failed"); toast(`${r.requeued} job(s) queued again`); viewQueue(); };
 }
 
 async function viewEvals() {
