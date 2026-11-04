@@ -7,7 +7,7 @@ each change, so this report can be reproduced with the commands at the bottom.
 
 | Area | Result |
 |---|---|
-| Test suite on SQLite | 174 passed |
+| Test suite on SQLite | 185 passed |
 | Test suite on Postgres 16 | 173 passed, 1 skipped (a SQLite-only schema test) |
 | Quality bench (`brain bench --gate`) | all 11 limits met |
 | Security tests | 17 passed (16 API tests, 1 browser test on 7 screens) |
@@ -22,7 +22,7 @@ each change, so this report can be reproduced with the commands at the bottom.
 
 ## What the tests found, and what was fixed
 
-Forty-one problems surfaced. All are fixed and each now has a test, so they cannot come back unnoticed.
+Forty-eight problems surfaced. All are fixed and each now has a test, so they cannot come back unnoticed.
 
 | # | Found by | Problem | Fix |
 |---|---|---|---|
@@ -66,6 +66,13 @@ Forty-one problems surfaced. All are fixed and each now has a test, so they cann
 | 39 | Back office journey | The same invoice sent twice was not caught. | Same number, or same partner, trip and amount: "Duplicate", resolving it needs a reason. |
 | 40 | Back office journey | With several partners on a trip, an invoice could be checked against another partner's offer; an invoice for a trip that is not booked was not flagged. | Only a sure match; "Trip not booked" when it is not. |
 | 41 | Back office journey | A hotel that said no kept the booking file incomplete, even after another hotel was chosen. | Only partners on the latest route count. |
+| 42 | Learning | The brain learned its own "onder voorbehoud" line as a specialist habit. | What the brain adds itself is remembered and never learned. |
+| 43 | Learning | A learned example could carry a child's name, phone number or address into another family's proposal. | Learned text goes through the same anonymiser as real data; when unsure it is not learned. |
+| 44 | Learning | The nightly vault read retired every learned house rule and note before anyone saw them. | Learned items are not vault files and are kept. |
+| 45 | Learning | A family's question mail got no draft answer at all. | The knowledge desk drafts it, or gives a blank that teaches the brain. |
+| 46 | Efficiency | The 15-minute check re-read the whole audit log, growing without end. | It reads only new entries; the whole log is checked nightly, and a change to an old entry still raises the alert. |
+| 47 | Efficiency | Matching an unknown sender read every family in the database. | One indexed lookup. |
+| 48 | Efficiency | Routing a request read every sent proposal. | One counting query. |
 | 10 | Backup drill | `brain migrate` failed on a database that was built without migrations. | It now adopts such a database only if it matches the code exactly, and otherwise stops without changing anything. |
 
 Two code scan warnings (a fixed temporary folder in the simulation, a table name in a query) were low risk in
@@ -158,6 +165,13 @@ with partner mail written the way partners write: from reservations@ or info@, w
 | a week later | reminders only to the two silent partners |
 | two weeks later | still silent after the reminder: flagged on the board and in the booking file |
 | invoices | the confirmed partner's invoice matches; the same invoice again is a duplicate; the silent partner's invoice cannot be placed |
+
+## The brain learning over two weeks
+
+In the two-week simulation the simulated specialists often add "PS Ik bel jullie morgen even". The brain proposed it
+as a house rule for each team, in proposals and in follow-ups (6 proposals, waiting for the team leads). 208 sent
+proposals became examples, 57 partners got measured scores, and 14 answers to family questions became proposed
+knowledge notes. Search: 20 of 20 original questions, 17 of 18 paraphrased (was 15) and 10 of 10 held-out questions.
 
 ## Backup and restore
 

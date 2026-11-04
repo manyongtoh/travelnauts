@@ -135,9 +135,12 @@ def compare_offers(s: Session, request_id: str) -> list[dict]:
     rows = []
     for pr in s.scalars(select(PartnerRequest).where(PartnerRequest.request_id == request_id)).all():
         p = s.get(Partner, pr.partner_id)
+        from ..partner_scores import scores
+        sc = scores(p)
         rows.append({"partner_request_id": pr.id, "partner": p.name, "kind": p.kind, "status": pr.status, "what": pr.what,
                      "available": (pr.offer or {}).get("available"), "price_eur": (pr.offer or {}).get("price_eur"),
-                     "note": (pr.offer or {}).get("note"), "reliability": p.reliability,
+                     "note": (pr.offer or {}).get("note"), "reliability": sc["reliability"], "measured": sc["measured"],
+                     "invoice_ok": sc["invoice_ok"], "complaints": sc["complaints"],
                      "waiting_days": (utcnow() - pr.sent_at).days if pr.sent_at and pr.status in ("waiting", "chased") else None})
     rows.sort(key=lambda r: (r["status"] != "answered", r["available"] is not True, r["price_eur"] or 1e9, -r["reliability"]))
     return rows

@@ -50,7 +50,7 @@ class Hit:
 
 def searchable(today: date | None = None):
     today = today or clock_today()
-    return select(KnowledgeItem).where(KnowledgeItem.status == "approved",
+    return select(KnowledgeItem).where(KnowledgeItem.status == "approved", KnowledgeItem.topic != "house_rule",
                                        (KnowledgeItem.valid_from.is_(None)) | (KnowledgeItem.valid_from <= today),
                                        (KnowledgeItem.valid_to.is_(None)) | (KnowledgeItem.valid_to >= today))
 
@@ -71,15 +71,21 @@ class KnowledgeBase:
             _INDEX["vec"] = TfidfVectorizer(stop_words=STOPWORDS_NL, ngram_range=(1, 2), sublinear_tf=True)
             _INDEX["matrix"] = _INDEX["vec"].fit_transform(docs)
             _INDEX["emb"] = embedder().fit(docs)
+            from .concepts import topics
+            _INDEX["topics"] = [topics(f"{i.title} {i.body}") | set(i.tags or []) for i in items]
         return _INDEX
 
     def search(self, query: str, destination: str | None = None, k: int = 4, role: str | None = None) -> list[Hit]:
         idx = self._index()
         if not idx.get("ids"):
             return []
+        from .concepts import destination_in, expand, topics
         items = {i.id: i for i in self.s.scalars(select(KnowledgeItem).where(KnowledgeItem.id.in_(idx["ids"]))).all()}
-        kw = cosine_similarity(idx["vec"].transform([query]), idx["matrix"])[0]
-        vs = idx["emb"].scores(query)
+        q = expand(query)  # the question plus words that mean the same ("omboeken" also searches "wijzigen")
+        kw = cosine_similarity(idx["vec"].transform([q]), idx["matrix"])[0]
+        vs = idx["emb"].scores(q)
+        q_dest = destination or destination_in(query)  # "Bali" is Indonesia: a boost, never a filter
+        q_topics = topics(query)
         rank_kw = {j: r for r, j in enumerate(sorted(range(len(kw)), key=lambda j: -kw[j]))}
         rank_vs = {j: r for r, j in enumerate(sorted(range(len(vs)), key=lambda j: -vs[j]))}
         owners = {e.id: e.name for e in self.s.scalars(select(Employee)).all()}
@@ -92,9 +98,13 @@ class KnowledgeBase:
                 continue
             if role and role not in (item.roles or []):
                 continue
-            if kw[j] <= 0 and vs[j] < 0.35:
+            if kw[j] <= 0 and vs[j] < 0.35 and not (q_topics & idx["topics"][j] - {"kids"} and q_dest == item.destination):
                 continue
             fused = 0.7 * kw[j] / kw_max + 0.3 * max(vs[j], 0)  # keyword leads; meaning catches spelling and word forms
+            if q_dest and item.destination == q_dest:
+                fused += 0.15
+            shared = q_topics & idx["topics"][j]
+            fused += 0.1 * min(len(shared - {"kids"}), 2)  # same topic (season, lodging, entry, ...): a small push
             hits.append((fused, Hit(item.id, item.title, item.body, float(kw[j]), owners.get(item.owner_id, item.owner_id),
                                     item.review_by, item.review_by < today, item.source, float(vs[j]))))
         hits.sort(key=lambda x: -x[0])

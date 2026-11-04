@@ -27,7 +27,7 @@ class BlockedByCheck(ValueError):
     pass
 
 
-CUSTOMER_KINDS = {"followup", "extras", "next_trip", "complaint_reply", "trip_alert", "roadbook", "alternatives", "change_reply"}
+CUSTOMER_KINDS = {"followup", "extras", "next_trip", "complaint_reply", "trip_alert", "roadbook", "alternatives", "change_reply", "answer"}
 MONEY = ("terugbetal", "refund", "compensatie", "vergoed", "korting", "geld terug", "compensation", "discount", "gratis", "for free")
 BOOKED_CLAIM = re.compile(r"\b(boeking|reis)\s+(is\s+)?(nu\s+)?(definitief\s+)?bevestigd|\bbooking\s+(is\s+)?confirmed|"
                           r"\bwe\s+hebben\s+(jullie\s+reis\s+|alles\s+)?geboekt", re.I)
@@ -98,12 +98,17 @@ def approve_draft(s: Session, draft_id: int, by: str, final_body: str | None = N
     stale = stale_reason(s, d)
     if stale:
         raise BlockedByCheck(stale)
+    if "[schrijf hier" in text.lower():
+        raise BlockedByCheck("Write the answer first: the draft still has the placeholder")
     promises = promise_problems(s, d, text, team_lead)
     if promises:
         raise BlockedByCheck("; ".join(promises))
+    before = text
     avail, text = availability_check(s, d, text)
     if avail:
         raise BlockedByCheck("; ".join(avail))
+    if text != before:  # what the brain added itself must never be learned as a specialist's habit
+        d.data = (d.data or {}) | {"system_added": [text[len(before):].strip()]}
     if d.kind in ("proposal", "change"):
         price = (d.data or {}).get("price") or {}
         allowed = [price.get("sell_eur")] + [((d.data or {}).get("price_before") or {}).get("sell_eur")]
@@ -126,6 +131,9 @@ def approve_draft(s: Session, draft_id: int, by: str, final_body: str | None = N
     if d.kind == "partner_request" and d.partner_request_id:
         mark_sent(s, d.partner_request_id, d.decided_at)
     auditchain.append(s, actor_id or by, "approve", f"draft:{d.kind}", d.id, ref=d.request_id, content=d.final_body)
+    if d.kind == "answer":
+        from .learning import learn_from_answer
+        learn_from_answer(s, d)
     if d.edit_share > HEAVY_REWRITE and tr:
         KnowledgeBase(s).record_gap(f"{d.kind} voor {tr.destination} werd grotendeels herschreven ({d.title})",
                                     "heavy_rewrite", tr.destination, tr.team_id)
@@ -213,8 +221,9 @@ def backoffice_overview(s: Session) -> dict:
                       "status": pr.status, "sent_at": pr.sent_at.isoformat() if pr.sent_at else None,
                       "waiting_days": (utcnow() - pr.sent_at).days if pr.sent_at and pr.status in ("waiting", "chased") else None,
                       "chase_due": pr.id in chase_ids, "silent_after_chase": pr.id in silent_ids, "offer": pr.offer})
+    from .partner_scores import scores
     slow = sorted(({"partner": p.name, "kind": p.kind, "destination": DESTINATIONS.get(p.destination, {}).get("name", "All"),
-                    "avg_reply_days": p.avg_reply_days, "reliability": p.reliability}
+                    **{k: v for k, v in scores(p).items() if k in ("avg_reply_days", "reliability", "invoice_ok", "complaints", "measured")}}
                    for p in partners.values() if p.kind != "airline"), key=lambda x: -x["avg_reply_days"])
     to_match = [{"mail_id": m.id, "from": m.sender, "subject": m.subject, "received_at": m.received_at.isoformat(),
                  "partner_id": m.partner_id, "reading": (m.triage or {}).get("partner_reading")}

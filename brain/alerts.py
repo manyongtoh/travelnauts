@@ -48,7 +48,10 @@ def checks(s: Session, now: datetime | None = None) -> list[Alert]:
     now = now or utcnow()
     out: list[Alert] = []
 
-    chain = auditchain.verify(s)
+    chain = auditchain.verify_recent(s)  # new entries every 15 minutes; the whole log nightly (see retention)
+    full = (s.get(Setting, "audit_full_check") or Setting(key="", value={})).value or {}
+    if chain["ok"] and full and not full.get("ok", True):
+        chain = full
     if not chain["ok"]:
         out.append(Alert("audit_chain", CRITICAL, "Audit chain broken",
                          f"Entry {chain['broken_at']} was changed or removed outside the application.",

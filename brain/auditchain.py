@@ -57,3 +57,44 @@ def verify(s: Session) -> dict:
             return {"ok": False, "entries": n, "broken_at": e.id}
         prev = e.hash
     return {"ok": True, "entries": n, "broken_at": None, "head": prev[:16]}
+
+
+
+CHECKPOINT = "audit_checkpoint"
+
+
+def verify_recent(s: Session) -> dict:
+    """Check only what was added since the last check, continuing from a remembered point. Cheap enough for every
+    15 minutes however long the log gets. The nightly full check (verify) also catches a change to an old entry."""
+    from .db import Setting
+    cp = (s.get(Setting, CHECKPOINT) or Setting(key=CHECKPOINT, value=None)).value or {}
+    last_id, prev = cp.get("id", 0), cp.get("hash", GENESIS)
+    if last_id:
+        anchor = s.get(AuditEntry, last_id)
+        if anchor is None or anchor.hash != prev:
+            return {"ok": False, "entries": 0, "broken_at": last_id, "checked": "since checkpoint"}
+    n = 0
+    for e in s.scalars(select(AuditEntry).where(AuditEntry.id > last_id).order_by(AuditEntry.id)).all():
+        n += 1
+        if e.prev_hash != prev or _digest(e) != e.hash:
+            return {"ok": False, "entries": n, "broken_at": e.id, "checked": "since checkpoint"}
+        prev, last_id = e.hash, e.id
+    if n:
+        st = s.get(Setting, CHECKPOINT)
+        value = {"id": last_id, "hash": prev}
+        if st:
+            st.value = value
+        else:
+            s.add(Setting(key=CHECKPOINT, value=value))
+        s.commit()
+    return {"ok": True, "entries": n, "broken_at": None, "checked": "since checkpoint", "head": prev[:16]}
+
+
+def verify_full_and_remember(s: Session) -> dict:
+    """Nightly: the whole log, and the result kept for the maintenance screen."""
+    from .db import Setting
+    from .clock import utcnow
+    r = verify(s)
+    s.merge(Setting(key="audit_full_check", value=r | {"at": utcnow().isoformat(timespec="minutes")}))
+    s.commit()
+    return r

@@ -816,7 +816,8 @@ def health(user: Principal = Depends(need("maintenance"))):
             "failed_jobs": [{"id": j.id, "kind": j.kind, "error": j.error}
                             for j in s.scalars(select(Job).where(Job.status == "failed").order_by(Job.id.desc()).limit(10)).all()],
             "budget": {"spent_today_eur": round(spent_today(s), 4), "cap_eur": daily_cap(s)},
-            "audit_chain": auditchain.verify(s),
+            "audit_chain": auditchain.verify_recent(s) | {"last_full_check": (s.get(Setting, "audit_full_check") or
+                                                                              Setting(key="", value={})).value},
             "evals": __import__("json").loads(bench.read_text()) if bench.exists() else None,
             "release": {"version": app.version, "data_stage": st.data_stage},
         }

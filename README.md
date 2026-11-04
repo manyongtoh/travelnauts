@@ -21,7 +21,7 @@ pip install -e ".[dev]"
 brain seed            # build the synthetic database and knowledge vault (data/)
 brain worker --once   # run the scheduler and the queue once (triage, follow-ups, insight, ...)
 brain serve           # open http://127.0.0.1:8000 and pick who you are
-pytest -q             # 174 tests (BRAIN_TEST_DATABASE_URL=postgresql+psycopg://... for Postgres)
+pytest -q             # 185 tests (BRAIN_TEST_DATABASE_URL=postgresql+psycopg://... for Postgres)
 brain bench --gate    # evals; fails when a gate from the architecture is not met
 brain mcp             # the tool server over MCP, as BRAIN_MCP_AGENT
 brain envcheck        # check the test, pilot or live configuration
@@ -44,6 +44,21 @@ docker compose up -d
 docker compose exec ollama ollama pull gemma4
 BRAIN_MODEL=ollama:gemma4 docker compose up -d app
 ```
+
+## How the brain learns
+
+Nothing it learns is used before a person approves it.
+
+| From | What the brain does | Who approves |
+|---|---|---|
+| What specialists keep adding or removing (3 drafts, 2 people, 30 days) | proposes a house rule; approved rules go into the prompts | team lead |
+| Proposals booked or turned down | keeps them as examples, without names (same anonymiser as real data); booked and alike ones first | automatic, anonymised |
+| A family question it could not answer | gives the specialist a blank to fill in; the answer becomes a proposed knowledge note | team lead |
+| Children's ages | keeps birth years, so ages count up; a next-trip idea years later thinks of today's ages | automatic |
+| Earlier trips and complaints | shown to agents as the family's history ("nice to plan with you again"; take extra care) | automatic |
+| Who knows a destination | routes requests to that specialist unless they have 3 or more requests more than the least busy colleague | automatic |
+| What partners actually do | measures reply time, reply rate, invoice accuracy and complaints; swaps a weak hotel in a draft route | automatic, shown on the board |
+| How specialists ask | search knows places (Bali is Indonesia), synonyms (omboeken is wijzigen) and topics | automatic |
 
 ## Two model modes
 

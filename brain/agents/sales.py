@@ -170,9 +170,13 @@ def next_trip(s: Session, family_id: str) -> Draft:
         out, _ = run_step(s, "next_trip", MailText, "Write a short, personal mail in Dutch suggesting CONTEXT.suggestions as a "
                           "next family trip, with one reason each that fits the children's ages, and the best season from "
                           "CONTEXT.knowledge. No prices. No pressure.", ctx)
-        from .triage import least_loaded_specialist, team_for
+        from ..db import Employee
+        from .triage import best_specialist, team_for
         team = team_for(s, pick[0]["destination"]) if pick else None
-        spec = least_loaded_specialist(s, team.id) if team else None
+        # the family's own specialist if they are still here and in the right team; else the one who knows it best
+        known = [s.get(Employee, t["specialist_id"]) for t in reversed(trips) if t.get("specialist_id")]
+        spec = next((e for e in known if e and e.active and team and e.team_id == team.id), None) \
+            or (best_specialist(s, team.id, pick[0]["destination"]) if team else None)
         d = Draft(kind="next_trip", request_id=trips[0]["id"] if trips else None, title=out.subject, body=out.body,
                   data={"family_id": family_id, "suggestions": pick, "team_id": team.id if team else None,
                         "specialist_id": spec.id if spec else None})

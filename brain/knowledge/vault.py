@@ -137,6 +137,8 @@ def reindex(s: Session, root: Path | None = None) -> dict:
                     archived += 1
     retired = 0
     for item in s.scalars(select(KnowledgeItem).where(KnowledgeItem.source.is_not(None))).all():
+        if (item.source or "").startswith("learned:") or (item.source is None and item.status == "proposed"):
+            continue  # learned from daily work (house rules, answers): not a vault file, so never retired by a reindex
         if item.id not in seen and item.status != "retired":
             item.status = "retired"
             retired += 1

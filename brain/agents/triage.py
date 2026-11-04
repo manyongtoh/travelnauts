@@ -60,6 +60,38 @@ def team_for(s: Session, destination: str | None) -> Team | None:
     return None
 
 
+EXTRA_LOAD = 3  # an expert may carry this many more open requests than the least busy colleague
+
+
+def best_specialist(s: Session, team_id: str, destination: str | None) -> Employee | None:
+    """Who should take this request: the colleague who knows the destination best, unless they are much busier.
+    Knowing = trips there they brought to a booking (counts most), proposals they sent there, notes they own on it."""
+    from ..db import Draft, KnowledgeItem
+    people = s.scalars(select(Employee).where(Employee.team_id == team_id, Employee.role == "specialist",
+                                              Employee.active.is_(True)).order_by(Employee.id)).all()
+    if not people:
+        return None
+    load = {e.id: 0 for e in people}
+    for tr in s.scalars(select(TripRequest).where(TripRequest.status.in_(["new", "proposal_draft", "proposal_sent", "change_requested"]),
+                                                  TripRequest.specialist_id.in_(load))).all():
+        load[tr.specialist_id] += 1
+    floor = min(load.values())
+    if not destination:
+        return min(people, key=lambda e: (load[e.id], e.id))
+    know = {e.id: 0.0 for e in people}
+    for tr in s.scalars(select(TripRequest).where(TripRequest.destination == destination, TripRequest.specialist_id.in_(load))).all():
+        know[tr.specialist_id] += 3.0 if tr.status == "booked" else 0.0
+    for spec_id, n in s.execute(select(TripRequest.specialist_id, func.count()).join(Draft, Draft.request_id == TripRequest.id)
+                                .where(Draft.kind == "proposal", Draft.status == "approved", TripRequest.destination == destination,
+                                       TripRequest.specialist_id.in_(know)).group_by(TripRequest.specialist_id)).all():
+        know[spec_id] += float(n)
+    for k in s.scalars(select(KnowledgeItem).where(KnowledgeItem.destination == destination, KnowledgeItem.status == "approved")).all():
+        if k.owner_id in know:
+            know[k.owner_id] += 2.0
+    able = [e for e in people if load[e.id] <= floor + EXTRA_LOAD]
+    return max(able, key=lambda e: (know[e.id], -load[e.id]))  # ties: the first by id, as before
+
+
 def least_loaded_specialist(s: Session, team_id: str) -> Employee | None:
     open_count = (select(TripRequest.specialist_id, func.count().label("n"))
                   .where(TripRequest.status.in_(["new", "proposal_draft", "proposal_sent", "change_requested"]))
@@ -125,8 +157,14 @@ def triage_mail(s: Session, mail_id: str) -> dict:
                 out["new_relation"] = fam.id.startswith("f-new-")
             elif res.category in ("new_request", "change", "complaint", "question"):
                 out["unknown_sender"] = True  # a person links it to the right family, helped by the candidates
+        if res.category == "new_request" and m.family_id and res.child_ages:
+            from ..db import Family as _F
+            from ..family import set_ages
+            f0 = s.get(_F, m.family_id)
+            if f0 is not None and len(res.child_ages) >= len(f0.child_ages or []):
+                set_ages(f0, res.child_ages, m.received_at.date())  # what they tell us now is the newest truth
         if res.category == "new_request" and m.family_id and res.destination:
-            spec = least_loaded_specialist(s, team.id) if team else None
+            spec = best_specialist(s, team.id, res.destination) if team else None
             from ..db import next_number
             n = next_number(s, "request", start_from=s.scalar(select(func.count()).select_from(TripRequest)) or 0)
             tr = TripRequest(id=f"r{n:03d}", family_id=m.family_id, mail_id=m.id, team_id=team.id if team else None,
@@ -156,6 +194,8 @@ def triage_mail(s: Session, mail_id: str) -> dict:
             enqueue(s, "partner_reply", {"mail_id": m.id})
         if res.category == "invoice":
             enqueue(s, "invoice", {"mail_id": m.id})
+        if res.category == "question" and m.family_id:
+            enqueue(s, "answer_question", {"mail_id": m.id})
         if res.category == "complaint" and m.family_id:
             enqueue(s, "complaint", {"mail_id": m.id})
         if m.family_id and res.category not in ("partner_reply", "invoice"):
@@ -320,10 +360,10 @@ def families_for_address(s: Session, addr: str) -> list:
     fams = {f.id: f for f in s.scalars(select(Family).where(func.lower(Family.email) == addr)).all()}
     for fa in s.scalars(select(FamilyAddress).where(FamilyAddress.email == addr)).all():
         fams.setdefault(fa.family_id, s.get(Family, fa.family_id))
-    if not fams:  # stored addresses may carry a +tag or capitals
-        for f in s.scalars(select(Family).where(Family.email.is_not(None))).all():
-            if normalise_address(f.email) == addr:
-                fams[f.id] = f
+    if not fams:  # stored addresses may carry a +tag: look those up by pattern, not by reading every family
+        local, domain = addr.rsplit("@", 1)
+        for f in s.scalars(select(Family).where(func.lower(Family.email).like(f"{local}+%@{domain}"))).all():
+            fams[f.id] = f
     return list(fams.values())
 
 
@@ -386,8 +426,9 @@ def resolve_family(s: Session, sender: str | None, res, body: str | None = None,
         notes["candidates"] = sugg
         return None, notes
     n = next_number(s, "new_relation")
+    from ..family import birth_years
     fam = Family(id=f"f-new-{n:04d}", surname=surname, contact_name=name, email=addr, adults=res.adults or 2,
-                 child_ages=list(res.child_ages or []), synthetic=False,
+                 child_ages=list(res.child_ages or []), child_birth_years=birth_years(res.child_ages or []), synthetic=False,
                  notes="Nieuwe relatie uit een eerste mail: controleer en maak aan in TravelSpirit.")
     s.add(fam)
     s.flush()

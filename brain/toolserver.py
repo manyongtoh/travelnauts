@@ -132,8 +132,9 @@ def read_mail(s: Session, mail_id: str) -> dict:
 
 @server.tool("ts.read_relation", cache_seconds=300)
 def read_relation(s: Session, family_id: str) -> dict:
-    """Read a relation (family) from TravelSpirit."""
-    return _ts(s).relation(family_id)
+    """Read a relation (family) from TravelSpirit, with what the brain remembers about them."""
+    from .family import history
+    return _ts(s).relation(family_id) | {"history": history(s, family_id)}
 
 
 @server.tool("ts.read_trip", cache_seconds=60)
@@ -172,11 +173,11 @@ def knowledge_search(s: Session, query: str, destination: str | None = None, k: 
 
 
 @server.tool("examples.search", cache_seconds=600, customer_data=False)
-def examples_search(s: Session, destination: str, days: int, k: int = 3) -> list[dict]:
-    """Earlier proposals like this one, booked ones first."""
+def examples_search(s: Session, destination: str, days: int, k: int = 3, child_ages: list[int] | None = None) -> list[dict]:
+    """Earlier proposals like this one: booked ones first, then the most alike (length, children, our own texts)."""
+    from .learning import rank_examples
     rows = list(s.scalars(select(PastProposal).where(PastProposal.destination == destination)).all())
-    rows.sort(key=lambda p: (not p.booked, abs(p.days - days)))
-    return [as_dict(p) for p in rows[:k]]
+    return [as_dict(p) for p in rank_examples(rows, days, child_ages, k)]
 
 
 # Calculation -----------------------------------------------------------------------------------

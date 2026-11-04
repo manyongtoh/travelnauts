@@ -132,6 +132,17 @@ def run(days: int = 14, seed: int = 7, mails_per_day: int = 25) -> dict:
             sent += 1
         # specialists send the extras offers and handle trip alerts; back office sends roadbooks; leads answer complaints
         lead_of = {e.team_id: e.id for e in s.scalars(select(Employee).where(Employee.role == "team_lead")).all()}
+        for d in s.scalars(select(Draft).where(Draft.status == "draft", Draft.kind == "answer")).all():
+            tr = s.get(TripRequest, d.request_id) if d.request_id else None
+            who = tr.specialist_id if tr else "sanne-de-vries"
+            body = d.body if "[Schrijf hier" not in d.body else (
+                "Goede vraag. Dat hebben we voor jullie nagevraagd bij onze lokale partner: het kan, we regelen het "
+                "bij de boeking en zetten het in het reisboek.")
+            try:
+                approve_draft(s, d.id, who, body, actor_id=who)
+                approved += 1
+            except Exception:  # noqa: BLE001
+                s.rollback()
         for d in s.scalars(select(Draft).where(Draft.status == "draft", Draft.kind.in_(
                 ["extras", "trip_alert", "next_trip", "roadbook", "complaint_reply"]))).all():
             if rng.random() < 0.8:

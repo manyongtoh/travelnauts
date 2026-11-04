@@ -119,6 +119,12 @@ def run(seed: int | None = None, out_dir: Path | None = None) -> dict:
         rep["knowledge_retrieval"] = {"questions": len(asked), "skipped_not_approved": skipped, "top3_pct": pct(top3, len(asked)),
                                       "current_policy_pct": pct(current, 2), "misses": misses,
                                       "specialist_cannot_see_margins": not any(h.id == "k-policy-margins" for h in kb.search("marge afspraken hotels", k=5, role="specialist"))}
+        from .sets import KNOWLEDGE_PARAPHRASES, KNOWLEDGE_PARAPHRASES_HELD_OUT
+        for name, qs in (("knowledge_paraphrased", KNOWLEDGE_PARAPHRASES), ("knowledge_held_out", KNOWLEDGE_PARAPHRASES_HELD_OUT)):
+            qs = [x for x in qs if x[1] in live]
+            hit = [want in [h.id for h in kb.search(q, k=3, role=role)] for q, want, role in qs]
+            rep[name] = {"questions": len(qs), "top3_pct": pct(sum(hit), len(qs)),
+                         "misses": [q for (q, _, _), ok in zip(qs, hit) if not ok]}
 
         # Price check: earlier offers recalculated by the calculation service, exact to the euro ----
         from ..pricing import calculate

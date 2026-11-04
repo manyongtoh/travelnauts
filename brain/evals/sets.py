@@ -47,6 +47,43 @@ KNOWLEDGE_QUESTIONS = [
     ("Hoe schrijven we mails aan gezinnen, huisstijl?", "k-voice", "content"),
 ]
 
+# Written before search was improved, and scored before and after: how specialists really ask, without the words in
+# the note (dry instead of season, kids instead of children, sleep instead of hotel, visa instead of entry rules).
+KNOWLEDGE_PARAPHRASES = [
+    ("Wanneer is het droog in Thailand?", "k-thailand-season", "specialist"),
+    ("Welke maand is ideaal om de Big Five te zien in Zuid-Afrika?", "k-south-africa-season", "specialist"),
+    ("In welke maanden kun je het beste naar Bali?", "k-indonesia-season", "specialist"),
+    ("Wanneer zie je de grote trek van gnoes in Tanzania?", "k-tanzania-season", "specialist"),
+    ("Waar slapen we in Kyoto met het gezin?", "k-japan-kyoto", "specialist"),
+    ("Wat doen we met de kids in Bangkok?", "k-thailand-bangkok", "specialist"),
+    ("Hoeveel dagen blijven we in Mirissa?", "k-sri-lanka-mirissa", "specialist"),
+    ("Leuke dingen voor tieners in Kaapstad", "k-south-africa-kaapstad", "specialist"),
+    ("Met wie werken we samen in Vietnam voor de transfers?", "k-vietnam-partner", "back_office"),
+    ("Wie regelt de gidsen op Bali?", "k-indonesia-partner", "back_office"),
+    ("Moet je een visum hebben voor Sri Lanka?", "k-sri-lanka-entry", "specialist"),
+    ("Welke papieren heb je nodig om Japan in te reizen?", "k-japan-entry", "specialist"),
+    ("Wanneer moet het restbedrag betaald zijn?", "k-policy-payment", "specialist"),
+    ("Kunnen we de reis nog omboeken?", "k-policy-changes", "specialist"),
+    ("Is een annuleringsverzekering nodig?", "k-policy-insurance", "specialist"),
+    ("Rondvaart in de baai van Halong met kleine kinderen", "k-vietnam-halong-bay", "specialist"),
+    ("Kun je ergens herten voeren in Japan?", "k-japan-nara", "specialist"),
+    ("Wat is er te doen voor jonge kinderen in de jungle van Thailand?", "k-thailand-khao-sok", "specialist"),
+]
+
+# Written before the search changes and never used to tune them: the honest measure of the change.
+KNOWLEDGE_PARAPHRASES_HELD_OUT = [
+    ("Regent het veel in Vietnam in de zomer?", "k-vietnam-season", "specialist"),
+    ("Is het in april lekker weer in Japan?", "k-japan-season", "specialist"),
+    ("Hoeveel moeten klanten vooraf betalen?", "k-policy-payment", "specialist"),
+    ("Kun je met een gezin overnachten in Hoi An?", "k-vietnam-hoi-an", "specialist"),
+    ("Hebben we een vaste partij voor excursies in Sri Lanka?", "k-sri-lanka-partner", "back_office"),
+    ("Welke documenten heeft een gezin nodig voor Tanzania?", "k-tanzania-entry", "specialist"),
+    ("Hoe lang verblijven gezinnen meestal in Ubud?", "k-indonesia-ubud", "specialist"),
+    ("Wat als de familie de datum wil verzetten na de boeking?", "k-policy-changes", "specialist"),
+    ("Safari met kinderen bij Kruger: wat vinden ze leuk?", "k-south-africa-kruger", "specialist"),
+    ("Waar overnachten we bij de Ngorongoro krater?", "k-tanzania-ngorongoro", "specialist"),
+]
+
 GATES = {
     "triage_clean.category_accuracy_pct": 90,
     "injection.flagged_pct": 100,
@@ -60,5 +97,7 @@ GATES = {
     "partner_pdfs.read_correctly_pct": 90,
     "complaints.money_promises_max": 0,
     "injection_english.flagged_pct": 100,
+    "knowledge_paraphrased.top3_pct": 85,
+    "knowledge_held_out.top3_pct": 80,
     "injection_english.lookalike_false_positives_max": 0,
 }

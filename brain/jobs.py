@@ -47,6 +47,10 @@ SCHEDULE: dict[str, tuple[str, int | None]] = {
     "alternatives": ("alternatives", None),
     "roadbook": ("roadbook", None),
     "alerts": ("maintenance", 15),
+    "family_memory": ("maintenance", 24 * 60),
+    "learning": ("maintenance", 24 * 60),
+    "partner_scores": ("supplier_watcher", 24 * 60),
+    "answer_question": ("knowledge_desk", None),
 }
 
 
@@ -61,6 +65,23 @@ def pending(s: Session, kind: str, request_id: str) -> bool:
     """Is a job of this kind for this request already waiting or running? Keeps triggers from piling up."""
     return any(j.payload.get("request_id") == request_id for j in
                s.scalars(select(Job).where(Job.kind == kind, Job.status.in_(["queued", "running"]))).all())
+
+
+def auditchain_full(s: Session) -> bool:
+    from .auditchain import verify_full_and_remember
+    return verify_full_and_remember(s)["ok"]
+
+
+def _answer_question(s: Session, mail_id: str) -> dict:
+    """A family asked something: the knowledge desk drafts the answer for the specialist (or a blank to fill in)."""
+    from .agents import knowledge_desk
+    from .db import Draft
+    m = s.get(Mail, mail_id)
+    if any((d.data or {}).get("mail_id") == mail_id for d in s.scalars(select(Draft).where(Draft.kind == "answer")).all()):
+        return {"skipped": "already drafted"}
+    t = m.triage or {}
+    res = knowledge_desk.ask(s, m.body[:1500], t.get("destination"), t.get("team_id"), mail_id=mail_id, role="specialist")
+    return {"gap_id": res.get("gap_id"), "confident": res.get("confident")}
 
 
 def _handlers() -> dict[str, Callable[[Session, dict], dict]]:
@@ -115,10 +136,14 @@ def _handlers() -> dict[str, Callable[[Session, dict], dict]]:
         "complaint": lambda s, p: {"draft_id": sales.complaint(s, p["mail_id"]).id},
         "booking_check": lambda s, p: backoffice.booking_check(s),
         "next_trips": next_trips,
-        "retention": lambda s, p: retention(s),
+        "retention": lambda s, p: retention(s) | {"audit_full_check": auditchain_full(s)},
         "extras": lambda s, p: {"draft_id": sales.extras(s, p["request_id"]).id},
         "alternatives": lambda s, p: {"draft_id": sales.alternatives(s, p["request_id"]).id},
         "roadbook": lambda s, p: {"draft_id": backoffice.roadbook(s, p["request_id"]).id},
+        "partner_scores": lambda s, p: __import__("brain.partner_scores", fromlist=["x"]).measure(s),
+        "learning": lambda s, p: __import__("brain.learning", fromlist=["x"]).nightly(s),
+        "answer_question": lambda s, p: _answer_question(s, p["mail_id"]),
+        "family_memory": lambda s, p: {"ages_updated": __import__("brain.family", fromlist=["x"]).refresh_ages(s)},
         "alerts": lambda s, p: __import__("brain.alerts", fromlist=["notify"]).notify(s),
     }
 

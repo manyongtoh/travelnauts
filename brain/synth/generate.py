@@ -144,7 +144,8 @@ def build(seed: int = 42, n_families: int = 200, hard: bool = True) -> dict:
                                       [rng.randint(9, 17), rng.randint(12, 18)]]))
             fam = Family(id=f"fam{i + 1:03d}", surname=sur, contact_name=f"{first} {sur}",
                          email=f"{first.lower()}.{slug(sur)}{i}@example.org", adults=rng.choice([2, 2, 2, 1]),
-                         child_ages=kids, city=rng.choice(CITIES),
+                         child_ages=kids, child_birth_years=__import__("brain.family", fromlist=["x"]).birth_years(kids),
+                         city=rng.choice(CITIES),
                          past_destinations=rng.sample(list(DESTINATIONS), k=rng.choice([0, 0, 1, 1, 2])))
             families.append(fam)
         s.add_all(families)

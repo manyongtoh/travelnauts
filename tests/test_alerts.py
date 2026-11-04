@@ -162,3 +162,19 @@ def test_runs_that_failed_because_the_model_was_down_are_not_blamed_on_the_agent
                            error="RuntimeError: All models failed for triage: timeout", cost_eur=0, created_at=utcnow()))
     world.commit()
     assert "agent_errors" not in keys(world)
+
+
+def test_the_15_minute_check_reads_only_new_entries_and_the_nightly_check_reads_all(world):
+    for i in range(5):
+        auditchain.append(world, "t", "x", "y", str(i))
+    world.commit()
+    assert auditchain.verify_recent(world)["entries"] == 5
+    auditchain.append(world, "t", "x", "y", "6")
+    world.commit()
+    assert auditchain.verify_recent(world)["entries"] == 1  # only the new one
+    first = world.scalars(select(AuditEntry).order_by(AuditEntry.id)).first()
+    world.execute(update(AuditEntry).where(AuditEntry.id == first.id).values(actor="someone-else"))
+    world.commit()
+    assert auditchain.verify_recent(world)["ok"]  # an old entry: not seen by the quick check
+    assert not auditchain.verify_full_and_remember(world)["ok"]  # but the nightly check finds it
+    assert {a.key: a.level for a in alerts.checks(world)}["audit_chain"] == "critical"  # and the alert stays up

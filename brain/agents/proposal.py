@@ -43,11 +43,26 @@ def pick_activities(s: Session, destination: str, stop: str, child_ages: list[in
     return [i.name for i in ok[:k]]
 
 
-def build_route(s: Session, tr: dict) -> tuple[list[dict], list[dict]]:
-    examples = server.call(s, ME, "examples.search", destination=tr["destination"], days=tr["days"])
-    base = next((p for p in examples if p["days"] == tr["days"]), None)
+def build_route(s: Session, tr: dict, child_ages: list[int] | None = None) -> tuple[list[dict], list[dict]]:
+    examples = server.call(s, ME, "examples.search", destination=tr["destination"], days=tr["days"], child_ages=child_ages)
+    base = next((p for p in examples if p["days"] == tr["days"] and all(r.get("hotel") for r in p["route"])), None)
     route = [dict(r) for r in base["route"]] if base else route_for(random.Random(tr["id"]), tr["destination"], tr["days"])
-    return route, examples
+    return avoid_weak_partners(s, tr["destination"], route), examples
+
+
+def avoid_weak_partners(s: Session, destination: str, route: list[dict]) -> list[dict]:
+    """Swap a hotel that measurably lets families down (complaints, or rarely answers) for another at the same stop."""
+    from ..db import Partner
+    from ..partner_scores import scores
+    weak = lambda p: p is not None and (sc := scores(p))["measured"] and (sc["complaints"] >= 2 or sc["reliability"] < 0.5)  # noqa: E731
+    hotels = s.scalars(select(PriceItem).where(PriceItem.destination == destination, PriceItem.kind == "hotel")).all()
+    for r in route:
+        if weak(s.scalars(select(Partner).where(Partner.name == r["hotel"])).first()):
+            alt = next((h for h in hotels if h.stop == r["stop"] and h.name != r["hotel"]
+                        and not weak(s.scalars(select(Partner).where(Partner.name == h.name)).first())), None)
+            if alt:
+                r["swapped_from"], r["hotel"] = r["hotel"], alt.name
+    return route
 
 
 def hotels_for(s: Session, destination: str) -> set[str]:
@@ -59,7 +74,7 @@ def write_proposal(s: Session, request_id: str) -> Draft:
     fam = server.call(s, ME, "ts.read_relation", family_id=tr["family_id"])
     spec = s.get(Employee, tr["specialist_id"]) if tr["specialist_id"] else None
     with audit(s, "proposal_writer", request_id, f"{tr['destination']} {tr['days']}d") as box:
-        route, examples = build_route(s, tr)
+        route, examples = build_route(s, tr, fam["child_ages"])
         for r in route:
             r["activities"] = pick_activities(s, tr["destination"], r["stop"], fam["child_ages"], tr["wishes"])
         calc = server.call(s, ME, "calc.quote", destination=tr["destination"], route=route, adults=fam["adults"],
@@ -75,7 +90,9 @@ def write_proposal(s: Session, request_id: str) -> Draft:
                 seen.add(h["id"])
                 knowledge.append({"id": h["id"], "title": h["title"], "text": h["body"], "outdated": h["outdated"]})
         ctx = {
-            "family": {"name": fam["contact_name"], "surname": fam["surname"], "adults": fam["adults"], "child_ages": fam["child_ages"]},
+            "family": {"name": fam["contact_name"], "surname": fam["surname"], "adults": fam["adults"], "child_ages": fam["child_ages"],
+                       "history": fam.get("history", {})},
+            "house_rules": __import__("brain.learning", fromlist=["x"]).house_rules(s, tr.get("team_id"), "proposal"),
             "trip": {"destination": d["nl"], "days": tr["days"], "month": tr["depart_month"], "budget_eur": tr["budget_eur"],
                      "wishes": tr["wishes"]},
             "route": route,

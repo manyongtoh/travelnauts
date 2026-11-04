@@ -62,6 +62,9 @@ class Family(Base):
     email: Mapped[str | None] = mapped_column(String, nullable=True)
     adults: Mapped[int] = mapped_column(Integer)
     child_ages: Mapped[list] = mapped_column(JSON, default=list)
+    # Ages count up: birth years (from TravelSpirit, or worked out from an age the family gave on a date).
+    # child_ages is refreshed from these every night, so every agent reads today's ages.
+    child_birth_years: Mapped[list] = mapped_column(JSON, default=list)
     city: Mapped[str | None] = mapped_column(String, nullable=True)
     past_destinations: Mapped[list] = mapped_column(JSON, default=list)
     notes: Mapped[str] = mapped_column(Text, default="")
@@ -77,6 +80,8 @@ class Partner(Base):
     email: Mapped[str] = mapped_column(String)
     avg_reply_days: Mapped[float] = mapped_column(Float, default=2.0)
     reliability: Mapped[float] = mapped_column(Float, default=0.9)
+    # What the partner actually does, measured nightly: reply days, reply rate, invoice accuracy, complaints.
+    measured: Mapped[dict] = mapped_column(JSON, default=dict)
     synthetic: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
@@ -152,6 +157,9 @@ class PastProposal(Base):
     text: Mapped[str] = mapped_column(Text)
     price_pp_eur: Mapped[float] = mapped_column(Float)
     booked: Mapped[bool] = mapped_column(Boolean)
+    # Learned from our own work: the text as the specialist sent it, the draft it came from, the child ages.
+    source_draft_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    child_ages: Mapped[list] = mapped_column(JSON, default=list)
     synthetic: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
@@ -204,6 +212,7 @@ class KnowledgeItem(Base):
     version: Mapped[int] = mapped_column(Integer, default=1)
     source: Mapped[str | None] = mapped_column(String, nullable=True)  # vault path, e.g. thailand/bangkok.md#met-kinderen
     roles: Mapped[list] = mapped_column(JSON, default=lambda: ["specialist", "back_office", "team_lead", "content"])
+    tags: Mapped[list] = mapped_column(JSON, default=list)  # season months, age groups, themes: used by search
     content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     # A changed note waits here for approval; until then agents keep using the approved body above.
     pending_body: Mapped[str | None] = mapped_column(Text, nullable=True)
