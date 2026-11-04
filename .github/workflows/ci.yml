@@ -74,6 +74,8 @@ jobs:
       - name: No medium or high findings in our code
         run: bandit -q -r brain -ll
       - name: Azure templates compile (infrastructure and alerts)
+        env:
+          PG_PASSWORD: compile-check-only  # placeholder; real values come from secrets at deploy
         run: |
           az bicep install
           az bicep build --file infra/main.bicep --stdout > /dev/null
