@@ -108,9 +108,14 @@ def _kids(ages: list[int]) -> str:
     return "de kinderen van " + ", ".join(str(a) for a in ages[:-1]) + f" en {ages[-1]}"
 
 
+def first_name(name: str | None) -> str:
+    """'Marieke Visser' gives 'Marieke'; an unknown name gives a greeting that still reads well."""
+    return (name or "").split()[0] if (name or "").strip() else "allemaal"
+
+
 def proposal(ctx: dict) -> dict:
     fam, trip, route, price = ctx["family"], ctx["trip"], ctx["route"], ctx["price"]
-    first = fam["name"].split()[0]
+    first = first_name(fam["name"])
     season = next((k for k in ctx["knowledge"] if "reistijd" in k["title"].lower()), None)
     lines = [f"Beste {first},", "",
              f"Wat leuk dat jullie in {trip['month']} met {_kids(fam['child_ages'])} naar {trip['destination']} willen. "
@@ -142,7 +147,7 @@ def proposal(ctx: dict) -> dict:
 
 def followup(ctx: dict) -> dict:
     fam, trip = ctx["family"], ctx["trip"]
-    first = fam["name"].split()[0]
+    first = first_name(fam["name"])
     body = [f"Beste {first},", "",
             f"Een tijdje geleden stuurde ik jullie een voorstel voor {trip['destination']}. Ik ben benieuwd wat jullie ervan vinden.",
             "Als er iets anders moet, pas ik de route graag aan. Bellen kan natuurlijk ook."]
@@ -237,7 +242,7 @@ def change_plan(ctx: dict) -> dict:
 
 
 def change_reply(ctx: dict) -> dict:
-    first = ctx["family"]["name"].split()[0]
+    first = first_name(ctx["family"]["name"])
     lines = [f"Beste {first},", "", "Dank voor je bericht. Ik heb het voorstel aangepast:"]
     for o in ctx["applied"]:
         lines.append({"extend_stop": f"- {o['nights']} {'nacht' if o['nights'] == 1 else 'nachten'} extra in {o['stop']}",
@@ -268,7 +273,7 @@ def partner_reply(ctx: dict) -> dict:
 
 def trip_alert(ctx: dict) -> dict:
     f, st = ctx["flight"], ctx["status"]
-    first = ctx["family"]["name"].split()[0]
+    first = first_name(ctx["family"]["name"])
     what = "is geannuleerd" if st["status"] == "cancelled" else f"heeft ongeveer {st['delay_minutes']} minuten vertraging"
     body = (f"Beste {first},\n\nJullie vlucht {f['number']} op {f['date']} {what}. We kijken nu naar de mogelijkheden "
             f"en laten zo snel mogelijk weten wat dat voor de transfer en het eerste hotel betekent.\n\n"

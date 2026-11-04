@@ -35,6 +35,9 @@ def approve_draft(s: Session, draft_id: int, by: str, final_body: str | None = N
     if d.status != "draft":
         raise ValueError(f"Draft {draft_id} is already {d.status}")
     text = final_body if final_body is not None else d.body
+    stale = stale_reason(s, d)
+    if stale:
+        raise BlockedByCheck(stale)
     if d.kind in ("proposal", "change"):
         price = (d.data or {}).get("price") or {}
         allowed = [price.get("sell_eur")] + [((d.data or {}).get("price_before") or {}).get("sell_eur")]
@@ -149,3 +152,28 @@ def backoffice_overview(s: Session) -> dict:
             "slowest_partners": slow,
             "drafts_to_check": s.query(Draft).filter(Draft.kind.in_(["partner_request", "partner_chase"]),
                                                      Draft.status == "draft").count()}
+
+
+def stale_reason(s: Session, d: Draft) -> str | None:
+    """A follow-up is only right while the family still has not answered our proposal."""
+    if d.kind != "followup" or not d.request_id:
+        return None
+    tr = s.get(TripRequest, d.request_id)
+    if tr is None:
+        return None
+    if tr.status != "proposal_sent":
+        return f"No longer needed: the request is now {tr.status.replace('_', ' ')}."
+    if tr.last_customer_contact and d.created_at and tr.last_customer_contact > d.created_at:
+        return "No longer needed: the family wrote to us after this follow-up was drafted."
+    return None
+
+
+def withdraw_stale_drafts(s: Session) -> int:
+    """Take back follow-ups that events overtook (booked, answered, lost), so nobody sends them by mistake."""
+    n = 0
+    for d in s.scalars(select(Draft).where(Draft.kind == "followup", Draft.status == "draft")).all():
+        why = stale_reason(s, d)
+        if why:
+            reject_draft(s, d.id, "brain", reason=why)
+            n += 1
+    return n

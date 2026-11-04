@@ -18,7 +18,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..db import CacheEntry, Employee, KnowledgeGap, KnowledgeItem
+from ..db import CacheEntry, Employee, KnowledgeGap, KnowledgeItem, cache_put
 from .embed import embedder
 from ..clock import utcnow
 from ..clock import today as clock_today
@@ -167,8 +167,7 @@ def semantic_lookup(s: Session, question: str, role: str | None, threshold: floa
 
 def semantic_store(s: Session, question: str, role: str | None, answer: dict, hours: int = 24) -> None:
     key = "semantic:" + hashlib.sha256(f"{role}|{question.lower().strip()}".encode()).hexdigest()
-    s.merge(CacheEntry(key=key, kind="semantic", text=question, value={"role": role, "answer": answer},
-                       expires_at=utcnow() + timedelta(hours=hours)))
+    cache_put(s, key, "semantic", {"role": role, "answer": answer}, utcnow() + timedelta(hours=hours), text=question)
 
 
 def clear_semantic_cache(s: Session) -> None:

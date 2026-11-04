@@ -126,7 +126,9 @@ def roadbook(s: Session, request_id: str) -> Draft:
                          f"{r['nights']} {'nacht' if r['nights'] == 1 else 'nachten'} in {r['hotel']}.\n"
                          + ("Wat jullie gaan doen: " + ", ".join(r.get("activities", [])) if r.get("activities") else "")))
             day += r["nights"]
-        flights = "\n".join(f"{f['number']} op {f['date']}: {f['from']} naar {f['to']}" for f in tr.get("flights", [])) or "Volgt nog"
+        from .trip_monitor import flight_fields
+        fl = [flight_fields(f) for f in tr.get("flights", [])]
+        flights = "\n".join(f"{f['number'] or '?'} op {f['date'] or '?'}: {f['from']} naar {f['to']}" for f in fl) or "Volgt nog"
         rb_path = files_dir() / "roadbooks" / f"roadbook_{request_id}.pdf"
         _pdf(rb_path, f"Reisboek {d['nl']}, familie {fam['surname']}",
              [("", txt.intro), ("Vluchten", flights), *days,
@@ -160,6 +162,9 @@ def booking_check(s: Session) -> dict:
     with audit(s, "booking_check", "daily") as box:
         files = []
         for t in server.call(s, me, "ts.list_trips", status="booked"):
+            dd = date.fromisoformat(t["depart_date"]) if t["depart_date"] else None
+            if dd and dd + timedelta(days=t.get("days") or 0) < clock_today():
+                continue  # already travelled and home again: nothing left to prepare
             prs = s.scalars(select(PartnerRequest).where(PartnerRequest.request_id == t["id"])).all()
             missing = []
             open_prs = [pr for pr in prs if pr.status not in ("answered",)]
@@ -170,8 +175,11 @@ def booking_check(s: Session) -> dict:
             if not s.scalars(select(Draft).where(Draft.request_id == t["id"], Draft.kind.in_(["proposal", "change"]),
                                                  Draft.status == "approved")).first():
                 missing.append("no approved offer")
+            from .trip_monitor import flight_fields
             if not t["flights"]:
                 missing.append("no flights in the file")
+            elif any(not (ff["number"] and ff["date"]) for ff in map(flight_fields, t["flights"])):
+                missing.append("flight number or date missing in the file")
             if t["payment_status"] != "paid":
                 dd = date.fromisoformat(t["depart_date"]) if t["depart_date"] else None
                 if dd and dd - clock_today() <= timedelta(weeks=6):
@@ -180,11 +188,21 @@ def booking_check(s: Session) -> dict:
                 missing.append("no proof of travel insurance")
             if not t["passports_checked"]:
                 missing.append("passport names not checked against the booking")
-            if not s.scalars(select(Draft).where(Draft.request_id == t["id"], Draft.kind == "roadbook")).first():
+            has = lambda kind: s.scalars(select(Draft).where(Draft.request_id == t["id"], Draft.kind == kind)).first()  # noqa: E731
+            to_go = (dd - clock_today()).days if dd else None
+            from ..jobs import enqueue, pending
+            # extras only while there is time to add them (more than three weeks out)
+            if to_go is not None and to_go > 21 and not has("extras") and not pending(s, "extras", t["id"]):
+                enqueue(s, "extras", {"request_id": t["id"]})
+            if not has("roadbook"):
+                if to_go is not None and 0 <= to_go <= 21 and not open_prs and not pending(s, "roadbook", t["id"]):
+                    enqueue(s, "roadbook", {"request_id": t["id"]})  # three weeks out, once partners confirmed
                 missing.append("roadbook not made")
             files.append({"request_id": t["id"], "destination": DESTINATIONS[t["destination"]]["name"], "team_id": t["team_id"],
                           "depart_date": t["depart_date"], "missing": missing, "complete": not missing})
         files.sort(key=lambda f: (f["complete"], f["depart_date"] or "9999"))
+        from ..workflow import withdraw_stale_drafts
+        withdraw_stale_drafts(s)
         s.merge(Setting(key="report:booking_check", value={"at": utcnow().isoformat(timespec="minutes"), "files": files}))
         s.commit()
         box["output"] = f"{sum(not f['complete'] for f in files)} of {len(files)} files incomplete"

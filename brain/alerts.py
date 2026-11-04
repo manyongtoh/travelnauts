@@ -92,7 +92,7 @@ def checks(s: Session, now: datetime | None = None) -> list[Alert]:
     # outage, are not the agent's fault and would only repeat another alert.
     per: dict[str, list[int]] = {}
     for agent, ok, error in s.execute(select(AgentRun.agent, AgentRun.ok, AgentRun.error).where(AgentRun.created_at >= hour)):
-        if error and error.split(":")[0] in ("BudgetExceeded", "AgentPaused"):
+        if error and (error.split(":")[0] in ("BudgetExceeded", "AgentPaused") or "All models failed" in error):
             continue
         per.setdefault(agent, [0, 0])
         per[agent][0] += 1

@@ -430,3 +430,16 @@ def assert_synthetic_only(s: Session) -> None:
 
 def as_dict(obj: Any) -> dict:
     return {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
+
+
+def cache_put(s: Session, key: str, kind: str, value, expires_at, text: str | None = None) -> None:
+    """Write a cache entry in one statement. Several workers may cache the same answer at the same moment; a
+    plain insert or merge would then fail one of them and undo its whole agent run."""
+    if s.bind.dialect.name == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert
+    else:
+        from sqlalchemy.dialects.sqlite import insert
+    stmt = insert(CacheEntry).values(key=key, kind=kind, text=text, value=value, expires_at=expires_at)
+    s.execute(stmt.on_conflict_do_update(index_elements=[CacheEntry.key],
+                                         set_={"value": stmt.excluded.value, "expires_at": stmt.excluded.expires_at,
+                                               "text": stmt.excluded.text}))

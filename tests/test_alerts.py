@@ -153,3 +153,12 @@ def test_only_https_webhooks_are_used(world, monkeypatch):
         monkeypatch.setenv("BRAIN_ALERT_WEBHOOK", bad)
         assert alerts._allowed(bad) is False
     assert alerts._allowed("https://travelnauts.webhook.office.com/x")
+
+
+def test_runs_that_failed_because_the_model_was_down_are_not_blamed_on_the_agent(world):
+    from brain.db import AgentRun
+    for i in range(6):
+        world.add(AgentRun(agent="triage", model="m", input_summary="", sources=[], output_summary="", ms=1, ok=False,
+                           error="RuntimeError: All models failed for triage: timeout", cost_eur=0, created_at=utcnow()))
+    world.commit()
+    assert "agent_errors" not in keys(world)

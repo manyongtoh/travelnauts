@@ -20,7 +20,7 @@ from typing import Any, Callable
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .db import CacheEntry, Family, Partner, PastProposal, ToolCall, TripRequest, as_dict
+from .db import CacheEntry, Family, Partner, PastProposal, ToolCall, TripRequest, as_dict, cache_put
 from .identity import AGENTS, Principal
 from .trace import current_trace
 from .clock import utcnow
@@ -73,7 +73,7 @@ class ToolServer:
                     return hit.value
             out = json.loads(json.dumps(t.fn(s, **kwargs), default=str))  # tools return plain JSON, like over MCP
             if key:
-                s.merge(CacheEntry(key=key, kind="exact", value=out, expires_at=utcnow() + timedelta(seconds=t.cache_seconds)))
+                cache_put(s, key, "exact", out, utcnow() + timedelta(seconds=t.cache_seconds))
             return out
         except Exception as e:
             log.ok = False

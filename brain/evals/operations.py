@@ -130,6 +130,19 @@ def run(days: int = 14, seed: int = 7, mails_per_day: int = 25) -> dict:
         for d in s.scalars(select(Draft).where(Draft.status == "draft", Draft.kind.in_(["partner_request", "partner_chase"]))).all():
             approve_draft(s, d.id, "ruben-stam", actor_id="ruben-stam")
             sent += 1
+        # specialists send the extras offers and handle trip alerts; back office sends roadbooks; leads answer complaints
+        lead_of = {e.team_id: e.id for e in s.scalars(select(Employee).where(Employee.role == "team_lead")).all()}
+        for d in s.scalars(select(Draft).where(Draft.status == "draft", Draft.kind.in_(
+                ["extras", "trip_alert", "next_trip", "roadbook", "complaint_reply"]))).all():
+            if rng.random() < 0.8:
+                tr = s.get(TripRequest, d.request_id) if d.request_id else None
+                who = {"roadbook": "ruben-stam"}.get(d.kind) or (lead_of.get(tr.team_id) if d.kind == "complaint_reply" and tr else None) \
+                    or (tr.specialist_id if tr else "sanne-de-vries")
+                try:
+                    approve_draft(s, d.id, who, actor_id=who)
+                    approved += 1
+                except Exception:  # noqa: BLE001
+                    s.rollback()
         # some families book
         for tr in s.scalars(select(TripRequest).where(TripRequest.status == "proposal_sent")).all():
             if rng.random() < 0.08:

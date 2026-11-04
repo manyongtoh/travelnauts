@@ -148,7 +148,8 @@ def test_parallel_workers_never_double_process(tmp_path):
     with db.session() as s:
         triaged = [r.subject for r in s.scalars(select(AgentRun).where(AgentRun.agent == "triage")).all()]
         assert len(triaged) == len(set(triaged)) and s.query(Mail).filter(Mail.status == "new").count() == 0
-        assert all(j.status == "done" for j in s.scalars(select(Job)).all())
+        left = [(j.kind, j.status, (j.error or "")[:80]) for j in s.scalars(select(Job)).all() if j.status != "done"]
+        assert not left, left
     db.reset_engine()
 
 

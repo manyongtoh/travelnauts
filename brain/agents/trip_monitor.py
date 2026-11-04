@@ -42,6 +42,9 @@ def run(s: Session, now: datetime | None = None) -> dict:
         for t in trips:
             fam = server.call(s, ME, "ts.read_relation", family_id=t["family_id"])
             for f in t["flights"]:
+                f = flight_fields(f)
+                if not (f["number"] and f["date"]):  # incomplete flight data from TravelSpirit: the booking check reports it
+                    continue
                 st = server.call(s, ME, "travel.flight_status", number=f["number"], date=f["date"])
                 if (t["id"], f["number"]) in done or not (st["status"] == "cancelled" or st["delay_minutes"] > 60):
                     continue
@@ -57,3 +60,10 @@ def run(s: Session, now: datetime | None = None) -> dict:
         s.commit()
         box["output"] = f"{len(trips)} trips checked, {alerts} alerts"
     return {"trips": len(trips), "alerts": alerts}
+
+
+def flight_fields(f: dict) -> dict:
+    """TravelSpirit flight rows differ per export; take the usual names and never fail on a missing one."""
+    g = lambda *ks: next((f[k] for k in ks if f.get(k)), None)  # noqa: E731
+    return {"number": g("number", "flight", "flight_number", "FlightNumber"), "date": g("date", "depart_date", "Date"),
+            "from": g("from", "origin", "From") or "?", "to": g("to", "destination", "To") or "?"}

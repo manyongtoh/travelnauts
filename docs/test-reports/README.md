@@ -7,20 +7,21 @@ each change, so this report can be reproduced with the commands at the bottom.
 
 | Area | Result |
 |---|---|
-| Test suite on SQLite | 127 passed |
-| Test suite on Postgres 16 | 126 passed, 1 skipped (a SQLite-only schema test) |
+| Test suite on SQLite | 132 passed |
+| Test suite on Postgres 16 | 131 passed, 1 skipped (a SQLite-only schema test) |
 | Quality bench (`brain bench --gate`) | all 11 limits met |
 | Security tests | 17 passed (16 API tests, 1 browser test on 7 screens) |
 | Dependency scan (pip-audit) | no known vulnerabilities |
 | Code scan (bandit, medium and high) | no findings |
 | Two weeks of simulated operation on Postgres, with 6 incidents | 0 failed jobs, 0 lost or doubled mails, audit chain ok every day |
+| One family's whole journey, first mail to next trip | every hand-off happens without anyone remembering a step |
 | Alerts during the two weeks | the right alert on each incident that needs a person, none on incidents that heal themselves, none on quiet days |
 | Backup and restore drill | passed: counts and audit chain identical, newest migration runs on the restored data |
 | Load test, 8 workers | 1,613 mails, none handled twice, none left |
 
 ## What the tests found, and what was fixed
 
-Thirteen problems surfaced. All are fixed and each now has a test, so they cannot come back unnoticed.
+Twenty-three problems surfaced. All are fixed and each now has a test, so they cannot come back unnoticed.
 
 | # | Found by | Problem | Fix |
 |---|---|---|---|
@@ -36,6 +37,16 @@ Thirteen problems surfaced. All are fixed and each now has a test, so they canno
 | 11 | Alert simulation | A daily budget of 0 did not count as reached, so the budget alert stayed silent. | A cap of 0 now counts as reached. |
 | 12 | Alert simulation | "Agent failing often" fired during the model outage and the budget stop, repeating the real cause. | Budget waits and pauses are not counted; with a model alert open it is not raised. |
 | 13 | Code scan | The alert webhook would accept any address scheme, such as file:. | Only https (and local http for tests). |
+| 14 | Journey | Real mail carries an address, not a family. Nothing matched it, so a first enquiry created no request, and changes and complaints from real mail were never linked. | Senders are matched to families by address; a first enquiry opens a new relation, named from the sign-off, for the specialist to check. |
+| 15 | Journey | A new request waited until the specialist asked for a proposal. | The proposal is drafted right after triage. |
+| 16 | Journey | A proposal for a family without a known name crashed. | A neutral greeting when no name is known. |
+| 17 | Journey | A "have you decided?" follow-up stayed ready to send after the family booked or wrote back. | It is withdrawn, and approving it is blocked. |
+| 18 | Journey | After booking nothing happened by itself: extras and roadbook waited for someone to remember. | Extras right after booking; the roadbook three weeks out, once partners confirmed. |
+| 19 | Journey | Flight rows with other field names crashed the flight watch and the roadbook. | Common field names are read; incomplete rows are reported by the booking check. |
+| 20 | Journey | A complaint was linked to any booked trip of the family. | To the trip that started most recently. |
+| 21 | Journey | Families who had travelled never got a next-trip idea, and in pilot and live the job did nothing at all. | Two months after coming home, at most once a year, on real data too. |
+| 22 | Parallel workers on Postgres | Two workers caching the same tool answer at once undid one agent run. | The cache write is a single upsert. |
+| 23 | Simulation | On its first run the booking check drafted extras and roadbooks for every booked trip, including trips long past. | Only trips still to come; extras only while more than three weeks remain. |
 | 10 | Backup drill | `brain migrate` failed on a database that was built without migrations. | It now adopts such a database only if it matches the code exactly, and otherwise stops without changing anything. |
 
 Two code scan warnings (a fixed temporary folder in the simulation, a table name in a query) were low risk in
@@ -83,6 +94,23 @@ scheduler every hour and the night jobs at 02:00. One incident on six of the day
 
 Across all 14 days: 0 failed jobs, the queue empty every night, no mail left untriaged or triaged twice, the
 audit chain intact every day, and the log size stable at about 3,500 rows with 7-day retention.
+
+## One family's journey
+
+`scripts/journey.py` (and `tests/test_journey.py`) follows one new family through the API, as each role would:
+
+| When | Who | What happens |
+|---|---|---|
+| Mon 08:00 | family | first mail from an unknown address |
+| Mon 08:00 | brain | new relation opened, named from the sign-off; request created and assigned; proposal drafted |
+| Mon 09:00 | specialist | finds the proposal ready; asks partners for availability |
+| Mon 10:00 | back office | approves the partner mails |
+| Tue | specialist | sends the proposal |
+| a week later | brain | drafts a follow-up after silence |
+| booking | brain | withdraws the follow-up; drafts extras |
+| 3 weeks out | brain | drafts the roadbook and vouchers once partners confirmed; watches the flight |
+| after the trip | family, team lead | complaint from the same address reaches the team lead, linked to the trip |
+| 4 months later | brain | next-trip idea |
 
 ## Backup and restore
 

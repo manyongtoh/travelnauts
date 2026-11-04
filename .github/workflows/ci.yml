@@ -56,6 +56,7 @@ jobs:
           BRAIN_DATABASE_URL=postgresql+psycopg://brain:brain@localhost:5432/brain_ops brain simulate --days 14
           python -c "import json; d=json.load(open('data/ops/simulation.json')); bad=[x for x in d['days'] if x['failed_jobs_total'] or x['mails_untriaged'] or x['triaged_twice'] or not x['audit_chain_ok']]; assert not bad, bad"
           python -c "import json; d=json.load(open('data/ops/simulation.json')); noisy=[x['day'] for x in d['days'] if not x['events'] and not x['checks'] and x['alerts']]; assert not noisy, f'alerts on quiet days: {noisy}'"
+          python -c "import json; d=json.load(open('data/ops/simulation.json')); m=max(x['drafts_waiting'] for x in d['days']); assert m < 100, f'drafts pile up: {m} waiting'"
           scripts/backup_drill.sh postgresql://brain:brain@localhost:5432/brain_ops
           cat data/ops/simulation.md >> "$GITHUB_STEP_SUMMARY"
   security:

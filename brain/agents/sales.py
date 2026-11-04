@@ -116,7 +116,7 @@ def complaint(s: Session, mail_id: str) -> Draft:
     with audit(s, "complaints", mail_id, m.subject) as box:
         mail = server.call(s, me, "ts.read_mail", mail_id=mail_id)
         trips = server.call(s, me, "ts.list_trips", family_id=m.family_id) if m.family_id else []
-        trip = next((t for t in trips if t["status"] == "booked"), None)  # complaints are about trips that were booked
+        trip = complained_trip(trips)
         fam = server.call(s, me, "ts.read_relation", family_id=m.family_id) if m.family_id else {"contact_name": ""}
         ctx = {"mail": {"subject": mail["subject"], "body": mail["body"]}, "family": {"name": fam["contact_name"]},
                "trip": {"destination": DESTINATIONS[trip["destination"]]["nl"], "depart_date": trip["depart_date"],
@@ -259,3 +259,13 @@ def call_notes(s: Session, request_id: str, notes: str) -> Draft:
         s.commit()
         box["output"] = out.summary[:120]
     return d
+
+
+def complained_trip(trips: list[dict]) -> dict | None:
+    """A complaint is about a booked trip: the one that started most recently, else the next one coming up."""
+    from ..clock import today
+    booked = [t for t in trips if t["status"] == "booked"]
+    started = sorted((t for t in booked if t.get("depart_date") and t["depart_date"] <= today().isoformat()),
+                     key=lambda t: t["depart_date"], reverse=True)
+    coming = sorted((t for t in booked if t not in started), key=lambda t: t.get("depart_date") or "9999")
+    return (started or coming or [None])[0]

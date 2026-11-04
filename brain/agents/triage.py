@@ -9,6 +9,7 @@ Order of work:
 """
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -106,6 +107,13 @@ def triage_mail(s: Session, mail_id: str) -> dict:
             escalated = True
         team = team_for(s, res.destination)
         out = res.model_dump() | {"team_id": team.id if team else None, "escalated": escalated}
+        if not m.family_id:  # real mail carries an address, not a family: match it, or open a new relation
+            fam = resolve_family(s, m.sender, res, m.body)  # the stored address; the model only ever sees the domain
+            if fam is not None:
+                m.family_id = fam.id
+                out["new_relation"] = fam.id.startswith("f-new-")
+            elif res.category in ("change", "complaint"):
+                out["unknown_sender"] = True  # a person links it to the right family
         if res.category == "new_request" and m.family_id and res.destination:
             spec = least_loaded_specialist(s, team.id) if team else None
             from ..db import next_number
@@ -131,15 +139,24 @@ def triage_mail(s: Session, mail_id: str) -> dict:
                 tr.status = "change_requested"
                 tr.last_customer_contact = m.received_at
         from ..jobs import enqueue
+        if out.get("request_id") and res.category == "new_request":
+            enqueue(s, "write_proposal", {"request_id": out["request_id"]})  # the draft is ready when the specialist looks
         if res.category == "partner_reply" and m.partner_id:
             enqueue(s, "partner_reply", {"mail_id": m.id})
         if res.category == "invoice":
             enqueue(s, "invoice", {"mail_id": m.id})
         if res.category == "complaint" and m.family_id:
             enqueue(s, "complaint", {"mail_id": m.id})
+        if m.family_id and res.category not in ("partner_reply", "invoice"):
+            for t in s.scalars(select(TripRequest).where(TripRequest.family_id == m.family_id,
+                                                          TripRequest.status == "proposal_sent")).all():
+                t.last_customer_contact = m.received_at  # they wrote back: a reminder from us would cross their mail
         m.triage = out
         m.status = "triaged"
         s.commit()
+        if m.family_id:
+            from ..workflow import withdraw_stale_drafts
+            withdraw_stale_drafts(s)
         box["output"] = f"{res.category} {res.destination or ''} team={out['team_id']}{' escalated' if escalated else ''}"
     return out
 
@@ -147,3 +164,39 @@ def triage_mail(s: Session, mail_id: str) -> dict:
 def triage_inbox(s: Session, limit: int | None = None) -> list[dict]:
     ids = [m.id for m in s.scalars(select(Mail).where(Mail.status == "new").order_by(Mail.received_at)).all()]
     return [triage_mail(s, i) for i in ids[:limit]]
+
+
+SIGN_OFF = re.compile(r"(?i:groet(?:en)?|groetjes|vriendelijke groet(?:en)?|hartelijke groet(?:en)?|liefs|regards)[,!.]?\s*\n?\s*"
+                      r"([A-Z][a-z\u00e0-\u00ff]+(?:(?:\s+(?:van|de|der|den|ter|ten|het|'t)){0,3}\s+[A-Z][a-z\u00e0-\u00ff'-]+)*)\s*$")
+
+
+def name_from_sign_off(body: str | None) -> tuple[str, str]:
+    """'Groet, Marieke van der Berg' gives ('Marieke van der Berg', 'van der Berg'). Nothing found gives ('', '')."""
+    lines = [ln for ln in (body or "").strip().splitlines()
+             if not re.match(r"\s*(verstuurd (vanaf|met)|sent from|get outlook|op .* schreef)", ln, re.I)]
+    m = SIGN_OFF.search("\n".join(lines).strip()[-200:])
+    if not m:
+        return "", ""
+    full = " ".join(m.group(1).split())
+    parts = full.split(" ", 1)
+    return full, (parts[1] if len(parts) > 1 else "")
+
+
+def resolve_family(s: Session, sender: str | None, res, body: str | None = None) -> "Family | None":
+    """Which family wrote this? By exact address (case-insensitive) against the relations. A first enquiry from an
+    unknown address opens a new relation, marked for the specialist to check and create in TravelSpirit."""
+    from ..db import Family, next_number
+    addr = (sender or "").strip().lower()
+    if not addr or "@" not in addr:
+        return None
+    fam = s.scalars(select(Family).where(func.lower(Family.email) == addr)).first()
+    if fam is not None or res.category != "new_request":
+        return fam
+    n = next_number(s, "new_relation")
+    name, surname = name_from_sign_off(body)
+    fam = Family(id=f"f-new-{n:04d}", surname=surname, contact_name=name, email=addr, adults=res.adults or 2,
+                 child_ages=list(res.child_ages or []), notes="Nieuwe relatie uit een eerste mail: controleer en maak aan in TravelSpirit.",
+                 synthetic=False)
+    s.add(fam)
+    s.flush()
+    return fam

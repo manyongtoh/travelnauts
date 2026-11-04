@@ -73,7 +73,7 @@ def write_commands(s: Session, request_id: str) -> Draft:
     back_date = out_date + timedelta(days=tr.days - 1)
     fmt = lambda d: f"{d.day:02d}{MON[d.month - 1]}"
     with audit(s, "galileo_helper", request_id) as box:
-        travellers = [{"surname": fam.surname.upper().replace(" ", ""), "first": fam.contact_name.split()[0].upper(),
+        travellers = [{"surname": fam.surname.upper().replace(" ", ""), "first": (fam.contact_name.split() or ["ONBEKEND"])[0].upper(),
                        "type": "adult"}]
         if fam.adults == 2:
             travellers.append({"surname": fam.surname.upper().replace(" ", ""), "first": "PARTNER", "type": "adult"})

@@ -41,6 +41,8 @@ SCHEDULE: dict[str, tuple[str, int | None]] = {
     "booking_check": ("booking_check", 24 * 60),
     "next_trips": ("next_trip", 7 * 24 * 60),
     "retention": ("maintenance", 24 * 60),
+    "extras": ("extras", None),
+    "roadbook": ("roadbook", None),
     "alerts": ("maintenance", 15),
 }
 
@@ -50,6 +52,12 @@ def enqueue(s: Session, kind: str, payload: dict | None = None, run_after: datet
     s.add(j)
     s.flush()
     return j
+
+
+def pending(s: Session, kind: str, request_id: str) -> bool:
+    """Is a job of this kind for this request already waiting or running? Keeps triggers from piling up."""
+    return any(j.payload.get("request_id") == request_id for j in
+               s.scalars(select(Job).where(Job.kind == kind, Job.status.in_(["queued", "running"]))).all())
 
 
 def _handlers() -> dict[str, Callable[[Session, dict], dict]]:
@@ -65,12 +73,21 @@ def _handlers() -> dict[str, Callable[[Session, dict], dict]]:
         return {"queued": len([i for i in ids if i not in queued])}
 
     def next_trips(s, p):
-        """Weekly: families who travelled with us and have nothing open get a next-trip idea (max 5 a week)."""
+        """Weekly: families back from a trip with us (two months or more) and nothing open get a next-trip idea,
+        at most once a year and at most 5 a week."""
+        from .alerts import OPEN_REQUEST_STATUSES
+        from .clock import today as _today
         from .db import Draft, Family, TripRequest
-        open_fams = {t.family_id for t in s.scalars(select(TripRequest)).all() if t.status != "lost"}
-        done = {(d.data or {}).get("family_id") for d in s.scalars(select(Draft).where(Draft.kind == "next_trip")).all()}
-        fams = [f for f in s.scalars(select(Family).where(Family.synthetic.is_(True))).all()
-                if f.past_destinations and f.id not in open_fams and f.id not in done][:5]
+        trips = s.scalars(select(TripRequest)).all()
+        busy = {t.family_id for t in trips if t.status in OPEN_REQUEST_STATUSES
+                or (t.status == "booked" and (t.depart_date is None or t.depart_date + timedelta(days=t.days) > _today()))}
+        back = {t.family_id for t in trips if t.status == "booked" and t.depart_date
+                and t.depart_date + timedelta(days=t.days + 60) <= _today()}
+        year_ago = utcnow() - timedelta(days=365)
+        done = {(d.data or {}).get("family_id") for d in s.scalars(select(Draft).where(
+            Draft.kind == "next_trip", Draft.created_at >= year_ago)).all()}
+        fams = [f for f in s.scalars(select(Family).order_by(Family.id)).all()
+                if (f.past_destinations or f.id in back) and f.id not in busy and f.id not in done][:5]
         return {"drafted": len([sales.next_trip(s, f.id) for f in fams])}
 
     def chases(s, p):
@@ -83,7 +100,8 @@ def _handlers() -> dict[str, Callable[[Session, dict], dict]]:
         "change": lambda s, p: {"draft_id": change.handle_change(s, p["mail_id"]).id},
         "partner_reply": lambda s, p: partner_desk.read_reply(s, p["mail_id"]),
         "chase_partners": chases,
-        "followups": lambda s, p: {"drafted": len(followup.run_followups(s))},
+        "followups": lambda s, p: {"withdrawn": __import__("brain.workflow", fromlist=["x"]).withdraw_stale_drafts(s),
+                                   "drafted": len(followup.run_followups(s))},
         "supplier_watch": lambda s, p: supplier.watch(s),
         "customer_insight": lambda s, p: insight.customer_insight(s),
         "team_insight": lambda s, p: insight.team_insight(s),
@@ -95,6 +113,8 @@ def _handlers() -> dict[str, Callable[[Session, dict], dict]]:
         "booking_check": lambda s, p: backoffice.booking_check(s),
         "next_trips": next_trips,
         "retention": lambda s, p: retention(s),
+        "extras": lambda s, p: {"draft_id": sales.extras(s, p["request_id"]).id},
+        "roadbook": lambda s, p: {"draft_id": backoffice.roadbook(s, p["request_id"]).id},
         "alerts": lambda s, p: __import__("brain.alerts", fromlist=["notify"]).notify(s),
     }
 
