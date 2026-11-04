@@ -1,0 +1,52 @@
+name: gemma
+# Test #1: Gemma 4 through Ollama on a GitHub runner (4 CPUs, 16 GB, no GPU). Slow, so a sample of the bench.
+# Start it by hand: Actions > gemma > Run workflow. The report, with Gemma's own proposal texts, is in the summary.
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Gemma 4 size (e2b is fastest, e4b is the default Gemma 4)"
+        type: choice
+        options: [gemma4:e4b, gemma4:e2b]
+        default: gemma4:e4b
+      mails:
+        description: "How many mails through triage"
+        default: "30"
+jobs:
+  modelcheck:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    env:
+      PYDANTIC_AI_NO_BANNER: "1"
+      BRAIN_MODEL_SMALL: ollama:${{ inputs.model }}
+      BRAIN_MODEL_LARGE: ollama:${{ inputs.model }}
+      BRAIN_MODEL_BASE_URL: http://localhost:11434/v1
+      BRAIN_MODEL_TIMEOUT: "900"          # CPU only: a proposal can take minutes
+      BRAIN_DAILY_BUDGET_EUR: "1000"      # local model, no cost; do not let the budget stop the run
+      BRAIN_DATABASE_URL: sqlite:///data/modelcheck.db
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - name: Install Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          sudo systemctl stop ollama || true
+          OLLAMA_CONTEXT_LENGTH=8192 OLLAMA_KEEP_ALIVE=24h nohup ollama serve > ollama.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:11434/api/tags > /dev/null && break; sleep 2; done
+          ollama --version
+      - name: Download ${{ inputs.model }}
+        run: ollama pull ${{ inputs.model }} && ollama run ${{ inputs.model }} "Zeg hallo in één zin." && ollama ps
+      - name: Model check
+        run: brain modelcheck --mails ${{ inputs.mails }} --proposals 4 --complaints 3 --replies 4
+      - if: always()
+        run: |
+          cat data/modelcheck/report.md >> "$GITHUB_STEP_SUMMARY" || echo "no report" >> "$GITHUB_STEP_SUMMARY"
+          tail -50 ollama.log || true
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: modelcheck-${{ github.run_id }}
+          path: data/modelcheck/

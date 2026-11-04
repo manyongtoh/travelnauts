@@ -30,6 +30,9 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("migrate", help="bring the database schema up to date (Alembic)")
     n8 = sub.add_parser("n8n", help="inventory of exported n8n workflows")
     n8.add_argument("paths", nargs="+")
+    mc = sub.add_parser("modelcheck", help="a sample of the bench for a real model on slow hardware (test #1)")
+    for flag, default in (("--mails", 30), ("--proposals", 4), ("--complaints", 3), ("--replies", 4)):
+        mc.add_argument(flag, type=int, default=default)
     sub.add_parser("check", help="the morning check: open alerts (exit 2 critical, 1 warning, 0 none)")
     sub.add_parser("verify", help="row counts, audit chain and schema version (use after a restore)")
     sub.add_parser("envcheck", help="check this environment's configuration (test, pilot, live)")
@@ -112,6 +115,9 @@ def main(argv: list[str] | None = None) -> None:
     elif a.cmd == "n8n":
         from .n8n_inventory import main as n8n_main
         n8n_main(a.paths)
+    elif a.cmd == "modelcheck":
+        from .evals.model_check import main as mc_main
+        mc_main(["--mails", str(a.mails), "--proposals", str(a.proposals), "--complaints", str(a.complaints), "--replies", str(a.replies)])
     elif a.cmd == "check":
         import sys
         from . import db as _db
