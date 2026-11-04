@@ -32,7 +32,7 @@ Every part of the tech architecture document, where it lives in the code, and it
 |---|---|
 | Triage | Built |
 | Proposal writer | Built |
-| Partner desk: requests, reads replies, chases, compares | Built (PDF attachments not yet read) |
+| Partner desk: requests, reads replies and PDF offers, chases, compares | Built |
 | Supplier watcher | Built |
 | Knowledge desk | Built |
 | Customer insight | Built |
@@ -41,6 +41,15 @@ Every part of the tech architecture document, where it lives in the code, and it
 | Team insight | Built |
 | Trip monitor | Built (stand-in flight data) |
 | Change handling (not in the document, added) | Built |
+| Proposal alternatives: quieter and cheaper, priced | Built |
+| Complaint handling: severity, actions, careful reply, team lead approves money or high priority | Built |
+| Next-trip advisor (weekly, former guests) | Built |
+| Extras advisor | Built |
+| Call notes into wishes, changes, questions, next steps | Built |
+| Invoice matcher: invoice against the accepted offer | Built |
+| Roadbook and vouchers as PDF, with a children's page | Built |
+| Partner offers in PDF attachments | Built |
+| Booking file checks (partners, offer, flights, payment, insurance, passports, roadbook) | Built |
 
 ## Knowledge and prompts
 

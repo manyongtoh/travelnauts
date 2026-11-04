@@ -46,10 +46,12 @@ def triage(ctx: dict) -> dict:
         if nl.lower() in low:
             dest = key
             break
-    if re.search(r"tn-r\d{3}", low) and not re.search(r"@example\.org|freemail", m["from"].lower()):
-        cat = "partner_reply"
-    elif "news" in m["from"].lower() or "afmelden" in low or "factuur" in low:
+    if "news" in m["from"].lower() or "afmelden" in low:
         cat = "other"
+    elif re.search(r"\b(invoice|factuur)\b", low) and not re.search(r"@example\.org|freemail", m["from"].lower()):
+        cat = "invoice"
+    elif re.search(r"tn-r\d{3}", low) and not re.search(r"@example\.org|freemail", m["from"].lower()):
+        cat = "partner_reply"
     elif any(w in low for w in ["teleurgesteld", "niet tevreden", "echt niet goed", "kwam niet opdagen", "klacht"]):
         cat = "complaint"
     elif any(w in low for w in ["wijzig", "in het voorstel", "later vertrekken", "in plaats daarvan"]):
@@ -61,7 +63,7 @@ def triage(ctx: dict) -> dict:
     else:
         cat = "other"
     out: dict = {"category": cat, "confidence": 0.5 if cat == "other" and "?" in text else 0.9,
-                 "destination": dest if cat not in ("other", "partner_reply") else None,
+                 "destination": dest if cat not in ("other", "partner_reply", "invoice") else None,
                  "urgent": cat == "complaint" or "snel reageren" in low, "child_ages": [], "wishes": []}
     if cat == "new_request":
         ages = re.search(r"kinderen (?:\(|van |zijn )([\d en]+?)(?: jaar|\)|\.)", low)
@@ -92,6 +94,7 @@ def triage(ctx: dict) -> dict:
         "question": f"Vraag{(' over ' + nl) if nl else ''}",
         "complaint": "Klacht, snel oppakken",
         "partner_reply": "Antwoord van een partner",
+        "invoice": "Factuur van een leverancier, naar de back office",
         "other": "Geen actie nodig",
     }[cat]
     return out
@@ -253,9 +256,9 @@ def change_reply(ctx: dict) -> dict:
 
 
 def partner_reply(ctx: dict) -> dict:
-    t = ctx["mail"]["body"].lower()
-    no = re.search(r"fully booked|unfortunately|not available|volgeboekt|helaas", t)
-    yes = re.search(r"confirm|available|bevestig|beschikbaar|our offer|please find", t)
+    t = (ctx["mail"]["body"] + "\n" + "\n".join(a["text"] for a in ctx["mail"].get("attachments", []))).lower()
+    no = re.search(r"fully booked|unfortunately|not available|volgeboekt|helaas|available: no", t)
+    yes = re.search(r"confirm|available: yes|available\b|bevestig|beschikbaar|our offer|please find", t)
     price = re.search(r"eur\s?([\d.,]+)|€\s?([\d.,]+)", t)
     eur = float((price.group(1) or price.group(2)).replace(",", "").rstrip(".")) if price else None
     return {"available": False if no else (True if yes else None), "price_eur": eur,
@@ -273,7 +276,102 @@ def trip_alert(ctx: dict) -> dict:
     return {"subject": f"Jullie vlucht {f['number']}", "body": body}
 
 
-HANDLERS = {"partner_reply": partner_reply, "trip_alert": trip_alert, "change_plan": change_plan, "change_reply": change_reply, "triage": triage, "proposal": proposal, "followup": followup, "partner_request": partner_request,
+def _first(ctx):
+    return (ctx.get("family") or {}).get("name", "").split(" ")[0] or "allemaal"
+
+
+def _eur(x):
+    return f"{int(round(x)):,}".replace(",", ".")
+
+
+def alternatives(ctx: dict) -> dict:
+    lines = [f"Beste {_first(ctx)},", "", f"Naast het voorstel van {_eur(ctx['current']['sell_eur'])} euro heb ik twee andere versies gemaakt:", ""]
+    for v in ctx["versions"]:
+        lines.append(f"{v['label']}: " + ", ".join(f"{r['stop']} ({r['nights']})" for r in v["route"]) + f". Ongeveer {_eur(v['sell_eur'])} euro voor het hele gezin.")
+    lines += ["", "Laat weten welke jullie het meest aanspreekt, dan werk ik die verder uit.", "", "Hartelijke groet,", ctx["specialist"]]
+    return {"subject": f"Twee andere versies voor {ctx['trip']['destination']}", "body": "\n".join(lines)}
+
+
+def complaint_reply(ctx: dict) -> dict:
+    t = ctx["mail"]["body"].lower()
+    topics = [k for k, ws in {"hotel": ["hotel", "kamer", "room", "pool", "zwembad"], "transfer": ["transfer", "pick-up", "ophalen"],
+                              "guide": ["gids", "guide"], "flight": ["vlucht", "flight"], "communication": ["niemand neemt op", "no answer"]}.items()
+              if any(w in t for w in ws)] or ["other"]
+    now = bool(re.search(r"\b(nu|now|staan|we zijn hier|right now|vandaag)\b", t))
+    high = now or "!!" in ctx["mail"]["body"] or "veilig" in t
+    sev = "high" if high else ("low" if re.search(r"prima|fine|maar ik wil wel even kwijt", t) else "medium")
+    first = _first(ctx)
+    lines = [f"Beste {first},", "", "Wat vervelend dat dit gebeurt, en dank dat je het meteen laat weten."]
+    if ctx.get("trip") and now:
+        lines.append(f"We gaan er nu direct mee aan de slag. Bel bij spoed onze 24/7 lijn: {ctx['emergency_line']}.")
+    lines += ["Ik zoek uit wat er is misgegaan en laat je vandaag nog weten wat we doen.", "", "Hartelijke groet,", ctx["specialist"]]
+    actions = {"hotel": "Hotel bellen en een andere kamer of hotel vragen", "transfer": "Lokale partner bellen over de transfer",
+               "guide": "Feedback aan de lokale partner over de gids", "flight": "Vluchtstatus en opties nagaan",
+               "communication": "Nagaan waarom de familie ons niet kon bereiken", "other": "Situatie uitzoeken met de specialist"}
+    return {"severity": sev, "while_travelling": now, "topics": topics, "actions": [actions[x] for x in topics] + (["Teamleider informeren"] if sev == "high" else []),
+            "subject": "Re: " + ctx["mail"]["subject"], "body": "\n".join(lines)}
+
+
+def next_trip(ctx: dict) -> dict:
+    kids = ctx["family"]["child_ages"]
+    lines = [f"Beste {_first(ctx)},", "", "Wat leuk dat jullie met ons op reis zijn geweest. Ik dacht al even mee over een volgende keer:", ""]
+    for o, k in zip(ctx["suggestions"], ctx["knowledge"] + [""] * 2):
+        lines.append(f"{o['name']}: met kinderen van {', '.join(str(a) for a in kids)} past er veel, de beste tijd is {o['best']}.")
+    lines += ["", "Geen haast hoor. Als jullie willen, maak ik een eerste idee.", "", "Hartelijke groet,", "Travelnauts"]
+    return {"subject": "Een idee voor jullie volgende reis", "body": "\n".join(lines)}
+
+
+def extras(ctx: dict) -> dict:
+    lines = [f"Beste {_first(ctx)},", "", "Een paar extra's die goed bij jullie passen:"]
+    lines += [f"- {e['name']} in {e['stop']}: {_eur(e['price_eur'])} euro voor het hele gezin" for e in ctx["extras"]]
+    if ctx.get("insurance_policy"):
+        lines += ["", ctx["insurance_policy"].replace(" (Sandbox voorbeeld.)", "")]
+    lines += ["", "Zeg het maar als je iets wilt toevoegen.", "", "Hartelijke groet,", ctx["specialist"]]
+    return {"subject": "Extra's voor jullie reis", "body": "\n".join(lines)}
+
+
+def call_notes(ctx: dict) -> dict:
+    n = ctx["notes"]
+    low = n.lower()
+    parts = [p.strip(" -*") for p in re.split(r"[\n;]+", n) if p.strip(" -*")]
+    budget = re.search(r"budget\D{0,12}(\d+)[.,]?(\d{3})?\s*(k|duizend)?", low)
+    b = None
+    if budget:
+        b = float(budget.group(1) + (budget.group(2) or ""))
+        if budget.group(3):
+            b *= 1000
+    days = re.search(r"(\d+)\s*(dagen|days)", low)
+    return {"summary": parts[0] if parts else "Gesprek met de familie",
+            "wishes": [p for p in parts if re.search(r"willen|graag|wens|liever|like|want", p.lower())],
+            "changes": [p for p in parts if re.search(r"wijzig|anders|in plaats|langer|korter|skip|overslaan", p.lower())],
+            "open_questions": [p for p in parts if p.endswith("?") or re.search(r"uitzoeken|checken|vragen of|weet niet", p.lower())],
+            "next_steps": [p for p in parts if re.search(r"sturen|bellen|terugkoppelen|maken|send|call back|volgende week", p.lower())],
+            "budget_eur": b, "days": int(days.group(1)) if days else None}
+
+
+def invoice_extract(ctx: dict) -> dict:
+    t = ctx["mail"]["subject"] + "\n" + ctx["mail"]["body"] + "\n" + "\n".join(a["text"] for a in ctx["mail"].get("attachments", []))
+    no = re.search(r"\bINV-[\w-]+", t) or re.search(r"factuur\s*(?:nr\.?|nummer)?\s*([\d][\w-]+)", t, re.I)
+    ref = re.search(r"TN-R\d{2,3}", t, re.I)
+    amt = re.search(r"(?:EUR|€)\s?([\d.,]+)", t)
+    days = re.search(r"within (\d+) days|binnen (\d+) dagen", t, re.I)
+    amount = float(amt.group(1).replace(",", "").rstrip(".")) if amt else None
+    return {"invoice_no": (no.group(1) if no.re.groups else no.group(0)) if no else None, "reference": ref.group(0).upper() if ref else None, "amount_eur": amount,
+            "due_days": int(days.group(1) or days.group(2)) if days else None}
+
+
+def roadbook_intro(ctx: dict) -> dict:
+    d = ctx["trip"]["destination"]
+    stops = [r["stop"] for r in ctx["trip"]["route"]]
+    intro = (f"Beste {_first(ctx)}, hier is jullie reisboek voor {d}. Jullie reizen langs {', '.join(stops[:-1])} en eindigen in {stops[-1]}. "
+             "Neem dit boekje mee: alles wat je onderweg nodig hebt staat erin.")
+    kids = (f"Hoi! Jullie gaan naar {d}. Onderweg zie je {stops[0]} en {stops[-1]}. Leuk om te weten: "
+            f"je slaapt op {len(stops)} verschillende plekken, je reist meer dan duizend kilometer, en je leert vast een paar woorden in een nieuwe taal.")
+    return {"intro": intro, "kids_page": kids}
+
+
+HANDLERS = {"partner_reply": partner_reply, "alternatives": alternatives, "complaint_reply": complaint_reply, "next_trip": next_trip,
+            "extras": extras, "call_notes": call_notes, "invoice_extract": invoice_extract, "roadbook_intro": roadbook_intro, "trip_alert": trip_alert, "change_plan": change_plan, "change_reply": change_reply, "triage": triage, "proposal": proposal, "followup": followup, "partner_request": partner_request,
             "partner_chase": partner_chase, "galileo": galileo, "answer": answer}
 
 

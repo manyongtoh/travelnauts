@@ -66,6 +66,14 @@ AGENTS: dict[str, set[str]] = {
     "agent:customer_insight": {"stats.requests"},
     "agent:team_insight": {"stats.requests"},
     "agent:trip_monitor": {"ts.list_trips", "travel.flight_status", "ts.read_relation"},
+    "agent:alternatives": {"ts.read_trip", "ts.read_relation", "prices.read", "calc.quote"},
+    "agent:complaints": {"ts.read_mail", "ts.list_trips", "ts.read_relation"},
+    "agent:next_trip": {"ts.read_relation", "ts.list_trips", "prices.read", "knowledge.search"},
+    "agent:extras": {"ts.read_trip", "ts.read_relation", "prices.read", "knowledge.search"},
+    "agent:call_notes": {"ts.read_trip"},
+    "agent:invoice_matcher": {"partners.read_reply"},
+    "agent:roadbook": {"ts.read_trip", "ts.read_relation", "knowledge.search", "partners.list"},
+    "agent:booking_check": {"ts.list_trips"},
 }
 
 

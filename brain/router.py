@@ -22,7 +22,9 @@ TASK_TIER = {
     "triage": "small", "followup": "small", "partner_request": "small", "partner_chase": "small",
     "partner_reply": "small", "galileo": "small", "answer": "small", "change_plan": "small",
     "supplier_note": "small", "trip_alert": "small",
-    "proposal": "large", "change_reply": "large", "complaint_reply": "large",
+    "extras": "small", "call_notes": "small", "invoice_extract": "small",
+    "proposal": "large", "change_reply": "large", "complaint_reply": "large", "alternatives": "large",
+    "next_trip": "large", "roadbook_intro": "large",
 }
 
 # EUR per million tokens (input, output). Estimates; replace with the contract prices.

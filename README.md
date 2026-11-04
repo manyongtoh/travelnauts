@@ -1,8 +1,10 @@
 # Travelnauts company brain: sandbox
 
 A working version of the company brain from the proposal and the tech architecture, running on
-**made-up data only**: the tool server (also over MCP), eleven agents, a job queue and scheduler, the model
+**made-up data only**: the tool server (also over MCP), a job queue and scheduler, the model
 router with budgets, guardrails, the knowledge vault, sign-in by role, a hash-chained audit log, traces,
+nineteen agents (including alternatives, complaints, next-trip and extras advisors, call notes, invoice matching,
+roadbooks and vouchers as PDF, and booking file checks),
 evals that gate CI, and five screens (specialist, team lead, back office, maintenance, user management).
 See [docs/architecture-coverage.md](docs/architecture-coverage.md) for what is built, what is a stand-in
 and what still needs Azure.
@@ -17,7 +19,7 @@ pip install -e ".[dev]"
 brain seed            # build the synthetic database and knowledge vault (data/)
 brain worker --once   # run the scheduler and the queue once (triage, follow-ups, insight, ...)
 brain serve           # open http://127.0.0.1:8000 and pick who you are
-pytest -q             # 72 tests
+pytest -q             # 83 tests
 brain bench --gate    # evals; fails when a gate from the architecture is not met
 brain mcp             # the tool server over MCP, as BRAIN_MCP_AGENT
 brain envcheck        # check the test, pilot or live configuration

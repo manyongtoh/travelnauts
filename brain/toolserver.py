@@ -209,7 +209,9 @@ def partners_read_reply(s: Session, mail_id: str) -> dict:
         if m.partner_id:
             q = q.where(PartnerRequest.partner_id == m.partner_id)
         pr = s.scalars(q).first()
-    return {"mail": {"subject": m.subject, "body": m.body, "partner_id": m.partner_id},
+    from .files import pdf_text
+    atts = [{"name": a["name"], "text": pdf_text(a["path"])[:4000]} for a in (m.attachments or []) if a.get("mime") == "application/pdf"]
+    return {"mail": {"subject": m.subject, "body": m.body, "partner_id": m.partner_id, "attachments": atts},
             "partner_request_id": pr.id if pr else None, "request_id": pr.request_id if pr else None}
 
 

@@ -10,9 +10,9 @@
 let team = store.get("tl:team") || "all", kfilter = "proposed";
 const app = shell({
   role: "Team lead",
-  nav: [["overview", "Overview"], ["insight", "Insight"], ["knowledge", "Knowledge"], ["gaps", "Knowledge gaps"], ["log", "Log"]],
+  nav: [["overview", "Overview"], ["complaints", "Complaints"], ["insight", "Insight"], ["knowledge", "Knowledge"], ["gaps", "Knowledge gaps"], ["log", "Log"]],
   needs: "team.metrics",
-  onNav: v => ({overview: viewOverview, insight: viewInsight, knowledge: viewKnowledge, gaps: viewGaps, log: viewLog})[v](),
+  onNav: v => ({overview: viewOverview, complaints: viewComplaints, insight: viewInsight, knowledge: viewKnowledge, gaps: viewGaps, log: viewLog})[v](),
 });
 $("#tb-left").textContent = "Pilot · synthetic stage";
 
@@ -84,6 +84,27 @@ async function viewOverview() {
 }
 function bindApprove(after) {
   $$("[data-approve]").forEach(b => b.onclick = async () => { await post(`/api/knowledge/${b.dataset.approve}/approve`, {by: "Team lead"}); toast("Approved. Agents can use it now."); after(); });
+}
+
+async function viewComplaints() {
+  const rows = await api("/api/complaints");
+  const open = rows.filter(d => d.status === "draft");
+  badge("complaints", open.filter(d => d.data.severity === "high").length);
+  $("#view").innerHTML = `<div class="vhead"><span class="label">${open.length} open · ${rows.length - open.length} handled</span><h1>Complaints</h1>
+    <p>The complaint agent sorts each complaint and drafts a careful reply. It never promises money: refunds, compensation and discounts are your decision. High priority replies need your approval.</p></div>
+    ${open.map(d => `<div class="detail" style="margin-bottom:18px">
+      <span class="label ${d.data.severity === "high" ? "hot" : ""}">${esc(d.data.severity)} priority${d.data.while_travelling ? " · travelling now" : ""} · ${esc(d.request_id || "no trip found")}</span>
+      <h2 class="d-title">${esc(d.mail ? d.mail.subject : d.title)}</h2>
+      ${d.mail ? `<div class="concept"><pre class="c-text">${esc(d.mail.body)}</pre></div>` : ""}
+      <p class="label sect">Internal actions</p><ul class="att">${d.data.actions.map(a => `<li class="t">${esc(a)}</li>`).join("")}</ul>
+      <p class="label sect">Draft reply</p><div class="concept"><textarea class="c-text" id="cb-${d.id}" rows="9">${esc(d.body)}</textarea>
+      ${(d.data.warnings || []).length ? `<div class="check"><b>Check:</b> ${d.data.warnings.map(esc).join(" · ")}</div>` : ""}</div>
+      <div class="actions"><button class="btn btn-primary" data-ok="${d.id}">Approve and send</button><button class="btn-link" data-no="${d.id}">Discard</button></div></div>`).join("")
+      || `<div class="detail empty"><b>No open complaints</b></div>`}`;
+  $$("[data-ok]").forEach(b => b.onclick = async () => {
+    try { await post(`/api/drafts/${b.dataset.ok}/approve`, {final_body: $(`#cb-${b.dataset.ok}`).value}); toast("Approved (logged)"); } catch (e) { toast(e.message); }
+    viewComplaints(); });
+  $$("[data-no]").forEach(b => b.onclick = async () => { await post(`/api/drafts/${b.dataset.no}/reject`, {reason: "team lead"}); viewComplaints(); });
 }
 
 async function viewInsight() {

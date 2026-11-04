@@ -130,6 +130,26 @@ def run(seed: int | None = None, out_dir: Path | None = None) -> dict:
         rep["triage_clean"] = triage_report(clean) | {"avg_ms": round(triage_ms, 1)}
         rep["triage_hard"] = triage_report(hard)
 
+        # Jobs that triage queued: partner replies (incl. PDFs), invoices, complaints ---------------
+        from .. import jobs as _jobs
+        from ..agents.sales import MONEY
+        from ..db import InvoiceCheck, PartnerRequest
+        for _ in range(3):
+            _jobs.work(s, limit=1000)
+        checks = {c.mail_id: c for c in s.scalars(select(InvoiceCheck)).all()}
+        inv = [m for m in clean if m.truth["category"] == "invoice"]
+        rep["invoices"] = {"invoices": len(inv), "status_accuracy_pct": pct(sum(checks.get(m.id) is not None and
+                           checks[m.id].status == m.truth["expected_status"] for m in inv), len(inv))}
+        pdfs = [m for m in clean if m.attachments]
+        ok_pdf = 0
+        for m in pdfs:
+            pr = s.get(PartnerRequest, m.truth["partner_request_id"])
+            ok_pdf += (pr.status == "answered" and (pr.offer or {}).get("price_eur") == m.truth["price_eur"]) if m.truth["available"] else pr.status == "declined"
+        rep["partner_pdfs"] = {"offers_in_pdf": len(pdfs), "read_correctly_pct": pct(ok_pdf, len(pdfs))}
+        replies = s.scalars(select(Draft).where(Draft.kind == "complaint_reply")).all()
+        rep["complaints"] = {"replies": len(replies), "money_promises": sum(any(w in d.body.lower() for w in MONEY) for d in replies),
+                             "high_priority": sum(d.data.get("severity") == "high" for d in replies)}
+
         # Change agent ---------------------------------------------------------------------
         for name, subset in (("change_clean", clean), ("change_hard", hard)):
             ch = [m for m in subset if m.truth["category"] == "change"]
@@ -217,8 +237,7 @@ def gates(rep: dict) -> dict:
         section, field = key.split(".", 1)
         is_max = field.endswith("_max")
         name = field.removesuffix("_max")
-        src = {"known_names_left": "known_names_left_in_passed_mails", "false_positive_pct": "false_positive_pct",
-               "unsafe_activities": "unsafe_activities"}.get(name, name)
+        src = {"known_names_left": "known_names_left_in_passed_mails"}.get(name, name)
         val = rep.get(section, {}).get(src)
         ok = val is not None and (val <= limit if is_max else val >= limit)
         out[key] = {"value": val, "limit": limit, "ok": ok}

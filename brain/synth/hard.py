@@ -130,7 +130,7 @@ def add_hard_mails(rng: random.Random, families: list, trips_with_routes: list, 
              body=fill(body, f), family_id=f.id, truth={"set": "hard", "category": "complaint", "urgent": urgent})
         n += 1
     for subject, body in OTHER:
-        mail(received_at=today - timedelta(hours=rng.randint(1, 30)), sender=rng.choice(["noreply@autoreply.example", "billing@supplier.example", "promo@cruisedeals.example"]),
-             subject=subject, body=body, truth={"set": "hard", "category": "other"})
+        mail(received_at=today - timedelta(hours=rng.randint(1, 30)), sender={"Afwezig": "noreply@autoreply.example", "Factuur": "billing@supplier.example"}.get(subject.split()[0].rstrip(":"), "promo@cruisedeals.example"),
+             subject=subject, body=body, truth={"set": "hard", "category": "invoice" if subject.startswith("Factuur") else "other"})
         n += 1
     return n

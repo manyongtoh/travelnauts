@@ -382,6 +382,42 @@ def build(seed: int = 42, n_families: int = 200, hard: bool = True) -> dict:
             mail(received_at=today - timedelta(hours=rng.randint(1, 20)), sender=fam.email, subject="Wijziging in ons voorstel",
                  body=f"Hoi,\n\n{txt}\n\nGroet, {fam.contact_name}", family_id=fam.id,
                  truth={"category": "change", "destination": tr.destination, "team": tr.team_id, "request_id": tr.id, "ops": ops})
+        # Booking files, supplier invoices and partner offers as PDF attachments
+        from ..files import files_dir, simple_pdf
+        for tr in trips:
+            if tr.status == "booked":
+                tr.payment_status = rng.choice(["deposit", "deposit", "paid"])
+                tr.insurance = rng.random() < 0.7
+                tr.passports_checked = rng.random() < 0.6
+        s.flush()
+        prs_all = list(s.scalars(select(PartnerRequest)).all())
+        partner_by_id = {p.id: p for v in partners.values() for p in v}
+        inv_n = 0
+        for pr in [p for p in prs_all if p.status == "answered" and (p.offer or {}).get("available")]:
+            if rng.random() > 0.8:
+                continue
+            p = partner_by_id[pr.partner_id]
+            inv_n += 1
+            price = pr.offer["price_eur"]
+            kind = rng.choices(["match", "differs", "unknown"], [0.6, 0.3, 0.1])[0]
+            amount = price if kind == "match" else (round(price * rng.choice([1.08, 1.12, 0.9]), -1) if kind == "differs" else price)
+            ref = f"TN-{pr.request_id.upper()}" if kind != "unknown" else "TN-R9" + str(rng.randint(10, 99))
+            mail(received_at=today - timedelta(hours=rng.randint(2, 60)), sender=p.email, subject=f"Invoice INV-2026-{1000 + inv_n}",
+                 body=f"Dear Travelnauts,\n\nPlease find invoice INV-2026-{1000 + inv_n} for booking {ref}: amount EUR {amount:,.0f}. "
+                      f"Payment within 30 days.\n\nKind regards,\n{p.name} accounts", partner_id=p.id,
+                 truth={"category": "invoice", "expected_status": kind, "partner_request_id": pr.id})
+        for pr in [p for p in prs_all if p.status in ("waiting", "chased")][:3]:
+            p = partner_by_id[pr.partner_id]
+            price = rng.choice([860, 1040, 1180, 1320])
+            avail = rng.random() < 0.8
+            ref = f"TN-{pr.request_id.upper()}"
+            path = simple_pdf(files_dir() / "attachments" / f"offer_{ref}_{p.id}.pdf", f"{p.name}: offer {ref}",
+                              [f"Reference: {ref}", "Room: family room for 2 adults and children", f"Available: {'yes' if avail else 'no, fully booked'}",
+                               f"Total price: EUR {price:,}", "Cancellation: free until 45 days before arrival"])
+            m = mail(received_at=today - timedelta(hours=rng.randint(1, 20)), sender=p.email, subject=f"RE: Availability request {ref}",
+                     body=f"Dear Travelnauts team,\n\nPlease find our offer for {ref} attached.\n\nRegards,\nReservations", partner_id=p.id,
+                     truth={"category": "partner_reply", "partner_request_id": pr.id, "price_eur": price, "available": avail})
+            m.attachments = [{"name": path.name, "path": str(path), "mime": "application/pdf"}]
         if hard:
             from .hard import add_hard_mails
             s.flush()

@@ -10,9 +10,10 @@
 let team = store.get("bo:team") || "all", openDraft = null;
 const app = shell({
   role: "Back office",
-  nav: [["board", "Partner requests"], ["check", "Mails to check"], ["compare", "Compare offers"], ["supplier", "Supplier watch"], ["partners", "Partners"]],
+  nav: [["board", "Partner requests"], ["check", "Mails to check"], ["compare", "Compare offers"], ["invoices", "Invoices"],
+        ["files", "Booking files"], ["supplier", "Supplier watch"], ["partners", "Partners"]],
   needs: "backoffice.board",
-  onNav: v => ({board: viewBoard, check: viewCheck, compare: viewCompare, supplier: viewSupplier, partners: viewPartners})[v](),
+  onNav: v => ({board: viewBoard, check: viewCheck, compare: viewCompare, invoices: viewInvoices, files: viewFiles, supplier: viewSupplier, partners: viewPartners})[v](),
 });
 $("#tb-left").textContent = "Partner desk agent";
 const BY = "";
@@ -127,6 +128,36 @@ async function viewCompare() {
       <span>${p.status === "answered" ? (p.available ? esc(p.note) : "Not available") : p.waiting_days != null ? `${p.waiting_days} days waiting` : ""}</span>
       <span class="mono">${p.price_eur ? eur(p.price_eur) : ""}</span><span class="mono">${Math.round(p.reliability * 100)}%</span></li>`).join("")}</ul>
     <div class="guard">${icon("book")} After choosing, book in TravelSpirit yourself. The agent never books.</div>`;
+}
+
+async function viewInvoices() {
+  const rows = await api("/api/invoices");
+  badge("invoices", rows.filter(r => !r.resolved && r.status !== "match").length);
+  const S = {match: ["Matches", "sea"], differs: ["Differs", "terra"], unknown: ["Cannot place", "gold"]};
+  const cols = "grid-template-columns:130px minmax(0,1.3fr) 150px 110px 110px minmax(0,1.6fr) 110px";
+  $("#view").innerHTML = `<div class="vhead"><span class="label">${rows.length} invoices</span><h1>Invoices</h1>
+    <p>The invoice matcher compares each supplier invoice with the offer we accepted. Paying stays your decision.</p></div>
+    <ul class="list"><li class="row row-head label" style="${cols}"><span>Result</span><span>Supplier</span><span>Invoice</span><span>Invoiced</span><span>Agreed</span><span>Note</span><span></span></li>
+    ${rows.map(c => `<li class="row" style="${cols};${c.resolved ? "opacity:.5" : ""}"><span class="pchip ${S[c.status][1]}" style="justify-self:start">${S[c.status][0]}</span>
+      <b>${esc(c.partner)}</b><span class="mono">${esc(c.invoice_no || "")} ${c.request_id ? "· " + esc(c.request_id) : ""}</span>
+      <span class="mono">${c.amount_eur != null ? eur(c.amount_eur) : ""}</span><span class="mono">${c.expected_eur != null ? eur(c.expected_eur) : ""}</span>
+      <span>${esc(c.note)}</span><span>${c.resolved ? "done" : `<button class="btn btn-outline btn-sm" data-resolve="${c.id}">Handled</button>`}</span></li>`).join("")
+      || `<li class="empty"><b>No invoices yet</b>Invoices arrive by mail and are picked up after triage.</li>`}</ul>`;
+  $$("[data-resolve]").forEach(b => b.onclick = async () => { await post(`/api/invoices/${b.dataset.resolve}/resolve`); toast("Marked as handled (logged)"); viewInvoices(); });
+}
+
+async function viewFiles() {
+  let r = await api("/api/reports/booking_check");
+  const cols = "grid-template-columns:110px 150px 130px minmax(0,2fr) 110px";
+  $("#view").innerHTML = `<div class="vhead"><span class="label">${r.at ? "Checked " + esc(r.at) : "Not run yet"}</span><h1>Booking files</h1>
+    <p>Every booked trip checked daily: partners confirmed, approved offer, flights, payment, insurance, passports, roadbook.</p></div>
+    <div class="filters"><button class="btn btn-outline btn-sm" id="runbc">Check now</button></div>
+    <ul class="list"><li class="row row-head label" style="${cols}"><span>Trip</span><span>Destination</span><span>Departs</span><span>Missing</span><span></span></li>
+    ${(r.files || []).map(f => `<li class="row" style="${cols}"><b class="mono">${esc(f.request_id)}</b><span>${esc(f.destination)}</span>
+      <span class="mono" style="${f.depart_date && (new Date(f.depart_date) - new Date()) < 3 * 864e5 ? "color:var(--terra-ink)" : ""}">${esc(f.depart_date || "")}</span>
+      <span>${f.missing.length ? f.missing.map(m => `<span class="pchip terra" style="margin:2px">${esc(m)}</span>`).join("") : `<span class="pchip sea">complete</span>`}</span>
+      <span>${f.complete ? "" : `<span class="status me">${f.missing.length} open</span>`}</span></li>`).join("") || `<li class="empty"><b>No booked trips</b></li>`}</ul>`;
+  $("#runbc").onclick = async () => { await post("/api/jobs/run/booking_check"); toast("Booking files checked"); viewFiles(); };
 }
 
 async function viewSupplier() {

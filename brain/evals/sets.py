@@ -56,4 +56,7 @@ GATES = {
     "knowledge_retrieval.current_policy_pct": 100,
     "anonymiser.known_names_left_max": 0,
     "proposals.unsafe_activities_max": 0,
+    "invoices.status_accuracy_pct": 90,
+    "partner_pdfs.read_correctly_pct": 90,
+    "complaints.money_promises_max": 0,
 }

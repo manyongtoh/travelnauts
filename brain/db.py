@@ -96,8 +96,9 @@ class Mail(Base):
     partner_id: Mapped[str | None] = mapped_column(ForeignKey("partners.id"), nullable=True)
     # Ground truth, only used by the test bench, never shown to agents.
     truth: Mapped[dict] = mapped_column(JSON, default=dict)
-    status: Mapped[str] = mapped_column(String, default="new")  # new | triaged | done
+    status: Mapped[str] = mapped_column(String, default="new")  # new | triaged | done | flagged
     triage: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    attachments: Mapped[list] = mapped_column(JSON, default=list)  # [{"name", "path", "mime"}]
     synthetic: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
@@ -118,6 +119,9 @@ class TripRequest(Base):
     proposal_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     depart_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     flights: Mapped[list] = mapped_column(JSON, default=list)
+    payment_status: Mapped[str | None] = mapped_column(String, nullable=True)  # deposit | paid
+    insurance: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    passports_checked: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     last_customer_contact: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     synthetic: Mapped[bool] = mapped_column(Boolean, default=True)
 
@@ -232,6 +236,22 @@ class Quote(Base):
     price_version: Mapped[str] = mapped_column(String)
     sell_eur: Mapped[float] = mapped_column(Float)
     data: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class InvoiceCheck(Base):
+    """A supplier invoice compared with what we agreed: match, differs or unknown."""
+    __tablename__ = "invoice_checks"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    mail_id: Mapped[str] = mapped_column(String)
+    partner_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    request_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    invoice_no: Mapped[str | None] = mapped_column(String, nullable=True)
+    amount_eur: Mapped[float | None] = mapped_column(Float, nullable=True)
+    expected_eur: Mapped[float | None] = mapped_column(Float, nullable=True)
+    status: Mapped[str] = mapped_column(String)  # match | differs | unknown
+    note: Mapped[str] = mapped_column(Text, default="")
+    resolved: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
 

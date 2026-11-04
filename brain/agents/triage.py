@@ -22,7 +22,7 @@ from ..synth.world import DESTINATIONS
 from ..toolserver import server
 from .common import audit, run_step
 
-Category = Literal["new_request", "change", "question", "complaint", "partner_reply", "other"]
+Category = Literal["new_request", "change", "question", "complaint", "partner_reply", "invoice", "other"]
 ME = agent("triage")
 
 
@@ -43,6 +43,7 @@ class TriageResult(BaseModel):
 INSTRUCTIONS = (
     "Classify the mail in CONTEXT.mail. Categories: new_request (a new trip), change (change to an existing proposal or "
     "booking), question (a general question), complaint, partner_reply (a hotel or local partner answering a request), "
+    "invoice (a supplier invoice), "
     "other (newsletters, invoices, out of office, spam). Mark urgent for complaints and when the family asks for a quick "
     "answer. Extract trip details only if stated. Give your confidence."
 )
@@ -81,7 +82,10 @@ def triage_mail(s: Session, mail_id: str) -> dict:
             s.commit()
             box["output"] = f"flagged {','.join(inj['reasons'])}"
             return out
-        ctx = {"mail": {"from": mail["sender"], "subject": mail["subject"], "body": mail["body"]},
+        from ..anonymise import FREEMAIL
+        domain = (mail["sender"] or "").rsplit("@", 1)[-1].lower()
+        sender = "freemail" if domain in FREEMAIL or not domain else domain  # the domain says who, without naming a person
+        ctx = {"mail": {"from": sender, "subject": mail["subject"], "body": mail["body"]},
                "destinations": {k: v["nl"] for k, v in DESTINATIONS.items()}}
         res, _ = run_step(s, "triage", TriageResult, INSTRUCTIONS, ctx)
         escalated = False
@@ -113,9 +117,13 @@ def triage_mail(s: Session, mail_id: str) -> dict:
                 out.update(request_id=tr.id, team_id=tr.team_id, specialist_id=tr.specialist_id)
                 tr.status = "change_requested"
                 tr.last_customer_contact = m.received_at
+        from ..jobs import enqueue
         if res.category == "partner_reply" and m.partner_id:
-            from ..jobs import enqueue
             enqueue(s, "partner_reply", {"mail_id": m.id})
+        if res.category == "invoice":
+            enqueue(s, "invoice", {"mail_id": m.id})
+        if res.category == "complaint" and m.family_id:
+            enqueue(s, "complaint", {"mail_id": m.id})
         m.triage = out
         m.status = "triaged"
         s.commit()

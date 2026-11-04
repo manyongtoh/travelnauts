@@ -103,3 +103,27 @@ async function copyText(id) {
   try { await navigator.clipboard.writeText(text); toast("Copied. Paste it into TravelSpirit."); }
   catch { el.select && el.select(); toast("Select and copy the text"); }
 }
+
+async function openFile(path) {
+  const r = await fetch(path, {headers: {"X-Brain-User": store.get("me") || ""}});
+  if (!r.ok) { toast("Cannot open this file"); return; }
+  const url = URL.createObjectURL(await r.blob());
+  window.open(url, "_blank");
+}
+const fileUrl = p => "/api/files/" + p.split("/").slice(-2).join("/");
+function extraBlocks(d) {
+  const x = d.data || {};
+  if (d.kind === "alternatives") return `<p class="label sect">Versions</p><div class="concept"><table class="itin">
+    <tr><td><b>Current proposal</b></td><td></td><td class="num">${eur(x.current_sell_eur)}</td></tr>
+    ${x.versions.map(v => `<tr><td><b>${esc(v.label)}</b></td><td>${esc(v.route.map(r => `${r.stop} (${r.nights})`).join(", "))}<br><span style="color:var(--muted)">${esc(v.route.map(r => r.hotel).join(", "))}</span></td><td class="num">${eur(v.price.sell_eur)}</td></tr>`).join("")}</table></div>`;
+  if (d.kind === "extras") return `<p class="label sect">Suggested extras</p><div class="concept"><table class="itin">${x.extras.map(e =>
+    `<tr><td><b>${esc(e.name)}</b></td><td>${esc(e.stop)}</td><td class="num">${eur(e.price_eur)}</td></tr>`).join("") || `<tr><td>Nothing that fits yet</td></tr>`}</table></div>`;
+  if (d.kind === "complaint_reply") return `<div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:18px 0 0">
+    <div class="kpi ${x.severity === "high" ? "hot" : ""}"><span class="label">Severity</span><b>${esc(x.severity)}</b><p class="sub">${x.while_travelling ? "travelling now" : "not travelling"}</p></div>
+    <div class="kpi"><span class="label">About</span><b style="font-size:18px">${esc(x.topics.join(", "))}</b></div>
+    <div class="kpi"><span class="label">Internal actions</span><p class="sub" style="color:var(--ink)">${esc(x.actions.join("; "))}</p></div></div>`;
+  if (d.kind === "roadbook") return `<p class="label sect">Documents</p><div class="chips"><button class="pchip sea" onclick="openFile('${fileUrl(x.roadbook)}')">Roadbook (PDF)</button>
+    ${x.vouchers.map(v => `<button class="pchip" onclick="openFile('${fileUrl(v.path)}')">Voucher ${esc(v.partner)}</button>`).join("")}</div>`;
+  if (d.kind === "next_trip") return `<p class="label sect">Suggestions</p><div class="chips">${x.suggestions.map(o => `<span class="pchip sea">${esc(o.name)}</span>`).join("")}</div>`;
+  return "";
+}

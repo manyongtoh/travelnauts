@@ -26,7 +26,9 @@ from ..toolserver import server as toolserver
 from ..workflow import BlockedByCheck, approve_draft, backoffice_overview, reject_draft, teamlead_overview
 
 STATIC = Path(__file__).parent / "static"
-CUSTOMER_DRAFTS = {"proposal", "change", "followup", "answer", "trip_alert", "galileo"}
+CUSTOMER_DRAFTS = {"proposal", "change", "followup", "answer", "trip_alert", "galileo", "alternatives", "extras",
+                   "complaint_reply", "next_trip", "call_notes", "roadbook"}
+MONEY_WORDS = ("terugbetal", "refund", "compensatie", "vergoed", "korting", "geld terug", "compensation", "discount")
 PARTNER_DRAFTS = {"partner_request", "partner_chase"}
 
 app = FastAPI(title="Travelnauts company brain (sandbox)", version="0.2.0")
@@ -226,6 +228,104 @@ def make_partner_requests(rid: str, user: Principal = Depends(current_user)):
             raise HTTPException(400, str(e))
 
 
+@app.post("/api/requests/{rid}/alternatives")
+def make_alternatives(rid: str, user: Principal = Depends(current_user)):
+    from ..agents import sales
+    with db.session() as s:
+        _visible_request(s, rid, user)
+        try:
+            return as_dict(sales.alternatives(s, rid))
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+
+@app.post("/api/requests/{rid}/extras")
+def make_extras(rid: str, user: Principal = Depends(current_user)):
+    from ..agents import sales
+    with db.session() as s:
+        _visible_request(s, rid, user)
+        try:
+            return as_dict(sales.extras(s, rid))
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+
+class Notes(BaseModel):
+    notes: str
+
+
+@app.post("/api/requests/{rid}/call-notes")
+def make_call_notes(rid: str, n: Notes, user: Principal = Depends(current_user)):
+    from ..agents import sales
+    with db.session() as s:
+        _visible_request(s, rid, user)
+        return as_dict(sales.call_notes(s, rid, n.notes))
+
+
+@app.post("/api/requests/{rid}/roadbook")
+def make_roadbook(rid: str, user: Principal = Depends(current_user)):
+    from ..agents import backoffice as bo
+    with db.session() as s:
+        _visible_request(s, rid, user)
+        try:
+            return as_dict(bo.roadbook(s, rid))
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+
+@app.get("/api/files/{kind}/{name}")
+def get_file(kind: str, name: str, user: Principal = Depends(current_user)):
+    """Roadbooks, vouchers and attachments, only for people who may see the trip."""
+    from fastapi.responses import FileResponse
+    from ..files import files_dir
+    if kind not in ("roadbooks", "vouchers", "attachments") or "/" in name or ".." in name:
+        _404("file")
+    path = files_dir() / kind / name
+    if not path.exists():
+        _404("file")
+    import re as _re
+    ref = _re.search(r"(r\d{3})", name.lower()) or _re.search(r"tn-(r\d{3})", name.lower())
+    with db.session() as s:
+        if ref and not ("back_office" in user.roles):
+            _visible_request(s, ref.group(1), user)
+        elif not ref and "back_office" not in user.roles:
+            raise HTTPException(403, "Not for your role")
+    return FileResponse(path, media_type="application/pdf", filename=name)
+
+
+@app.get("/api/invoices")
+def invoice_checks(user: Principal = Depends(need("backoffice.board"))):
+    from ..db import InvoiceCheck, Partner
+    with db.session() as s:
+        names = {p.id: p.name for p in s.scalars(select(Partner)).all()}
+        return [as_dict(c) | {"partner": names.get(c.partner_id, "Unknown sender")}
+                for c in s.scalars(select(InvoiceCheck).order_by(InvoiceCheck.resolved, InvoiceCheck.id.desc())).all()]
+
+
+@app.post("/api/invoices/{cid}/resolve")
+def resolve_invoice(cid: int, user: Principal = Depends(need("backoffice.board"))):
+    from ..db import InvoiceCheck
+    with db.session() as s:
+        c = s.get(InvoiceCheck, cid) or _404("invoice")
+        c.resolved = True
+        auditchain.append(s, user.id, "invoice_resolved", "invoice", cid, ref=c.status)
+        s.commit()
+        return as_dict(c)
+
+
+@app.get("/api/complaints")
+def complaints(user: Principal = Depends(need("team.metrics"))):
+    with db.session() as s:
+        rows = s.scalars(select(Draft).where(Draft.kind == "complaint_reply").order_by(Draft.id.desc())).all()
+        out = []
+        for d in rows:
+            m = s.get(Mail, (d.data or {}).get("mail_id"))
+            if (d.data or {}).get("team_id") not in (None, user.team_id) and "admin" not in user.roles:
+                continue
+            out.append(as_dict(d) | {"mail": {"subject": m.subject, "body": m.body} if m else None})
+        return out
+
+
 class Reassign(BaseModel):
     specialist_id: str
 
@@ -294,16 +394,22 @@ class Decision(BaseModel):
     reason: str = ""
 
 
-def _may_decide(s, user: Principal, d: Draft) -> None:
+def _may_decide(s, user: Principal, d: Draft, final_text: str | None = None) -> None:
     if d.kind in PARTNER_DRAFTS:
         if not user.can("drafts.approve_partner"):
             raise HTTPException(403, "Partner mails are approved by the back office")
         return
     tr = s.get(TripRequest, d.request_id) if d.request_id else None
-    own = tr is not None and tr.specialist_id == user.id and user.can("drafts.approve_customer")
-    exception = "team_lead" in user.roles and tr is not None and tr.team_id == user.team_id
-    if not (own or exception or (tr is None and user.can("drafts.approve_customer"))):
+    owner = (d.data or {}).get("specialist_id") or (tr.specialist_id if tr else None)
+    team = (d.data or {}).get("team_id") or (tr.team_id if tr else None)
+    own = owner == user.id and user.can("drafts.approve_customer")
+    exception = "team_lead" in user.roles and team == user.team_id
+    if not (own or exception or (owner is None and team is None and user.can("drafts.approve_customer"))):
         raise HTTPException(403, "Only the specialist on this trip (or the team lead) approves customer mail")
+    if d.kind == "complaint_reply" and "team_lead" not in user.roles:
+        text = (final_text or d.body).lower()
+        if any(w in text for w in MONEY_WORDS) or (d.data or {}).get("severity") == "high":
+            raise HTTPException(403, "This reply talks about money or is high priority: the team lead approves it")
 
 
 @app.get("/api/drafts")
@@ -315,9 +421,15 @@ def drafts(kind: str | None = None, status: str | None = "draft", user: Principa
         if status:
             q = q.where(Draft.status == status)
         rows = s.scalars(q).all()
-        if not user.can("requests.all"):
+        if "back_office" in user.roles:
+            pass
+        elif "team_lead" in user.roles:
+            team = {t.id for t in s.scalars(select(TripRequest).where(TripRequest.team_id == user.team_id)).all()}
+            rows = [d for d in rows if d.request_id in team or (d.data or {}).get("team_id") == user.team_id]
+        else:
             mine = {t.id for t in s.scalars(select(TripRequest).where(TripRequest.specialist_id == user.id)).all()}
-            rows = [d for d in rows if d.request_id in mine]
+            rows = [d for d in rows if (d.request_id in mine and not (d.data or {}).get("specialist_id"))
+                    or (d.data or {}).get("specialist_id") == user.id]
         return [as_dict(d) for d in rows]
 
 
@@ -325,7 +437,7 @@ def drafts(kind: str | None = None, status: str | None = "draft", user: Principa
 def approve(did: int, d: Decision, user: Principal = Depends(current_user)):
     with db.session() as s:
         draft = s.get(Draft, did) or _404("draft")
-        _may_decide(s, user, draft)
+        _may_decide(s, user, draft, d.final_body)
         try:
             return as_dict(approve_draft(s, did, user.name, d.final_body, actor_id=user.id))
         except BlockedByCheck as e:
@@ -412,7 +524,7 @@ def backoffice(user: Principal = Depends(need("backoffice.board"))):
         return backoffice_overview(s)
 
 
-REPORT_ACCESS = {"supplier_watch": "backoffice.board", "customer_insight": "team.metrics", "team_insight": "team.metrics",
+REPORT_ACCESS = {"supplier_watch": "backoffice.board", "booking_check": "backoffice.board", "customer_insight": "team.metrics", "team_insight": "team.metrics",
                  "review_reminders": "knowledge.approve"}
 
 
@@ -472,7 +584,8 @@ def trace(trace_id: str, user: Principal = Depends(need("audit.read"))):
 # Maintenance and user management -----------------------------------------------------------------
 
 AGENT_NAMES = ["triage", "proposal_writer", "change", "follow_up", "partner_desk", "galileo_helper", "knowledge_desk",
-               "supplier_watcher", "customer_insight", "team_insight", "trip_monitor"]
+               "supplier_watcher", "customer_insight", "team_insight", "trip_monitor", "alternatives", "complaints",
+               "next_trip", "extras", "call_notes", "invoice_matcher", "roadbook", "booking_check"]
 
 
 @app.get("/api/admin/health")

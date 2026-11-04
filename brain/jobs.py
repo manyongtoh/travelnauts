@@ -34,6 +34,10 @@ SCHEDULE: dict[str, tuple[str, int | None]] = {
     "trip_monitor": ("trip_monitor", 60),
     "reindex_knowledge": ("knowledge_desk", 24 * 60),
     "knowledge_review_reminders": ("knowledge_desk", 24 * 60),
+    "invoice": ("invoice_matcher", None),
+    "complaint": ("complaints", None),
+    "booking_check": ("booking_check", 24 * 60),
+    "next_trips": ("next_trip", 7 * 24 * 60),
 }
 
 
@@ -45,7 +49,7 @@ def enqueue(s: Session, kind: str, payload: dict | None = None, run_after: datet
 
 
 def _handlers() -> dict[str, Callable[[Session, dict], dict]]:
-    from .agents import change, followup, insight, partner_desk, proposal, supplier, trip_monitor, triage
+    from .agents import backoffice, change, followup, insight, partner_desk, proposal, sales, supplier, trip_monitor, triage
     from .knowledge import vault
 
     def poll(s, p):
@@ -55,6 +59,15 @@ def _handlers() -> dict[str, Callable[[Session, dict], dict]]:
             if i not in queued:
                 enqueue(s, "triage_mail", {"mail_id": i})
         return {"queued": len([i for i in ids if i not in queued])}
+
+    def next_trips(s, p):
+        """Weekly: families who travelled with us and have nothing open get a next-trip idea (max 5 a week)."""
+        from .db import Draft, Family, TripRequest
+        open_fams = {t.family_id for t in s.scalars(select(TripRequest)).all() if t.status != "lost"}
+        done = {(d.data or {}).get("family_id") for d in s.scalars(select(Draft).where(Draft.kind == "next_trip")).all()}
+        fams = [f for f in s.scalars(select(Family).where(Family.synthetic.is_(True))).all()
+                if f.past_destinations and f.id not in open_fams and f.id not in done][:5]
+        return {"drafted": len([sales.next_trip(s, f.id) for f in fams])}
 
     def chases(s, p):
         return {"drafted": len([partner_desk.draft_chase(s, pr.id) for pr in partner_desk.due_chases(s)])}
@@ -73,6 +86,10 @@ def _handlers() -> dict[str, Callable[[Session, dict], dict]]:
         "trip_monitor": lambda s, p: trip_monitor.run(s),
         "reindex_knowledge": lambda s, p: vault.reindex(s),
         "knowledge_review_reminders": lambda s, p: vault.review_reminders(s),
+        "invoice": lambda s, p: {"status": backoffice.invoices(s, p["mail_id"]).status},
+        "complaint": lambda s, p: {"draft_id": sales.complaint(s, p["mail_id"]).id},
+        "booking_check": lambda s, p: backoffice.booking_check(s),
+        "next_trips": next_trips,
     }
 
 
@@ -99,7 +116,7 @@ def schedule_tick(s: Session, now: datetime | None = None) -> list[str]:
     return added
 
 
-def work(s: Session, limit: int = 50) -> list[dict]:
+def work(s: Session, limit: int = 200) -> list[dict]:
     """Run due jobs, oldest first."""
     handlers = _handlers()
     done = []
