@@ -179,7 +179,8 @@ broken at entry 201" and exited with an error, so tampering with a backup or the
 
 ## What this does not cover yet
 
-- **The real model.** All of this ran with the stand-in model. Quality and cost with the real model are measured
+- **The real model.** All of this ran with the stand-in model. A first Gemma 4 run (e4b, CPU only) is under way
+  on a GitHub runner; its report will be added here as gemma4-e4b-cpu.md. Quality and cost with the real model are measured
   in the first pilot week with the same bench.
 - **Real Azure.** Point-in-time restore, failover, Entra sign-in, KEDA scaling and the Azure Monitor alerts are
   configured but only testable in Travelnauts' subscription. CI compiles the templates on every change. Repeat the backup drill there before live.

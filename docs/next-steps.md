@@ -23,7 +23,8 @@ next steps** (with status and results). They are the source of truth; this page 
 ## Next, in order
 
 1. **Agree:** contract, success measure, inventory questionnaire, interviews with specialists and back office.
-2. **Gemma 4 on the bench** (can start now): see [gemma.md](gemma.md).
+2. **Gemma 4 on the bench:** a first run on a GitHub runner is under way (Actions > gemma); results go to
+   [test-reports](test-reports/README.md). On a machine with a GPU, run the full bench: see [gemma.md](gemma.md).
 3. **Real TravelSpirit adapter** with contract tests on the test account.
 4. **Anonymised data:** run the anonymiser on 200 real mails with a person checking; sender matching, sign-off
    names, partner replies and invoices on real mail.

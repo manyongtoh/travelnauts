@@ -1,9 +1,24 @@
 # Running the brain on Gemma 4
 
 The sandbox runs on a stand-in model by default. To see real writing and to run test #1 (the quality bench on the
-real model), run Gemma 4 locally with Ollama. Synthetic data only, so nothing leaves your machine.
+real model) there are two ways. Synthetic data only in both.
 
-## 1. Install Ollama
+## Without installing anything: on GitHub
+
+The workflow `gemma` runs Gemma 4 through Ollama on a GitHub runner (4 CPUs, 16 GB, no GPU) and runs
+`brain modelcheck`, a sample of the bench: 30 mails through triage (clean, hard and English), 4 proposals,
+3 complaint replies and 4 partner offers in PDF.
+
+1. On GitHub: **Actions**, then **gemma**, then **Run workflow**.
+2. Pick the size: `gemma4:e4b` (the default Gemma 4) or `gemma4:e2b` (faster, weaker), and the number of mails.
+3. About an hour later the run's summary shows the report, including Gemma's own proposal and complaint texts.
+   The full report is attached to the run as `modelcheck-<run id>`.
+
+CPU only, so the speed it reports is far below what a GPU in Azure gives. Quality is what to look at.
+
+## On your own machine
+
+### 1. Install Ollama
 
 | Machine | How |
 |---|---|
@@ -13,7 +28,7 @@ real model), run Gemma 4 locally with Ollama. Synthetic data only, so nothing le
 
 Check: `ollama --version`. Ollama answers on `http://localhost:11434`; if it does not, open the app or run `ollama serve`.
 
-## 2. Pull Gemma 4
+### 2. Pull Gemma 4
 
 | Model | Download | Fits | Use it for |
 |---|---|---|---|
@@ -27,7 +42,7 @@ ollama pull gemma4:26b        # if your machine has the memory
 ollama run gemma4 "Zeg hallo in één zin."   # quick check
 ```
 
-## 3. Point the brain at it
+### 3. Point the brain at it
 
 ```bash
 cd travelnauts
@@ -43,7 +58,10 @@ brain serve                                    # http://127.0.0.1:8000, the draf
 With Docker instead: `docker compose up -d`, then `docker compose exec ollama ollama pull gemma4`, then
 `BRAIN_MODEL=ollama:gemma4 docker compose up -d app`.
 
-## 4. Run test #1: the quality bench
+### 4. Run test #1: the quality bench
+
+A quick sample first, the same as on GitHub: `brain modelcheck --mails 30` (report in `data/modelcheck/report.md`).
+Then the full bench:
 
 ```bash
 brain bench --gate             # takes longer than with the stand-in: every mail goes through Gemma

@@ -33,9 +33,11 @@ brain simulate        # two weeks of daily operation with incidents
 brain check           # open alerts;  brain verify: counts, audit chain, schema
 python scripts/journey.py             # one family, first mail to next trip
 python scripts/journey_backoffice.py  # the back office day for one trip
+brain modelcheck      # a sample of the bench for a real model on slow hardware
 ```
 
-With Gemma 4 instead of the stand-in model, see [docs/gemma.md](docs/gemma.md). With the full stack (Postgres and Ollama):
+With Gemma 4 instead of the stand-in model, see [docs/gemma.md](docs/gemma.md): on your own machine, or without
+installing anything through the `gemma` workflow on GitHub (`brain modelcheck`, a sample of the bench). With the full stack (Postgres and Ollama):
 
 ```bash
 docker compose up -d
