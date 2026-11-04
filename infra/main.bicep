@@ -124,16 +124,27 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
 // Roles: both identities read secrets and pull images; nothing else.
 var kvSecretsUser = '4633458b-17de-408a-b874-0445c86b69e6'
 var acrPull = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
-resource kvRoles 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for id in [idApi, idWorker]: {
-  name: guid(kv.id, id.id, kvSecretsUser)
+// Written out per identity: a loop over resources is not allowed (BCP178).
+resource kvRoleApi 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(kv.id, idApi.id, kvSecretsUser)
   scope: kv
-  properties: { roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', kvSecretsUser), principalId: id.properties.principalId, principalType: 'ServicePrincipal' }
-}]
-resource acrRoles 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for id in [idApi, idWorker]: {
-  name: guid(acr.id, id.id, acrPull)
+  properties: { roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', kvSecretsUser), principalId: idApi.properties.principalId, principalType: 'ServicePrincipal' }
+}
+resource acrRoleApi 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(acr.id, idApi.id, acrPull)
   scope: acr
-  properties: { roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPull), principalId: id.properties.principalId, principalType: 'ServicePrincipal' }
-}]
+  properties: { roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPull), principalId: idApi.properties.principalId, principalType: 'ServicePrincipal' }
+}
+resource kvRoleWorker 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(kv.id, idWorker.id, kvSecretsUser)
+  scope: kv
+  properties: { roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', kvSecretsUser), principalId: idWorker.properties.principalId, principalType: 'ServicePrincipal' }
+}
+resource acrRoleWorker 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(acr.id, idWorker.id, acrPull)
+  scope: acr
+  properties: { roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPull), principalId: idWorker.properties.principalId, principalType: 'ServicePrincipal' }
+}
 
 resource cae 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: 'cae-${name}'
@@ -187,7 +198,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
         rules: [{ name: 'http', http: { metadata: { concurrentRequests: '30' } } }] }
     }
   }
-  dependsOn: [kvRoles, acrRoles, pgSecret]
+  dependsOn: [kvRoleApi, kvRoleWorker, acrRoleApi, acrRoleWorker, pgSecret]
 }
 
 // Two worker jobs: the scheduler (every 5 minutes, queues periodic work and does one pass) and the scaled
@@ -221,7 +232,7 @@ resource drain 'Microsoft.App/jobs@2024-03-01' = {
         command: ['brain', 'worker', '--drain'] }]
     }
   }
-  dependsOn: [kvRoles, acrRoles, pgSecret, pgConn, hookSecret]
+  dependsOn: [kvRoleApi, kvRoleWorker, acrRoleApi, acrRoleWorker, pgSecret, pgConn, hookSecret]
 }
 
 resource pgConn 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
@@ -249,7 +260,7 @@ resource worker 'Microsoft.App/jobs@2024-03-01' = {
         command: ['brain', 'worker', '--once'] }]
     }
   }
-  dependsOn: [kvRoles, acrRoles, pgSecret, hookSecret]
+  dependsOn: [kvRoleApi, kvRoleWorker, acrRoleApi, acrRoleWorker, pgSecret, hookSecret]
 }
 
 resource budget 'Microsoft.Consumption/budgets@2023-05-01' = {
