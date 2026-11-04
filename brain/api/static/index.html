@@ -1,21 +1,20 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Company brain sandbox</title><link rel="stylesheet" href="brain.css"></head>
+<title>Company brain sandbox</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="brain.css"></head>
 <body>
-<main style="max-width:900px;margin:0 auto">
-  <div class="card">
-    <h2>Sandbox</h2>
-    <h3>The Travelnauts company brain, on made-up data</h3>
-    <p>Everything here is synthetic: families, partners, prices and staff are invented. Agents only write drafts; a person approves every mail before it goes out.</p>
-    <div class="row">
-      <a href="specialist.html"><button>Specialist</button></a>
-      <a href="teamlead.html"><button class="ghost">Team lead</button></a>
-      <a href="backoffice.html"><button class="ghost">Back office</button></a>
-      <a href="/docs"><button class="ghost">API</button></a>
-    </div>
+<div class="banner">SANDBOX · MADE-UP DATA · NOTHING IS SENT</div>
+<main class="content" style="max-width:880px;margin:0 auto">
+  <div class="hello"><span class="label">Travelnauts pilot · synthetic stage</span><h1>Company brain sandbox</h1>
+    <p class="summary">Six agents on made-up families, partners and prices. Agents only write drafts; a person approves every mail.</p></div>
+  <div class="grid-cards" style="grid-template-columns:repeat(3,1fr)">
+    <a class="card" href="specialist.html" style="text-decoration:none;color:inherit"><span class="label">Sales</span><h2>Specialist</h2><p class="sub">Requests, proposals, Galileo, ask the brain</p></a>
+    <a class="card" href="teamlead.html" style="text-decoration:none;color:inherit"><span class="label">Lead</span><h2>Team lead</h2><p class="sub">Team figures, knowledge approval, gaps</p></a>
+    <a class="card" href="backoffice.html" style="text-decoration:none;color:inherit"><span class="label">Back office</span><h2>Partner desk</h2><p class="sub">Requests to partners, reminders, offers</p></a>
   </div>
-  <div class="card small muted" id="status">Loading…</div>
+  <p class="guard" id="status"></p>
 </main>
 <script src="brain.js"></script>
-<script>api("/api/status").then(s => $("#status").innerHTML = Object.entries(s).map(([k, v]) => `<b>${esc(k)}</b>: ${esc(v)}`).join(" · "));</script>
+<script>api("/api/status").then(s => $("#status").textContent = `Model: ${s.model} · data: ${s.data_stage} · TravelSpirit: ${s.travelspirit} (${s.travelspirit_write})`);</script>
 </body></html>

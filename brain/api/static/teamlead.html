@@ -1,54 +1,133 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Team lead · Company brain</title><link rel="stylesheet" href="brain.css"></head>
+<title>Team lead · Company brain</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="brain.css"></head>
 <body>
-<main>
-  <div class="row"><label class="small muted">Team</label><select id="team"></select>
-    <button class="ghost" id="fu">Run follow-up check</button>
-    <span class="small muted">Figures are per team, never per person.</span></div>
-  <div class="tiles" id="tiles"></div>
-  <div class="cols" style="grid-template-columns:1fr 1fr">
-    <div class="card"><h2>Knowledge gaps</h2><div id="gaps"></div></div>
-    <div class="card"><h2>Knowledge to check</h2><div id="review"></div></div>
-  </div>
-  <div class="card"><h2>Follow-ups waiting for approval</h2><div id="followups"></div></div>
-  <div class="card"><h2>Agent activity</h2><div id="audit"></div></div>
-</main>
 <script src="brain.js"></script>
 <script>
-header("Team lead");
-let data;
-async function load() {
-  data = await api("/api/teamlead");
-  const sel = $("#team");
-  if (!sel.options.length) {
-    sel.innerHTML = Object.entries(data.teams).map(([id, t]) => `<option value="${id}">${esc(t.team)}</option>`).join("");
-    sel.onchange = render;
-  }
-  render();
-  const runs = await api("/api/audit?limit=12");
-  $("#audit").innerHTML = `<table><tr><th>Agent</th><th>Subject</th><th>Result</th><th class="num">ms</th><th>Sources</th></tr>${runs.map(a =>
-    `<tr><td>${esc(a.agent)}</td><td>${esc(a.subject)}</td><td class="small">${esc(a.output_summary)}</td><td class="num">${a.ms}</td><td class="num">${a.sources.length}</td></tr>`).join("")}</table>`;
+let team = store.get("tl:team") || "all", kfilter = "proposed";
+const app = shell({
+  role: "Team lead",
+  nav: [["overview", "Overview"], ["knowledge", "Knowledge"], ["gaps", "Knowledge gaps"], ["log", "Log"]],
+  links: [["specialist.html", "Specialist view"], ["backoffice.html", "Back office view"]],
+  who: `<span class="avatar">TL</span><div>Signed in as team lead<small>sandbox</small></div>`,
+  onNav: v => ({overview: viewOverview, knowledge: viewKnowledge, gaps: viewGaps, log: viewLog})[v](),
+});
+$("#tb-left").textContent = "Pilot · synthetic stage";
+
+const sum = (arr, f) => arr.reduce((a, x) => a + (f(x) || 0), 0);
+function pick(data) {
+  const ts = Object.entries(data.teams).filter(([id]) => team === "all" || id === team).map(([, t]) => t);
+  const appr = sum(ts, t => t.proposals_approved);
+  const edit = appr ? sum(ts, t => (t.avg_edit_share || 0) * t.proposals_approved) / appr : null;
+  const mins = ts.filter(t => t.avg_minutes_to_first_draft != null);
+  const status = {};
+  ts.forEach(t => Object.entries(t.status).forEach(([k, v]) => status[k] = (status[k] || 0) + v));
+  return {ts, open: sum(ts, t => t.open_requests), drafted: sum(ts, t => t.proposals_drafted), appr, edit, status,
+    mins: mins.length ? sum(mins, t => t.avg_minutes_to_first_draft) / mins.length : null,
+    fu: ts.flatMap(t => t.followups_waiting), fudue: sum(ts, t => t.followups_due), gaps: ts.flatMap(t => t.gaps)};
 }
-function render() {
-  const t = data.teams[$("#team").value];
-  const tiles = [["Open requests", t.open_requests], ["Proposals drafted", t.proposals_drafted],
-    ["Proposals approved", t.proposals_approved],
-    ["Avg. edited", t.avg_edit_share == null ? "n/a" : Math.round(t.avg_edit_share * 100) + "%"],
-    ["Mail to first draft", t.avg_minutes_to_first_draft == null ? "n/a" : t.avg_minutes_to_first_draft + " min"],
-    ["Follow-ups due", t.followups_due]];
-  $("#tiles").innerHTML = tiles.map(([l, v]) => `<div class="tile"><div class="v">${esc(v)}</div><div class="l">${esc(l)}</div></div>`).join("");
-  $("#gaps").innerHTML = t.gaps.length ? `<table>${t.gaps.map(g => `<tr><td>${esc(g.question)}</td><td>${chip(g.reason)}</td><td class="num">${g.count}×</td></tr>`).join("")}</table>`
-    : `<p class="muted small">No open gaps for this team. Ask the brain something it cannot answer to see one appear.</p>`;
-  const tid = $("#team").value, mine = k => !k.team_id || k.team_id === tid;
-  $("#followups").innerHTML = t.followups_waiting.length ? `<table>${t.followups_waiting.map(d => `<tr><td>${esc(d.request_id)}</td><td>${esc(d.title)}</td><td class="small muted">${d.days_since} days since proposal</td></tr>`).join("")}</table>`
-    : `<p class="muted small">None for this team. Run the follow-up check.</p>`;
-  $("#review").innerHTML = `<b class="small">Past review date</b><table>${data.review_due.filter(mine).slice(0, 8).map(k => `<tr><td>${esc(k.title)}</td><td class="small muted">${esc(k.review_by)}</td></tr>`).join("")}</table>
-    <b class="small" style="display:block;margin-top:10px">Waiting for approval</b><table>${data.proposed_knowledge.filter(mine).slice(0, 8).map(k =>
-    `<tr><td>${esc(k.title)}</td><td><button class="ghost" onclick="approveK('${k.id}')">Approve</button></td></tr>`).join("")}</table>`;
+function teamChips() {
+  return `<div class="fchips"><span class="label" style="margin-right:6px">Team</span>${[["all", "All"], ...Object.entries(TEAMS)].map(([id, n]) =>
+    `<button class="fchip" data-team="${id}" aria-pressed="${team === id}">${n}</button>`).join("")}</div>`;
 }
-async function approveK(id) { await post(`/api/knowledge/${id}/approve`, {by: "Team lead"}); toast("Approved: agents can use it now"); load(); }
-$("#fu").onclick = async () => { const r = await post("/api/jobs/followups"); toast(`${r.length} follow-ups drafted`); load(); };
-load();
+function bindTeam(rerender) { $$("[data-team]").forEach(b => b.onclick = () => { team = b.dataset.team; store.set("tl:team", team); rerender(); }); }
+const inTeam = k => team === "all" || !k.team_id || k.team_id === team;
+
+async function viewOverview() {
+  const data = await api("/api/teamlead");
+  const p = pick(data);
+  badge("knowledge", data.proposed_knowledge.length);
+  badge("gaps", Object.values(data.teams).reduce((a, t) => a + t.gaps.length, 0));
+  const maxS = Math.max(1, ...Object.values(p.status));
+  const S = [["new", "New", "terra"], ["proposal_draft", "Draft ready", "gold"], ["proposal_sent", "Proposal sent", ""], ["booked", "Booked", "sea"], ["lost", "Lost", ""]];
+  const review = data.review_due.filter(inTeam), proposed = data.proposed_knowledge.filter(inTeam);
+  const inboxMax = Math.max(1, ...Object.values(data.inbox));
+  $("#view").innerHTML = `
+    <div class="hello"><span class="label">${esc(today())}</span><h1>${greeting()}</h1>
+      <div class="strip">
+        <span class="stat">${icon("mail")}<b>${p.open}</b> open requests</span>
+        <span class="stat">${icon("bolt")}<b>${p.drafted}</b> proposals drafted</span>
+        <span class="stat">${icon("check")}<b>${p.appr}</b> approved</span>
+        <span class="stat">${icon("clock")}<b class="${p.fudue ? "hot" : ""}">${p.fudue + p.fu.length}</b> follow-ups</span>
+        <span class="stat">${icon("gap")}<b class="${p.gaps.length ? "hot" : ""}">${p.gaps.length}</b> knowledge gaps</span>
+      </div>
+      <div class="guard">${icon("shield")} Figures are per team, never per person. They are here to share work fairly and to see where the brain needs help, not to judge anyone.</div></div>
+    <div class="filters">${teamChips()}</div>
+    <div class="grid2">
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:0">
+          <div class="kpi"><span class="label">Share edited</span><b>${p.edit == null ? "n/a" : Math.round(p.edit * 100) + "%"}</b><p class="sub">of approved proposals, lower is better</p></div>
+          <div class="kpi"><span class="label">Mail to first draft</span><b>${p.mins == null ? "n/a" : p.mins.toFixed(1) + " min"}</b><p class="sub">agent time, not the specialist's</p></div>
+          <div class="kpi"><span class="label">Agent runs, 24 h</span><b>${data.agent_runs_24h}</b><p class="sub">all logged with sources</p></div>
+        </div>
+        <div class="card"><h2>Requests by status</h2><p class="sub">${team === "all" ? "All teams" : "Team " + TEAMS[team]}, synthetic data</p>
+          <div class="bars">${S.map(([k, n, c]) => `<div class="bar"><span>${n}</span><span class="track"><span class="fill ${c}" style="width:${100 * (p.status[k] || 0) / maxS}%"></span></span><span class="v">${p.status[k] || 0}</span></div>`).join("")}</div></div>
+        <div class="card"><h2>Inbox</h2><p class="sub">Mail in the (fake) TravelSpirit inbox, all teams</p>
+          <div class="bars">${Object.entries(data.inbox).map(([k, v]) => `<div class="bar"><span>${k === "new" ? "Waiting for triage" : "Triaged"}</span><span class="track"><span class="fill ${k === "new" ? "terra" : "sea"}" style="width:${100 * v / inboxMax}%"></span></span><span class="v">${v}</span></div>`).join("")}</div></div>
+      </div>
+      <div class="card"><h2>Needs attention</h2><p class="sub">What the agents flagged for a person</p>
+        <ul class="att">
+          ${p.fudue ? `<li><span class="label hot">Follow-ups due</span><div class="row-act"><span class="t">${p.fudue} proposals without a reply for 5 days</span><button class="btn-link" id="runfu">Draft follow-ups</button></div></li>` : ""}
+          ${p.fu.slice(0, 4).map(f => `<li><span class="label">Follow-up waiting for the specialist</span><div class="t">${esc(f.title)}</div><small>${esc(f.request_id)} · ${f.days_since} days since the proposal</small></li>`).join("")}
+          ${p.gaps.slice(0, 4).map(g => `<li><span class="label hot">Knowledge gap · ${esc(g.reason.replace("_", " "))}</span><div class="t">${esc(g.question)}</div><small>asked ${g.count}×</small></li>`).join("")}
+          ${proposed.slice(0, 3).map(k => `<li><span class="label">Knowledge waiting for approval</span><div class="row-act"><span class="t">${esc(k.title)}</span><button class="btn-link" data-approve="${k.id}">Approve</button></div></li>`).join("")}
+          ${review.slice(0, 3).map(k => `<li><span class="label hot">Past review date</span><div class="t">${esc(k.title)}</div><small>review was due ${esc(k.review_by)}, answers using it are flagged</small></li>`).join("")}
+          ${!(p.fudue || p.fu.length || p.gaps.length || proposed.length || review.length) ? `<li class="empty"><b>Nothing needs you</b></li>` : ""}
+        </ul></div>
+    </div>`;
+  bindTeam(viewOverview); bindApprove(viewOverview);
+  const fu = $("#runfu"); if (fu) fu.onclick = async () => { const r = await post("/api/jobs/followups"); toast(`${r.length} follow-ups drafted for the specialists`); viewOverview(); };
+}
+function bindApprove(after) {
+  $$("[data-approve]").forEach(b => b.onclick = async () => { await post(`/api/knowledge/${b.dataset.approve}/approve`, {by: "Team lead"}); toast("Approved. Agents can use it now."); after(); });
+}
+
+async function viewKnowledge() {
+  const [items, data] = await Promise.all([api("/api/knowledge"), api("/api/teamlead")]);
+  const due = new Set(data.review_due.map(k => k.id));
+  const teamOf = Object.fromEntries([...data.review_due, ...data.proposed_knowledge].map(k => [k.id, k.team_id]));
+  const F = {proposed: ["Waiting for approval", k => k.status === "proposed"], due: ["Past review date", k => due.has(k.id)],
+             approved: ["Approved", k => k.status === "approved"], all: ["All", () => true]};
+  const rows = items.filter(F[kfilter][1]).filter(k => inTeam({team_id: teamOf[k.id]}));
+  const cols = "grid-template-columns:minmax(0,2fr) minmax(0,1fr) 120px 130px 120px";
+  $("#view").innerHTML = `<div class="vhead"><span class="label">${items.length} items</span><h1>Knowledge</h1>
+    <p>Agents only use approved knowledge. Each item has an owner and a review date.</p></div>
+    <div class="filters"><div class="fchips"><span class="label" style="margin-right:6px">Show</span>${Object.entries(F).map(([id, [n]]) =>
+      `<button class="fchip" data-k="${id}" aria-pressed="${kfilter === id}">${n}</button>`).join("")}</div>${teamChips()}</div>
+    <ul class="list"><li class="row row-head label" style="${cols}"><span>Item</span><span>Owner</span><span>Review by</span><span>Status</span><span></span></li>
+    ${rows.map(k => `<li class="row" style="${cols}"><div><b>${esc(k.title)}</b><small>${esc(k.body)}</small></div><span>${esc(k.owner)}</span>
+      <span class="mono" style="${due.has(k.id) ? "color:var(--terra-ink)" : ""}">${esc(k.review_by)}</span>
+      <span class="status ${k.status === "approved" ? (due.has(k.id) ? "me" : "go") : "wait"}">${k.status === "approved" ? (due.has(k.id) ? "check again" : "approved") : "waiting"}</span>
+      <span>${k.status === "proposed" || due.has(k.id) ? `<button class="btn btn-outline btn-sm" data-approve="${k.id}">${k.status === "proposed" ? "Approve" : "Still correct"}</button>` : ""}</span></li>`).join("")
+      || `<li class="empty"><b>Nothing here</b>No items match this filter.</li>`}</ul>`;
+  $$("[data-k]").forEach(b => b.onclick = () => { kfilter = b.dataset.k; viewKnowledge(); });
+  bindTeam(viewKnowledge); bindApprove(viewKnowledge);
+}
+
+async function viewGaps() {
+  const gaps = await api(`/api/gaps${team === "all" ? "" : "?team=" + team}`);
+  const cols = "grid-template-columns:minmax(0,2fr) 150px 120px 80px";
+  $("#view").innerHTML = `<div class="vhead"><span class="label">${gaps.length} open</span><h1>Knowledge gaps</h1>
+    <p>Questions the brain could not answer well, answers built on outdated knowledge, and drafts that specialists rewrote heavily. This tells the team what to write down next.</p></div>
+    <div class="filters">${teamChips()}</div>
+    <ul class="list"><li class="row row-head label" style="${cols}"><span>Question</span><span>Why</span><span>Team</span><span>Asked</span></li>
+    ${gaps.map(g => `<li class="row" style="${cols}"><b>${esc(g.question)}</b><span class="pchip ${g.reason === "no_answer" ? "terra" : "gold"}" style="justify-self:start">${esc(g.reason.replace("_", " "))}</span>
+      <span>${esc(TEAMS[g.team_id] || "")}</span><span class="mono">${g.count}×</span></li>`).join("")
+      || `<li class="empty"><b>No open gaps</b>Ask the brain something it does not know on the specialist screen to see one appear.</li>`}</ul>`;
+  bindTeam(viewGaps);
+}
+
+async function viewLog() {
+  const runs = await api("/api/audit?limit=60");
+  const cols = "grid-template-columns:150px 140px 170px minmax(0,1fr) 70px 70px";
+  $("#view").innerHTML = `<div class="vhead"><span class="label">Audit log</span><h1>What the agents did</h1><p>Every run, with the sources used and how long it took.</p></div>
+    <ul class="list"><li class="row row-head label" style="${cols}"><span>Time (UTC)</span><span>Agent</span><span>Subject</span><span>Result</span><span>Sources</span><span>ms</span></li>
+    ${runs.map(a => `<li class="row" style="${cols}"><span class="mono">${esc(a.created_at.replace("T", " ").slice(0, 16))}</span><b>${esc(a.agent.replace("_", " "))}</b>
+      <span class="mono">${esc(a.subject || "")}</span><span>${esc(a.output_summary)}</span><span class="mono">${a.sources.length}</span><span class="mono">${a.ms}</span></li>`).join("")}</ul>`;
+}
+app.start();
 </script>
 </body></html>

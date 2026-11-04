@@ -125,6 +125,12 @@ def make_partner_requests(rid: str):
             raise HTTPException(400, str(e))
 
 
+@app.post("/api/partner-requests/{prid}/draft")
+def draft_partner_request(prid: int):
+    with db.session() as s:
+        return as_dict(partner_desk.draft_request_mail(s, prid))
+
+
 # Scheduled jobs (in production these run on a timer) -----------------------------------------
 
 @app.post("/api/jobs/followups")

@@ -1,46 +1,143 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Back office · Company brain</title><link rel="stylesheet" href="brain.css"></head>
+<title>Back office · Company brain</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="brain.css"></head>
 <body>
-<main>
-  <div class="row">
-    <button id="chase">Draft reminders for slow partners</button>
-    <button class="ghost" id="sim">Simulate partner replies</button>
-    <span class="small muted" id="info"></span>
-  </div>
-  <div class="kanban" id="board"></div>
-  <div class="cols" style="grid-template-columns:2fr 1fr">
-    <div class="card"><h2>Mails to check before sending</h2><div id="drafts"></div></div>
-    <div class="card"><h2>Slowest partners</h2><div id="slow"></div></div>
-  </div>
-</main>
 <script src="brain.js"></script>
 <script>
-header("Back office");
-const COLS = [["to_send", "To send"], ["waiting", "Waiting"], ["chased", "Reminder sent"], ["answered", "Answered"], ["declined", "Declined"]];
-async function load() {
-  const b = await api("/api/backoffice");
-  $("#info").textContent = `${b.chase_due} requests waiting longer than 3 days · ${b.drafts_to_check} mails to check`;
-  $("#board").innerHTML = COLS.map(([k, n]) => {
-    const cards = b.cards.filter(c => c.status === k);
-    return `<div class="col"><h2>${n} (${cards.length})</h2>${cards.slice(0, 14).map(c => `<div class="k">
-      <b>${esc(c.partner)}</b><div class="muted">${esc(c.request_id)} · ${esc(c.what)}</div>
-      ${c.waiting_days != null ? `<div class="${c.chase_due ? "" : "muted"}" style="${c.chase_due ? "color:var(--red)" : ""}">${c.waiting_days} days waiting</div>` : ""}
-      ${c.offer ? `<div>${c.offer.available ? "Available" : "Not available"} · ${eur(c.offer.price_eur)}<br><span class="muted">${esc(c.offer.note)}</span></div>` : ""}
-    </div>`).join("")}${cards.length > 14 ? `<div class="small muted">+ ${cards.length - 14} more</div>` : ""}</div>`;
-  }).join("");
-  $("#slow").innerHTML = `<table><tr><th>Partner</th><th class="num">Days to reply</th><th class="num">Reliable</th></tr>${b.slowest_partners.map(p =>
-    `<tr><td>${esc(p.partner)}</td><td class="num">${p.avg_reply_days}</td><td class="num">${Math.round(p.reliability * 100)}%</td></tr>`).join("")}</table>`;
-  const drafts = await api("/api/drafts?kind=partner_request,partner_chase");
-  $("#drafts").innerHTML = drafts.length ? drafts.slice(0, 10).map(d => `<div class="card" style="background:#fff;margin-bottom:10px">
-      <div class="row"><b>${esc(d.title)}</b><span class="chip">${esc(d.kind.replace("_", " "))}</span><span class="small muted">to ${esc(d.data.to)}</span></div>
-      <textarea id="b-${d.id}" style="min-height:160px">${esc(d.body)}</textarea>
-      <div class="row"><button class="teal" onclick="ok(${d.id})">Approve and send</button></div></div>`).join("")
-    : `<p class="muted small">Nothing to check. Ask partners from a request on the specialist screen, or draft reminders.</p>`;
+let team = store.get("bo:team") || "all", openDraft = null;
+const app = shell({
+  role: "Back office",
+  nav: [["board", "Partner requests"], ["check", "Mails to check"], ["compare", "Compare offers"], ["partners", "Partners"]],
+  links: [["specialist.html", "Specialist view"], ["teamlead.html", "Team lead view"]],
+  who: `<span class="avatar">RS</span><div>Signed in as Ruben<small>back office</small></div>`,
+  onNav: v => ({board: viewBoard, check: viewCheck, compare: viewCompare, partners: viewPartners})[v](),
+});
+$("#tb-left").textContent = "Partner desk agent";
+const BY = "Ruben Stam";
+const COLS = [
+  ["to_send", "To approve", "Agent drafted, needs your click"],
+  ["waiting", "Sent, waiting", "Reminder after 3 days without a reply"],
+  ["chased", "Chased", "Reminder sent"],
+  ["answered", "Reply in, offer ready", "Compare and choose"],
+  ["declined", "Declined", "Partner said no"],
+];
+const ago = h => h == null ? "" : h < 24 ? `${h} h` : `${Math.round(h / 24)} d`;
+
+function teamChips() {
+  return `<div class="fchips"><span class="label" style="margin-right:6px">Team</span>${[["all", "All"], ...Object.entries(TEAMS)].map(([id, n]) =>
+    `<button class="fchip" data-team="${id}" aria-pressed="${team === id}">${n}</button>`).join("")}</div>`;
 }
-async function ok(id) { await post(`/api/drafts/${id}/approve`, {by: "Ruben Stam", final_body: $(`#b-${id}`).value}); toast("Sent (in the sandbox: marked as sent)"); load(); }
-$("#chase").onclick = async () => { const r = await post("/api/jobs/chases"); toast(`${r.length} reminders drafted`); load(); };
-$("#sim").onclick = async () => { const r = await post("/api/jobs/simulate-replies"); toast(`${r.answered} partners answered`); load(); };
-load();
+function bindTeam(r) { $$("[data-team]").forEach(b => b.onclick = () => { team = b.dataset.team; store.set("bo:team", team); r(); }); }
+
+async function viewBoard() {
+  const b = await api("/api/backoffice");
+  const cards = b.cards.filter(c => team === "all" || c.team_id === team);
+  const n = k => cards.filter(c => c.status === k).length;
+  const toApprove = cards.filter(c => c.draft_id).length;
+  badge("board", n("to_send")); badge("check", b.drafts_to_check);
+  const avg = b.slowest_partners.length ? b.slowest_partners.reduce((a, p) => a + p.avg_reply_days, 0) / b.slowest_partners.length : 0;
+  $("#view").innerHTML = `
+    <div class="vhead"><span class="label">${esc(today())}</span><h1>Partner requests</h1>
+      <p><b style="color:var(--ink)">The agent writes, chases and compares. You approve and choose. Nothing goes to a partner without your click.</b></p></div>
+    <div class="kpis">
+      <div class="kpi"><span class="label">Open requests</span><b>${cards.filter(c => c.status !== "declined").length}</b><p class="sub">across ${new Set(cards.map(c => c.request_id)).size} trips</p></div>
+      <div class="kpi hot"><span class="label">Waiting for your approval</span><b>${toApprove}</b><p class="sub">requests and reminders</p></div>
+      <div class="kpi"><span class="label">Awaiting partner reply</span><b>${n("waiting")}</b><p class="sub">sent by mail</p></div>
+      <div class="kpi ${b.chase_due ? "hot" : ""}"><span class="label">Overdue</span><b>${b.chase_due}</b><p class="sub">no reply after 3 days</p></div>
+      <div class="kpi"><span class="label">Offers ready</span><b>${n("answered")}</b><p class="sub">compare and choose</p></div>
+      <div class="kpi"><span class="label">Avg partner reply</span><b>${avg.toFixed(1)} days</b><p class="sub">synthetic partners</p></div>
+    </div>
+    <div class="filters">${teamChips()}
+      <div class="fchips" style="margin-left:auto">
+        <button class="btn btn-outline btn-sm" id="chase" ${b.chase_due ? "" : "disabled"}>Draft reminders (${b.chase_due})</button>
+        <button class="btn btn-outline btn-sm" id="sim">Simulate partner replies</button></div></div>
+    <div class="board">${COLS.map(([k, title, sub], i) => {
+      const cs = cards.filter(c => c.status === k);
+      return `<div class="bcol ${i === 0 ? "first" : ""}"><div class="bhead"><div class="t">${title}<span>${cs.length}</span></div><small>${sub}</small></div>
+        ${cs.slice(0, 12).map(cardHtml).join("")}${cs.length > 12 ? `<div class="label" style="padding:4px 6px">+ ${cs.length - 12} more</div>` : ""}</div>`;
+    }).join("")}</div>`;
+  bindTeam(viewBoard);
+  $("#chase").onclick = async () => { const r = await post("/api/jobs/chases"); toast(`${r.length} reminders drafted, check them before sending`); viewBoard(); };
+  $("#sim").onclick = async () => { const r = await post("/api/jobs/simulate-replies"); toast(`${r.answered} partners answered`); viewBoard(); };
+  $$("[data-draft]").forEach(x => x.onclick = () => { openDraft = +x.dataset.draft; app.go("check"); });
+  $$("[data-write]").forEach(x => x.onclick = async () => { const d = await post(`/api/partner-requests/${x.dataset.write}/draft`); toast("Request drafted, check it before sending"); openDraft = d.id; app.go("check"); });
+  $$("[data-cmp]").forEach(x => x.onclick = () => { store.set("bo:trip", x.dataset.cmp); app.go("compare"); });
+}
+function cardHtml(c) {
+  let next;
+  if (c.draft_id) next = `<button class="nx me" data-draft="${c.draft_id}">${c.status === "to_send" ? "Approve and send" : "Approve reminder"}</button>`;
+  else if (c.status === "to_send") next = `<button class="nx me" data-write="${c.id}">Let the agent draft the request</button>`;
+  else if (c.status === "waiting") next = c.chase_due ? `<div class="nx me">Overdue, draft a reminder</div>` : `<div class="nx wait">Agent chases after 3 days</div>`;
+  else if (c.status === "chased") next = `<div class="nx wait">Waiting; agent flags again</div>`;
+  else if (c.status === "answered") next = c.offer && c.offer.available ? `<button class="nx go" data-cmp="${c.request_id}">Compare and choose</button>` : `<div class="nx me">Not available, find another</div>`;
+  else next = `<div class="nx wait">Closed</div>`;
+  return `<div class="bcard"><div class="top"><span class="label">${esc(c.destination || "")}</span><span class="label ${c.chase_due ? "hot" : ""}">${ago(c.age_hours)}</span></div>
+    <div class="fam">Family ${esc(c.family || "")}</div><div class="who">${esc(c.partner)}</div>
+    <div class="what">${esc(c.what)} · ${esc(c.request_id)}</div>
+    ${c.offer ? `<div>${c.offer.available ? eur(c.offer.price_eur) : "Not available"}<br><span style="color:var(--muted)">${esc(c.offer.note)}</span></div>` : ""}
+    <span class="ch">Email · English</span>${next}</div>`;
+}
+
+async function viewCheck() {
+  const drafts = await api("/api/drafts?kind=partner_request,partner_chase");
+  badge("check", drafts.length);
+  $("#view").innerHTML = `<div class="vhead"><span class="label">${drafts.length} drafts</span><h1>Mails to check</h1>
+    <p>Requests and reminders the partner desk wrote. Partners see a booking reference, never the family's name.</p></div>
+    <div class="today"><div><ul class="dlist">${drafts.map(d => `<li><button class="ditem" data-id="${d.id}" aria-current="${d.id === openDraft}">
+      <span class="label ${d.kind === "partner_chase" ? "hot" : ""}">${d.kind === "partner_chase" ? "Reminder" : "New request"}</span>
+      <span class="fam">${esc(d.title)}</span><span class="why">to ${esc(d.data.to)}</span></button></li>`).join("") || `<li class="empty"><b>Nothing to check</b>New partner mails appear here.</li>`}</ul></div>
+      <div id="detail"></div></div>`;
+  $$(".ditem").forEach(b => b.onclick = () => show(+b.dataset.id));
+  const first = drafts.find(d => d.id === openDraft) || drafts[0];
+  if (first) show(first.id);
+  function show(id) {
+    openDraft = id;
+    $$(".ditem").forEach(b => b.setAttribute("aria-current", +b.dataset.id === id));
+    const d = drafts.find(x => x.id === id);
+    $("#detail").innerHTML = `<div class="detail"><span class="label">${d.kind === "partner_chase" ? "Reminder" : "Availability request"} · ${esc(d.request_id)}</span>
+      <h2 class="d-title">${esc(d.title)}</h2><p class="d-sum">To ${esc(d.data.to)}</p>
+      <div class="concept"><div class="c-head"><div><div class="c-title">Draft mail</div><div class="c-to">Edit freely before sending</div></div><span class="pchip gold">draft</span></div>
+      <textarea class="c-text" id="b-${d.id}" rows="14">${esc(d.body)}</textarea></div>
+      <div class="actions"><button class="btn btn-primary btn-lg" id="ok">${icon("send")} Approve and send</button><button class="btn-link" id="no">Reject</button></div>
+      <div class="guard">${icon("shield")} In the sandbox nothing is actually sent; the request moves to "Sent, waiting".</div></div>`;
+    $("#ok").onclick = async () => { await post(`/api/drafts/${id}/approve`, {by: BY, final_body: $(`#b-${id}`).value}); toast("Approved and marked as sent"); openDraft = null; viewCheck(); };
+    $("#no").onclick = async () => { await post(`/api/drafts/${id}/reject`, {by: BY}); toast("Rejected"); openDraft = null; viewCheck(); };
+  }
+}
+
+async function viewCompare() {
+  const b = await api("/api/backoffice");
+  const trips = [...new Set(b.cards.filter(c => c.status === "answered").map(c => c.request_id))];
+  const sel = store.get("bo:trip");
+  const rid = trips.includes(sel) ? sel : trips[0];
+  $("#view").innerHTML = `<div class="vhead"><span class="label">${trips.length} trips with offers</span><h1>Compare offers</h1>
+    <p>Ranked by availability, then price, then how reliable the partner has been.</p></div>
+    <div class="filters"><div class="fchips">${trips.map(t => { const c = b.cards.find(x => x.request_id === t);
+      return `<button class="fchip" data-trip="${t}" aria-pressed="${t === rid}">Family ${esc(c.family)} · ${esc(c.destination)}</button>`; }).join("") || `<span class="label">No offers yet. Simulate partner replies on the board.</span>`}</div></div>
+    <div id="cmp"></div>`;
+  $$("[data-trip]").forEach(x => x.onclick = () => { store.set("bo:trip", x.dataset.trip); viewCompare(); });
+  if (!rid) return;
+  const r = await api(`/api/requests/${rid}`);
+  const cols = "grid-template-columns:minmax(0,1.4fr) 140px minmax(0,1fr) 110px 100px";
+  $("#cmp").innerHTML = `<ul class="list"><li class="row row-head label" style="${cols}"><span>Partner</span><span>Status</span><span>Offer</span><span>Price</span><span>Reliable</span></li>
+    ${r.partners.map((p, i) => `<li class="row" style="${cols}"><div><b>${esc(p.partner)}</b><small>${esc(p.what)}</small></div>
+      <span class="status ${p.status === "answered" ? "go" : p.status === "to_send" ? "me" : "wait"}">${esc(p.status.replace("_", " "))}</span>
+      <span>${p.status === "answered" ? (p.available ? esc(p.note) : "Not available") : p.waiting_days != null ? `${p.waiting_days} days waiting` : ""}</span>
+      <span class="mono">${p.price_eur ? eur(p.price_eur) : ""}</span><span class="mono">${Math.round(p.reliability * 100)}%</span></li>`).join("")}</ul>
+    <div class="guard">${icon("book")} After choosing, book in TravelSpirit yourself. The agent never books.</div>`;
+}
+
+async function viewPartners() {
+  const b = await api("/api/backoffice");
+  const cols = "grid-template-columns:minmax(0,1.6fr) 130px 130px 130px 110px";
+  $("#view").innerHTML = `<div class="vhead"><span class="label">${b.slowest_partners.length} partners</span><h1>Partners</h1><p>Slowest first. The partner desk chases these sooner.</p></div>
+    <ul class="list"><li class="row row-head label" style="${cols}"><span>Partner</span><span>Kind</span><span>Destination</span><span>Days to reply</span><span>Reliable</span></li>
+    ${b.slowest_partners.map(p => `<li class="row" style="${cols}"><b>${esc(p.partner)}</b><span>${esc(p.kind.replace("_", " "))}</span><span>${esc(p.destination)}</span>
+      <span class="mono" style="${p.avg_reply_days > 3 ? "color:var(--terra-ink)" : ""}">${p.avg_reply_days}</span><span class="mono">${Math.round(p.reliability * 100)}%</span></li>`).join("")}</ul>`;
+}
+app.start();
 </script>
 </body></html>

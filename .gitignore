@@ -6,4 +6,3 @@ data/*.db
 data/bench/
 .pytest_cache/
 *.egg-info/
-build/

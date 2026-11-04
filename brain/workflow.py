@@ -98,15 +98,28 @@ def backoffice_overview(s: Session) -> dict:
     prs = list(s.scalars(select(PartnerRequest)).all())
     partners = {p.id: p for p in s.scalars(select(Partner)).all()}
     chase_ids = {p.id for p in due_chases(s)}
+    from .db import Family
+    from .synth.world import DESTINATIONS
+    reqs = {r.id: r for r in s.scalars(select(TripRequest)).all()}
+    pending = {d.partner_request_id: d.id for d in s.scalars(select(Draft).where(
+        Draft.kind.in_(["partner_request", "partner_chase"]), Draft.status == "draft")).all()}
     cards = []
     for pr in prs:
         p = partners[pr.partner_id]
+        tr = reqs.get(pr.request_id)
+        fam = s.get(Family, tr.family_id) if tr else None
         cards.append({"id": pr.id, "request_id": pr.request_id, "partner": p.name, "kind": p.kind, "what": pr.what,
+                      "destination": DESTINATIONS[tr.destination]["name"] if tr else None,
+                      "team_id": tr.team_id if tr else None, "family": fam.surname if fam else None,
+                      "draft_id": pending.get(pr.id),
+                      "age_hours": int(((datetime.utcnow() - (pr.answered_at or pr.chased_at or pr.sent_at)).total_seconds()) // 3600)
+                      if (pr.answered_at or pr.chased_at or pr.sent_at) else None,
                       "status": pr.status, "sent_at": pr.sent_at.isoformat() if pr.sent_at else None,
                       "waiting_days": (datetime.utcnow() - pr.sent_at).days if pr.sent_at and pr.status in ("waiting", "chased") else None,
                       "chase_due": pr.id in chase_ids, "offer": pr.offer})
-    slow = sorted(({"partner": p.name, "avg_reply_days": p.avg_reply_days, "reliability": p.reliability}
-                   for p in partners.values() if p.kind != "airline"), key=lambda x: -x["avg_reply_days"])[:6]
+    slow = sorted(({"partner": p.name, "kind": p.kind, "destination": DESTINATIONS.get(p.destination, {}).get("name", "All"),
+                    "avg_reply_days": p.avg_reply_days, "reliability": p.reliability}
+                   for p in partners.values() if p.kind != "airline"), key=lambda x: -x["avg_reply_days"])
     return {"cards": cards, "counts": dict(Counter(c["status"] for c in cards)), "chase_due": len(chase_ids),
             "slowest_partners": slow,
             "drafts_to_check": s.query(Draft).filter(Draft.kind.in_(["partner_request", "partner_chase"]),
