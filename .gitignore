@@ -7,3 +7,7 @@ data/bench/
 .pytest_cache/
 *.egg-info/
 build/
+data/vault/
+data/ops/
+data/files/
+data/*.dump
