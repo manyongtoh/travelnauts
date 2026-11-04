@@ -155,10 +155,13 @@ def requests(team: str | None = None, specialist: str | None = None, user: Princ
         if specialist:
             q = q.where(TripRequest.specialist_id == specialist)
         out = []
+        pending: dict[str, list[str]] = {}
+        for d in s.scalars(select(Draft).where(Draft.status == "draft", Draft.kind.in_(["trip_alert", "followup"]))).all():
+            pending.setdefault(d.request_id, []).append(d.kind)
         for r in s.scalars(q).all():
             f = s.get(Family, r.family_id)
             out.append(as_dict(r) | {"family": f.contact_name, "child_ages": f.child_ages, "adults": f.adults,
-                                      "destination_name": DESTINATIONS[r.destination]["name"]})
+                                      "destination_name": DESTINATIONS[r.destination]["name"], "pending": pending.get(r.id, [])})
         return out
 
 

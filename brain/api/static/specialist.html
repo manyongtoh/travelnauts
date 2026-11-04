@@ -7,38 +7,34 @@
 <body>
 <script src="brain.js"></script>
 <script>
-let me = store.get("who") || "sanne-de-vries", people = [], reqs = [], current = null;
+let reqs = [], current = null;
 
 const app = shell({
   role: "Specialist dashboard",
   nav: [["today", "Today"], ["trips", "All my trips"], ["ask", "Ask the brain"], ["log", "Log"]],
-  links: [["teamlead.html", "Team lead view"], ["backoffice.html", "Back office view"]],
-  who: `<span class="avatar" id="av">S</span><div><select id="who" aria-label="Working as"></select><small>specialist</small></div>`,
+  needs: "drafts.approve_customer",
   onNav: v => ({today: viewToday, trips: viewTrips, ask: viewAsk, log: viewLog})[v](),
 });
 
-async function init() {
-  people = (await api("/api/employees")).filter(e => e.role === "specialist");
-  $("#who").innerHTML = people.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
-  if (!people.some(p => p.id === me)) me = people[0].id;
-  $("#who").value = me;
-  $("#who").onchange = () => { me = $("#who").value; store.set("who", me); current = null; setWho(); app.start(); };
-  setWho();
+function init() {
+  app.ready.then(me => { $("#tb-left").textContent = me.team_id ? `Team ${TEAMS[me.team_id]}` : ""; });
   app.start();
 }
-function setWho() { const p = people.find(p => p.id === me); $("#av").textContent = initials(p.name); $("#tb-left").textContent = `Team ${TEAMS[p.team_id]}`; }
 const kids = n => `${n} ${n === 1 ? "child" : "children"}`;
-const myName = () => people.find(p => p.id === me).name;
+const myName = () => ME.name;
 
 async function loadReqs() {
-  reqs = await api(`/api/requests?specialist=${me}`);
-  const waiting = reqs.filter(r => ["new", "proposal_draft", "change_requested"].includes(r.status));
+  reqs = await api(`/api/requests`);
+  const waiting = reqs.filter(r => ["new", "proposal_draft", "change_requested"].includes(r.status) || r.pending.length);
+  waiting.sort((a, b) => (b.pending.includes("trip_alert") - a.pending.includes("trip_alert")));
   badge("today", waiting.length);
   return waiting;
 }
 
 function itemHtml(r) {
-  const [lbl, cls] = REQ_STATUS[r.status] || [r.status, ""];
+  let [lbl, cls] = REQ_STATUS[r.status] || [r.status, ""];
+  if ((r.pending || []).includes("trip_alert")) [lbl, cls] = ["Trip alert, travelling soon", "hot"];
+  else if ((r.pending || []).includes("followup")) [lbl, cls] = ["Follow-up ready", "hot"];
   return `<li><button class="ditem" data-id="${r.id}" aria-current="${r.id === current}">
     <span class="label ${cls}">${esc(lbl)}</span>
     <span class="fam">Family ${esc(r.family.split(" ").slice(-1)[0])} · ${esc(r.destination_name)}</span>
@@ -91,7 +87,7 @@ function tags(q, f, triage) {
 }
 
 function draftHtml(d) {
-  const kindLabel = {proposal: "Draft travel proposal", change: "Draft reply with the changed proposal", followup: "Draft follow-up", galileo: "Galileo commands", answer: "Draft answer"}[d.kind] || d.kind;
+  const kindLabel = {proposal: "Draft travel proposal", change: "Draft reply with the changed proposal", trip_alert: "Trip alert: draft message for the family", followup: "Draft follow-up", galileo: "Galileo commands", answer: "Draft answer"}[d.kind] || d.kind;
   const price = d.data && d.data.price, route = d.data && d.data.route;
   const warns = [...((price && price.warnings) || []), ...((d.data && d.data.warnings) || [])];
   const approveLabel = d.kind === "galileo" ? "Checked, I will run these in Galileo" : "Approve and send";
@@ -116,7 +112,8 @@ function draftHtml(d) {
     </div>
     ${(d.sources || []).some(s => s.title) ? `<p class="label sect">Sources</p>${sourcesList(d.sources)}` : ""}
     ${d.status === "draft" ? `<div class="actions"><button class="btn btn-primary btn-lg" onclick="approve(${d.id})">${icon("check")} ${approveLabel}</button>
-      <button class="btn-link" onclick="reject(${d.id})">Reject</button></div>` : ""}`;
+      <button class="btn btn-outline" onclick="copyText('body-${d.id}')">Copy for TravelSpirit</button>
+      <button class="btn-link" onclick="reject(${d.id})">Discard</button></div>` : ""}`;
 }
 
 async function openReq(id) {
@@ -126,7 +123,8 @@ async function openReq(id) {
   const q = r.request, f = r.family;
   const latest = r.drafts.filter(d => d.kind === "proposal" || d.kind === "change").slice(-1)[0];
   const pending = (r.changes || []).filter(m => m.status === "triaged");
-  const others = r.drafts.filter(d => d !== latest).reverse();
+  const urgent = r.drafts.filter(d => ["trip_alert", "followup"].includes(d.kind) && d.status === "draft");
+  const others = r.drafts.filter(d => d !== latest && !urgent.includes(d)).reverse();
   const [lbl] = REQ_STATUS[q.status] || [q.status];
   $("#detail").innerHTML = `<div class="detail">
     <span class="label">${esc(lbl)} · Team ${esc(TEAMS[q.team_id] || "")}</span>
@@ -135,6 +133,7 @@ async function openReq(id) {
     ${r.mail ? `<p class="label sect">Incoming email</p><div class="concept"><dl class="mailhead"><dt>From</dt><dd>${esc(f.contact_name)}</dd><dt>Subject</dt><dd>${esc(r.mail.subject)}</dd>
       <dt>Received</dt><dd>${esc(new Date(r.mail.received_at).toLocaleString("en-GB", {dateStyle: "medium", timeStyle: "short"}))}</dd></dl><pre class="c-text">${esc(r.mail.body)}</pre></div>
       <p class="label sect">Triage tags</p>${tags(q, f, r.mail.triage)}` : ""}
+    ${urgent.map(draftHtml).join("")}
     ${pending.map(m => `<p class="label sect hot" style="color:var(--terra-ink)">Change request</p><div class="concept"><dl class="mailhead"><dt>From</dt><dd>${esc(f.contact_name)}</dd><dt>Subject</dt><dd>${esc(m.subject)}</dd></dl>
       <pre class="c-text">${esc(m.body)}</pre></div><div class="actions"><button class="btn btn-primary btn-lg" onclick="applyChange('${m.id}')">${icon("bolt")} Let the agent apply the change</button></div>`).join("")}
     ${latest ? draftHtml(latest) : `<div class="actions"><button class="btn btn-primary btn-lg" onclick="act('proposal')">${icon("bolt")} Write travel proposal</button></div>`}
@@ -164,10 +163,11 @@ async function applyChange(mid) {
   catch (e) { toast(e.message); }
 }
 async function approve(id) {
-  await post(`/api/drafts/${id}/approve`, {by: myName(), final_body: $(`#body-${id}`).value});
+  try { await post(`/api/drafts/${id}/approve`, {final_body: $(`#body-${id}`).value}); }
+  catch (e) { toast(e.message); return; }
   toast("Approved. In the sandbox nothing is actually sent."); openReq(current); loadReqs();
 }
-async function reject(id) { await post(`/api/drafts/${id}/reject`, {by: myName()}); toast("Rejected"); openReq(current); }
+async function reject(id) { await post(`/api/drafts/${id}/reject`, {reason: "discarded"}); toast("Discarded. That is feedback for the brain too."); openReq(current); }
 
 function viewAsk() {
   $("#view").innerHTML = `<div class="vhead"><span class="label">Knowledge desk</span><h1>Ask the brain</h1>
@@ -179,7 +179,7 @@ function viewAsk() {
         .map(x => `<button class="pchip" data-q="${esc(x)}">${esc(x)}</button>`).join("")}</div>
       <div id="answer"></div></div>`;
   const run = async () => {
-    const p = people.find(p => p.id === me);
+    const p = ME;
     const a = await post("/api/ask", {question: $("#q").value, team_id: p.team_id});
     $("#answer").innerHTML = `<p class="label sect">${a.confident ? "Answer" : "Not known yet"}</p>
       <div class="${a.confident ? "info" : "note"}">${esc(a.answer)}</div>

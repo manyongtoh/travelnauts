@@ -96,5 +96,23 @@ def audit(s: Session, agent: str, subject: str | None, input_summary: str = ""):
         if calls:
             run.model = ",".join(sorted({c.model for c in calls if c.ok}) or {calls[-1].model})
         end_trace(token)
+        _export_langfuse(run, calls)
         s.add(run)
         s.commit()
+
+
+def _export_langfuse(run: AgentRun, calls: list[ModelCall]) -> None:
+    """Send the trace to Langfuse when configured. Only masked summaries and numbers, never raw content."""
+    from ..trace import langfuse
+    lf = langfuse()
+    if lf is None:
+        return
+    try:  # pragma: no cover - needs a Langfuse server
+        lf.trace(id=run.trace_id, name=run.agent, metadata={"subject": run.subject, "ok": run.ok, "ms": run.ms},
+                 output=run.output_summary[:200])
+        for c in calls:
+            lf.generation(trace_id=run.trace_id, name=c.task, model=c.model,
+                          usage={"input": c.tokens_in, "output": c.tokens_out}, metadata={"tier": c.tier, "prompt": c.prompt_version,
+                                                                                         "cost_eur": c.cost_eur, "ok": c.ok})
+    except Exception:  # noqa: BLE001  tracing must never break an agent
+        pass

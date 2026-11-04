@@ -23,6 +23,9 @@ def main(argv: list[str] | None = None) -> None:
     wk.add_argument("--once", action="store_true")
     sub.add_parser("mcp", help="serve the tool server over MCP (stdio) as BRAIN_MCP_AGENT")
     sub.add_parser("reindex", help="re-read the knowledge vault")
+    n8 = sub.add_parser("n8n", help="inventory of exported n8n workflows")
+    n8.add_argument("paths", nargs="+")
+    sub.add_parser("envcheck", help="check this environment's configuration (test, pilot, live)")
     ak = sub.add_parser("ask", help="ask the brain a question")
     ak.add_argument("question")
     a = p.parse_args(argv)
@@ -71,6 +74,15 @@ def main(argv: list[str] | None = None) -> None:
         from .knowledge.vault import reindex
         with db.session() as s:
             print(json.dumps(reindex(s), indent=2))
+    elif a.cmd == "n8n":
+        from .n8n_inventory import main as n8n_main
+        n8n_main(a.paths)
+    elif a.cmd == "envcheck":
+        import sys
+        from .environments import check
+        c = check()
+        print(json.dumps({"env": c.env, "ok": c.ok, "problems": c.problems}, indent=2))
+        sys.exit(0 if c.ok else 1)
     elif a.cmd == "ask":
         from . import db
         from .agents.knowledge_desk import ask

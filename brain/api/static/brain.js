@@ -1,17 +1,31 @@
 // Shared helpers and the app shell (sidebar, banner, topbar), same layout as the demo dashboards.
 const api = async (path, opts = {}) => {
-  const r = await fetch(path, {headers: {"Content-Type": "application/json"}, ...opts,
-    body: opts.body ? JSON.stringify(opts.body) : undefined});
+  const headers = {"Content-Type": "application/json"};
+  const who = store.get("me");
+  if (who) headers["X-Brain-User"] = who;
+  const r = await fetch(path, {headers, ...opts, body: opts.body ? JSON.stringify(opts.body) : undefined});
+  if (r.status === 401 && !location.pathname.endsWith("index.html")) {
+    location.href = "/static/index.html?next=" + encodeURIComponent(location.pathname.split("/").pop());
+    throw new Error("Sign in first");
+  }
   if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch {} throw new Error(m); }
-  return r.json();
+  const type = r.headers.get("content-type") || "";
+  return type.includes("json") ? r.json() : r.text();
 };
 const post = (path, body) => api(path, {method: "POST", body: body || {}});
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
 const eur = n => n == null ? "" : "€ " + Math.round(n).toLocaleString("nl-NL");
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
-const store = {get(k) { try { return localStorage.getItem(k); } catch { return null; } },
-               set(k, v) { try { localStorage.setItem(k, v); } catch {} }};
+const store = {get(k) { try { return localStorage.getItem(k) || sessionMem[k] || null; } catch { return sessionMem[k] || null; } },
+               set(k, v) { sessionMem[k] = v; try { localStorage.setItem(k, v); } catch {} }};
+const sessionMem = {};
+let ME = null;
+async function loadMe() { ME = await api("/api/me"); return ME; }
+const SCREENS = [["specialist.html", "Specialist view", "drafts.approve_customer"], ["teamlead.html", "Team lead view", "team.metrics"],
+                 ["backoffice.html", "Back office view", "backoffice.board"], ["maintenance.html", "Maintenance", "maintenance"],
+                 ["users.html", "User management", "users.manage"]];
+const ROLE_LABEL = {specialist: "specialist", back_office: "back office", team_lead: "team lead", content: "product and content", admin: "admin"};
 const initials = n => n.split(" ").filter(w => w[0] === w[0].toUpperCase()).map(w => w[0]).slice(0, 2).join("");
 const TEAMS = {asia: "Asia", africa: "Africa", americas: "Americas"};
 const ICON = {
@@ -34,13 +48,14 @@ function greeting() { const h = new Date().getHours(); return h < 12 ? "Good mor
 function today() { return new Date().toLocaleDateString("en-GB", {weekday: "long", day: "numeric", month: "long", year: "numeric"}).replace(",", ""); }
 
 // shell({role, nav: [[id, label]], links: [[href, label]], who: html}) builds the page frame; views live in <main id="view">.
-function shell({role, nav, links, who, onNav}) {
+function shell({role, nav, links, who, onNav, needs}) {
+  links = links || [];
   document.body.innerHTML = `<div class="app">
     <aside class="sidebar">
       <div class="brand"><span class="brand-name">Company brain</span><span class="label">${esc(role)}</span></div>
       <nav class="nav">${nav.map(([id, l]) => `<button class="nav-btn" data-view="${id}">${esc(l)}<span class="badge" id="badge-${id}" hidden></span></button>`).join("")}</nav>
-      <div class="side-links">${links.map(([h, l]) => `<a href="${h}">${esc(l)} →</a>`).join("")}</div>
-      <div class="whoami">${who}</div>
+      <div class="side-links" id="side-links"></div>
+      <div class="whoami" id="whoami">${who || ""}</div>
     </aside>
     <div class="main">
       <div class="banner">SANDBOX · MADE-UP DATA · NOTHING IS SENT</div>
@@ -59,7 +74,17 @@ function shell({role, nav, links, who, onNav}) {
     $("#tb-model").textContent = `Model: ${s.model}`;
     $("#tb-ts").textContent = `TravelSpirit · ${s.travelspirit} · ${s.travelspirit_write}`;
   });
-  return {go, start() { go(store.get(role + ":view") && nav.some(n => n[0] === store.get(role + ":view")) ? store.get(role + ":view") : nav[0][0]); }};
+  const ready = loadMe().then(me => {
+    const here = location.pathname.split("/").pop();
+    $("#side-links").innerHTML = SCREENS.filter(([h, , p]) => h !== here && me.can.includes(p)).map(([h, l]) => `<a href="${h}">${esc(l)} →</a>`).join("");
+    if (!who) $("#whoami").innerHTML = `<span class="avatar">${esc(initials(me.name))}</span><div>${esc(me.name)}<small>${esc(me.roles.map(r => ROLE_LABEL[r] || r).join(", "))} · <a href="index.html" style="color:inherit">switch</a></small></div>`;
+    if (needs && !me.can.includes(needs)) {
+      $("#view").innerHTML = `<div class="detail empty"><b>Not for your role</b>${esc(me.name)} (${esc(me.roles.map(r => ROLE_LABEL[r]).join(", "))}) cannot open this screen. <a href="index.html">Sign in as someone else</a>.</div>`;
+      throw new Error("forbidden");
+    }
+    return me;
+  });
+  return {go, ready, start() { ready.then(() => go(store.get(role + ":view") && nav.some(n => n[0] === store.get(role + ":view")) ? store.get(role + ":view") : nav[0][0])).catch(() => {}); }};
 }
 function badge(id, n) { const b = $("#badge-" + id); if (!b) return; b.hidden = !n; b.textContent = n; }
 
@@ -70,4 +95,11 @@ function sourcesList(sources) {
   if (!k.length) return "";
   return `<ul class="src">${k.map((s, i) => `<li><span class="n ${s.outdated ? "old" : ""}">[${i + 1}]</span>
     <div><b>${esc(s.title)}</b><small>Owner ${esc(s.owner)} · review by ${esc(s.review_by)}${s.outdated ? " · past review date, check first" : ""}</small></div></li>`).join("")}</ul>`;
+}
+
+async function copyText(id) {
+  const el = document.getElementById(id);
+  const text = el.value !== undefined ? el.value : el.textContent;
+  try { await navigator.clipboard.writeText(text); toast("Copied. Paste it into TravelSpirit."); }
+  catch { el.select && el.select(); toast("Select and copy the text"); }
 }

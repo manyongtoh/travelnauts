@@ -120,7 +120,7 @@ class Pseudonymiser:
 HEALTH = re.compile(r"\b(malaria\w*|vaccin\w*|inent\w*|medicij\w*|prik\w*|antibiotica|tabletten|pillen|dosis|vaccination\w*|medication)\b", re.I)
 REFERRAL = re.compile(r"\b(GGD|huisarts|reisvaccinatie|doctor|arts)\b", re.I)
 EURO = re.compile(r"(?:€\s?|EUR\s?)(\d{1,3}(?:[.,]\d{3})+|\d+)|(\d{1,3}(?:[.,]\d{3})+|\d{3,})\s?(?:euro|EUR)", re.I)
-DASHES = re.compile("[–—]")
+DASHES = re.compile("[\u2013\u2014]")
 
 
 def _amounts(text: str) -> list[int]:

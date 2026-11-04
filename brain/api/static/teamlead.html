@@ -10,10 +10,9 @@
 let team = store.get("tl:team") || "all", kfilter = "proposed";
 const app = shell({
   role: "Team lead",
-  nav: [["overview", "Overview"], ["knowledge", "Knowledge"], ["gaps", "Knowledge gaps"], ["log", "Log"]],
-  links: [["specialist.html", "Specialist view"], ["backoffice.html", "Back office view"]],
-  who: `<span class="avatar">TL</span><div>Signed in as team lead<small>sandbox</small></div>`,
-  onNav: v => ({overview: viewOverview, knowledge: viewKnowledge, gaps: viewGaps, log: viewLog})[v](),
+  nav: [["overview", "Overview"], ["insight", "Insight"], ["knowledge", "Knowledge"], ["gaps", "Knowledge gaps"], ["log", "Log"]],
+  needs: "team.metrics",
+  onNav: v => ({overview: viewOverview, insight: viewInsight, knowledge: viewKnowledge, gaps: viewGaps, log: viewLog})[v](),
 });
 $("#tb-left").textContent = "Pilot · synthetic stage";
 
@@ -44,6 +43,7 @@ async function viewOverview() {
   const maxS = Math.max(1, ...Object.values(p.status));
   const S = [["new", "New", "terra"], ["proposal_draft", "Draft ready", "gold"], ["proposal_sent", "Proposal sent", ""], ["booked", "Booked", "sea"], ["lost", "Lost", ""]];
   const review = data.review_due.filter(inTeam), proposed = data.proposed_knowledge.filter(inTeam);
+  const flagged = await api("/api/inbox?status=flagged");
   const inboxMax = Math.max(1, ...Object.values(data.inbox));
   $("#view").innerHTML = `
     <div class="hello"><span class="label">${esc(today())}</span><h1>${greeting()}</h1>
@@ -70,6 +70,7 @@ async function viewOverview() {
       </div>
       <div class="card"><h2>Needs attention</h2><p class="sub">What the agents flagged for a person</p>
         <ul class="att">
+          ${flagged.map(m => `<li><span class="label hot">Suspicious mail, no draft made</span><div class="t">${esc(m.subject)}</div><small>${esc((m.triage.injection || {}).reasons?.join(", ") || "")} · a person should look at it</small></li>`).join("")}
           ${p.fudue ? `<li><span class="label hot">Follow-ups due</span><div class="row-act"><span class="t">${p.fudue} proposals without a reply for 5 days</span><button class="btn-link" id="runfu">Draft follow-ups</button></div></li>` : ""}
           ${p.fu.slice(0, 4).map(f => `<li><span class="label">Follow-up waiting for the specialist</span><div class="t">${esc(f.title)}</div><small>${esc(f.request_id)} · ${f.days_since} days since the proposal</small></li>`).join("")}
           ${p.gaps.slice(0, 4).map(g => `<li><span class="label hot">Knowledge gap · ${esc(g.reason.replace("_", " "))}</span><div class="t">${esc(g.question)}</div><small>asked ${g.count}×</small></li>`).join("")}
@@ -84,6 +85,31 @@ async function viewOverview() {
 function bindApprove(after) {
   $$("[data-approve]").forEach(b => b.onclick = async () => { await post(`/api/knowledge/${b.dataset.approve}/approve`, {by: "Team lead"}); toast("Approved. Agents can use it now."); after(); });
 }
+
+async function viewInsight() {
+  const [ci, ti, people] = await Promise.all([api("/api/reports/customer_insight"), api("/api/reports/team_insight"), api("/api/employees")]);
+  const teams = team === "all" ? Object.keys(TEAMS) : [team];
+  const none = `<div class="detail empty"><b>No report yet</b>The insight agents run nightly and hourly. <button class="btn btn-outline btn-sm" id="runins">Run them now</button></div>`;
+  if (!ci.teams || !ti.teams) { $("#view").innerHTML = `<div class="vhead"><h1>Insight</h1></div>${none}`; $("#runins").onclick = runIns; return; }
+  $("#view").innerHTML = `<div class="vhead"><span class="label">Customer insight ${esc(ci.at || "")} · team insight ${esc(ti.at || "")}</span><h1>Insight</h1>
+    <p>Totals per team: what families ask for, and where requests get stuck. Nothing per person.</p></div>
+    <div class="filters">${teamChips()}<button class="btn btn-outline btn-sm" id="runins" style="margin-left:auto">Refresh now</button></div>
+    ${teams.map(t => { const c = ci.teams[t] || {}, x = ti.teams[t] || {stuck: []};
+      return `<div class="grid2" style="margin-bottom:18px">
+      <div class="card"><h2>Team ${TEAMS[t]}: what families ask</h2><p class="sub">${c.requests || 0} requests · average ${c.avg_trip_days || "n/a"} days · budget ${c.avg_budget_eur ? eur(c.avg_budget_eur) : "n/a"} · booked ${c.booked_share_pct ?? "n/a"}% of offers</p>
+        <div class="bars">${(c.top_destinations || []).map(([d, n]) => `<div class="bar"><span>${esc(d)}</span><span class="track"><span class="fill sea" style="width:${100 * n / Math.max(1, c.requests)}%"></span></span><span class="v">${n}</span></div>`).join("")}</div>
+        <p class="label sect">Top wishes</p><div class="chips">${(c.top_wishes || []).map(([w, n]) => `<span class="pchip">${esc(w)} · ${n}</span>`).join("")}</div></div>
+      <div class="card"><h2>Stuck requests</h2><p class="sub">${x.open ?? 0} open · ${x.waiting_for_specialist ?? 0} waiting for a specialist · first draft after ${x.avg_hours_to_first_draft ?? "n/a"} h</p>
+        <ul class="att">${x.stuck.map(r => `<li><div class="row-act"><span class="t"><b class="mono">${esc(r.request_id)}</b> ${esc(r.status.replace("_", " "))}, ${r.days} days</span>
+          <select data-reassign="${r.request_id}" style="height:30px;border:1px solid var(--sand);border-radius:6px;background:var(--white)"><option value="">Reassign to…</option>${people.filter(p => p.role === "specialist" && p.team_id === t).map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select></div></li>`).join("") || `<li class="empty"><b>Nothing stuck</b></li>`}</ul></div></div>`; }).join("")}`;
+  bindTeam(viewInsight);
+  $("#runins").onclick = runIns;
+  $$("[data-reassign]").forEach(s => s.onchange = async () => {
+    if (!s.value) return;
+    try { await post(`/api/requests/${s.dataset.reassign}/reassign`, {specialist_id: s.value}); toast("Reassigned (logged)"); } catch (e) { toast(e.message); }
+  });
+}
+async function runIns() { await post("/api/jobs/run/customer_insight"); await post("/api/jobs/run/team_insight"); toast("Insight refreshed"); viewInsight(); }
 
 async function viewKnowledge() {
   const [items, data] = await Promise.all([api("/api/knowledge"), api("/api/teamlead")]);

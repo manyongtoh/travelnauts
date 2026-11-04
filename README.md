@@ -1,8 +1,11 @@
 # Travelnauts company brain: sandbox
 
-A working first version of the company brain from the proposal, running on **made-up data only**.
-It has the six pilot agents, the knowledge rules (approval, owner, review date, gap list), a fake
-TravelSpirit, the price calculation and the three screens (specialist, team lead, back office).
+A working version of the company brain from the proposal and the tech architecture, running on
+**made-up data only**: the tool server (also over MCP), eleven agents, a job queue and scheduler, the model
+router with budgets, guardrails, the knowledge vault, sign-in by role, a hash-chained audit log, traces,
+evals that gate CI, and five screens (specialist, team lead, back office, maintenance, user management).
+See [docs/architecture-coverage.md](docs/architecture-coverage.md) for what is built, what is a stand-in
+and what still needs Azure.
 
 Nothing here is Travelnauts data. Families, partners, hotels, prices and staff are invented.
 Agents only ever write drafts; a person approves every mail before it goes out.
@@ -11,10 +14,14 @@ Agents only ever write drafts; a person approves every mail before it goes out.
 
 ```bash
 pip install -e ".[dev]"
-brain seed            # build the synthetic database (data/brain.db)
-brain serve           # open http://127.0.0.1:8000
-pytest -q             # 26 tests
-brain bench           # test bench report in data/bench/
+brain seed            # build the synthetic database and knowledge vault (data/)
+brain worker --once   # run the scheduler and the queue once (triage, follow-ups, insight, ...)
+brain serve           # open http://127.0.0.1:8000 and pick who you are
+pytest -q             # 72 tests
+brain bench --gate    # evals; fails when a gate from the architecture is not met
+brain mcp             # the tool server over MCP, as BRAIN_MCP_AGENT
+brain envcheck        # check the test, pilot or live configuration
+brain n8n export.json # inventory of exported n8n workflows
 ```
 
 With the full stack (Postgres and Ollama with Gemma):

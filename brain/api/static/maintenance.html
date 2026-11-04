@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Maintenance · Company brain</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="brain.css"></head>
+<body>
+<script src="brain.js"></script>
+<script>
+const app = shell({
+  role: "Maintenance", needs: "maintenance",
+  nav: [["health", "Health"], ["agents", "Agents"], ["queue", "Queue"], ["evals", "Evals"], ["audit", "Audit chain"], ["tools", "Tool server"]],
+  onNav: v => ({health: viewHealth, agents: viewAgents, queue: viewQueue, evals: viewEvals, audit: viewAudit, tools: viewTools})[v](),
+});
+$("#tb-left").textContent = "Admin · no customer content";
+let H = null;
+const load = async () => (H = await api("/api/admin/health"));
+const okDot = ok => `<span class="status ${ok ? "go" : "me"}">${ok ? "ok" : "problem"}</span>`;
+
+async function viewHealth() {
+  await load();
+  const b = H.budget, q = H.queue;
+  badge("queue", q.failed);
+  $("#view").innerHTML = `<div class="hello"><span class="label">${esc(today())} · release ${esc(H.release.version)} · ${esc(H.release.data_stage)} data</span><h1>Maintenance</h1>
+    <div class="strip"><span class="stat">${icon("bolt")}<b>${Object.values(H.agents).reduce((a, x) => a + x.runs, 0)}</b> agent runs, 24 h</span>
+    <span class="stat">${icon("alert")}<b class="${Object.values(H.agents).some(x => x.errors) ? "hot" : ""}">${Object.values(H.agents).reduce((a, x) => a + x.errors, 0)}</b> errors</span>
+    <span class="stat">${icon("clock")}<b>${q.queued}</b> queued, <b class="${q.failed ? "hot" : ""}">${q.failed}</b> failed</span>
+    <span class="stat">${icon("shield")}<b>${H.audit_chain.ok ? "intact" : "BROKEN"}</b> audit chain</span></div>
+    <div class="guard">${icon("shield")} This screen shows no customer content. Opening a mail is a break-glass action and is written to the audit chain.</div></div>
+    <div class="grid2">
+      <div class="card"><h2>Connections</h2><p class="sub">Every outside system, through its own connector</p>
+        <ul class="att">${H.connections.map(c => `<li><div class="row-act"><span class="t"><b>${esc(c.name)}</b> <span class="mono">${esc(c.mode)}</span></span>${okDot(c.ok)}</div><small>${esc(c.detail)}</small></li>`).join("")}</ul></div>
+      <div class="card"><h2>Model budget</h2><p class="sub">Daily cap for this environment; agents stop when it is reached</p>
+        <div class="kpis" style="grid-template-columns:1fr 1fr;margin:0 0 14px"><div class="kpi"><span class="label">Spent today</span><b>€ ${b.spent_today_eur.toFixed(2)}</b></div>
+        <div class="kpi"><span class="label">Cap</span><b>€ ${b.cap_eur.toFixed(2)}</b></div></div>
+        <div class="row" style="padding:0;grid-template-columns:1fr auto"><input id="cap" type="number" step="0.5" min="0" value="${b.cap_eur}" style="height:38px;border:1px solid var(--sand);border-radius:8px;padding:0 10px">
+        <button class="btn btn-outline btn-sm" id="setcap">Set cap</button></div>
+        <h2 style="margin-top:18px">Tools</h2><p class="sub">${H.tools.calls} calls in 24 h · ${H.tools.denied} denied · ${H.tools.errors} errors · ${H.tools.cache_hits} from cache</p>
+        <div class="actions"><button class="btn btn-outline btn-sm" id="tick">Run the scheduler now</button></div></div>
+    </div>`;
+  $("#setcap").onclick = async () => { await post("/api/admin/budget", {cap_eur: +$("#cap").value}); toast("Budget cap set (logged)"); viewHealth(); };
+  $("#tick").onclick = async () => { const r = await post("/api/jobs/tick"); toast(`${r.scheduled.length} jobs scheduled, ${r.worked.length} run`); viewHealth(); };
+}
+
+async function viewAgents() {
+  await load();
+  const cols = "grid-template-columns:minmax(0,1.4fr) 90px 90px 110px 140px";
+  $("#view").innerHTML = `<div class="vhead"><span class="label">Last 24 hours</span><h1>Agents</h1><p>Pause an agent: its jobs wait in the queue until you resume it. Every pause is logged.</p></div>
+    <ul class="list"><li class="row row-head label" style="${cols}"><span>Agent</span><span>Runs</span><span>Errors</span><span>Avg ms</span><span></span></li>
+    ${Object.entries(H.agents).map(([a, x]) => `<li class="row" style="${cols}"><b>${esc(a.replace("_", " "))}</b><span class="mono">${x.runs}</span>
+      <span class="mono" style="${x.errors ? "color:var(--terra-ink)" : ""}">${x.errors}</span><span class="mono">${x.avg_ms}</span>
+      <span><button class="btn ${x.paused ? "btn-primary" : "btn-outline"} btn-sm" data-agent="${a}" data-paused="${x.paused}">${x.paused ? "Resume" : "Pause"}</button></span></li>`).join("")}</ul>`;
+  $$("[data-agent]").forEach(b => b.onclick = async () => {
+    await post(`/api/admin/agents/${b.dataset.agent}/pause`, {paused: b.dataset.paused !== "true"}); toast("Saved and logged"); viewAgents(); });
+}
+
+async function viewQueue() {
+  await load();
+  const cols = "grid-template-columns:80px 180px minmax(0,1fr) 110px";
+  $("#view").innerHTML = `<div class="vhead"><span class="label">Work queue</span><h1>Queue</h1><p>${Object.entries(H.queue).map(([k, v]) => `${v} ${k}`).join(" · ")}</p></div>
+    <p class="label sect">Failed jobs</p>
+    <ul class="list"><li class="row row-head label" style="${cols}"><span>Job</span><span>Kind</span><span>Error</span><span></span></li>
+    ${H.failed_jobs.map(j => `<li class="row" style="${cols}"><span class="mono">#${j.id}</span><b>${esc(j.kind)}</b><span class="mono">${esc(j.error)}</span>
+      <span><button class="btn btn-outline btn-sm" data-retry="${j.id}">Retry</button></span></li>`).join("") || `<li class="empty"><b>No failed jobs</b></li>`}</ul>
+    <p class="label sect">Stuck for more than an hour</p>
+    <ul class="list">${H.stuck_jobs.map(j => `<li class="row" style="${cols}"><span class="mono">#${j.id}</span><b>${esc(j.kind)}</b><span>${esc(j.status)}</span><span></span></li>`).join("") || `<li class="empty"><b>Nothing stuck</b></li>`}</ul>`;
+  $$("[data-retry]").forEach(b => b.onclick = async () => { await post(`/api/admin/jobs/${b.dataset.retry}/retry`); toast("Queued again"); viewQueue(); });
+}
+
+async function viewEvals() {
+  await load();
+  const e = H.evals;
+  if (!e) { $("#view").innerHTML = `<div class="detail empty"><b>No eval report yet</b>Run <span class="mono">brain bench</span>; CI runs it on every change.</div>`; return; }
+  const cols = "grid-template-columns:minmax(0,1.6fr) 120px 120px 100px";
+  $("#view").innerHTML = `<div class="vhead"><span class="label">Model ${esc(e.model)} · seed ${e.seed}</span><h1>Evals</h1>
+    <p>${e.gates.passed ? "All gates pass. A change that drops below a gate is blocked in CI." : "A gate fails: this release should not go further."}</p></div>
+    <ul class="list"><li class="row row-head label" style="${cols}"><span>Gate</span><span>Value</span><span>Limit</span><span></span></li>
+    ${Object.entries(e.gates.checks).map(([k, g]) => `<li class="row" style="${cols}"><b>${esc(k.replace(/_/g, " "))}</b><span class="mono">${g.value}</span><span class="mono">${g.limit}</span>${okDot(g.ok)}</li>`).join("")}</ul>
+    <p class="label sect">Hard mails (not gated: the yardstick for a real model)</p>
+    <div class="info">Triage category ${e.triage_hard.category_accuracy_pct}% · change requests understood ${e.change_hard.changes_understood_pct}% · knowledge answered ${e.knowledge_hard.answered_with_right_source_pct}%</div>`;
+}
+
+async function viewAudit() {
+  const c = await api("/api/admin/audit-chain?limit=60");
+  const cols = "grid-template-columns:150px 150px 140px minmax(0,1fr) 150px";
+  $("#view").innerHTML = `<div class="vhead"><span class="label">${c.verify.entries} entries · head ${esc(c.verify.head || "")}</span><h1>Audit chain</h1>
+    <p>${c.verify.ok ? "Intact: every entry links to the one before it." : `Broken at entry ${c.verify.broken_at}. Someone changed the log.`} Pseudonymous ids and references only, never names or mail text.</p></div>
+    <ul class="list"><li class="row row-head label" style="${cols}"><span>Time (UTC)</span><span>Actor</span><span>Action</span><span>Object</span><span>Hash</span></li>
+    ${c.entries.map(e => `<li class="row" style="${cols}"><span class="mono">${esc(e.at.replace("T", " ").slice(0, 16))}</span><span class="mono">${esc(e.actor)}</span>
+      <b>${esc(e.action.replace("_", " "))}</b><span>${esc(e.object_type)} ${esc(e.object_id)}${e.ref ? ` <span class="mono">(${esc(e.ref)})</span>` : ""}</span><span class="mono">${esc(e.hash.slice(0, 12))}</span></li>`).join("")}</ul>`;
+}
+
+async function viewTools() {
+  const t = await api("/api/admin/tools");
+  const cols = "grid-template-columns:200px 80px minmax(0,1fr) minmax(0,1.2fr)";
+  $("#view").innerHTML = `<div class="vhead"><span class="label">${t.length} tools</span><h1>Tool server</h1><p>The single door to TravelSpirit, the calculation, knowledge and outside data. Each agent only has the tools it needs. Also published over MCP.</p></div>
+    <ul class="list"><li class="row row-head label" style="${cols}"><span>Tool</span><span>Access</span><span>What</span><span>Agents</span></li>
+    ${t.map(x => `<li class="row" style="${cols}"><b class="mono">${esc(x.name)}</b><span class="pchip ${x.access === "read" ? "sea" : "gold"}" style="justify-self:start">${esc(x.access)}</span>
+      <span>${esc(x.description)}</span><small>${esc(x.agents.map(a => a.replace("agent:", "").replace("_", " ")).join(", "))}</small></li>`).join("")}</ul>`;
+}
+app.start();
+</script>
+</body></html>

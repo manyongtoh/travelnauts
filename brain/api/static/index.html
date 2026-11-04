@@ -1,20 +1,36 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Company brain sandbox</title>
+<title>Sign in · Company brain</title>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="brain.css"></head>
 <body>
 <div class="banner">SANDBOX · MADE-UP DATA · NOTHING IS SENT</div>
-<main class="content" style="max-width:880px;margin:0 auto">
-  <div class="hello"><span class="label">Travelnauts pilot · synthetic stage</span><h1>Company brain sandbox</h1>
-    <p class="summary">Six agents on made-up families, partners and prices. Agents only write drafts; a person approves every mail.</p></div>
-  <div class="grid-cards" style="grid-template-columns:repeat(3,1fr)">
-    <a class="card" href="specialist.html" style="text-decoration:none;color:inherit"><span class="label">Sales</span><h2>Specialist</h2><p class="sub">Requests, proposals, Galileo, ask the brain</p></a>
-    <a class="card" href="teamlead.html" style="text-decoration:none;color:inherit"><span class="label">Lead</span><h2>Team lead</h2><p class="sub">Team figures, knowledge approval, gaps</p></a>
-    <a class="card" href="backoffice.html" style="text-decoration:none;color:inherit"><span class="label">Back office</span><h2>Partner desk</h2><p class="sub">Requests to partners, reminders, offers</p></a>
-  </div>
+<main class="content" style="max-width:980px;margin:0 auto">
+  <div class="hello"><span class="label">Travelnauts pilot · synthetic stage</span><h1>Company brain</h1>
+    <p class="summary">Pick who you are. In the pilot this is your Microsoft sign-in with a second factor (Entra ID); what you can see and do follows your role.</p></div>
+  <div id="people"></div>
   <p class="guard" id="status"></p>
 </main>
 <script src="brain.js"></script>
-<script>api("/api/status").then(s => $("#status").textContent = `Model: ${s.model} · data: ${s.data_stage} · TravelSpirit: ${s.travelspirit} (${s.travelspirit_write})`);</script>
+<script>
+const HOME = {specialist: "specialist.html", team_lead: "teamlead.html", back_office: "backoffice.html", content: "teamlead.html", admin: "maintenance.html"};
+const ORDER = [["specialist", "Sales specialists", "Own requests and drafts, knowledge, approve and send own drafts"],
+  ["back_office", "Back office", "Partner requests, offers, Galileo, supplier watch"],
+  ["team_lead", "Team leads", "Team view and metrics, reassign, approve knowledge and exceptions"],
+  ["content", "Product and content", "Write and approve knowledge"],
+  ["admin", "Admin (Myt)", "Maintenance, users, budgets; no customer content by default"]];
+(async () => {
+  const s = await api("/api/status");
+  $("#status").textContent = `Model: ${s.model} · data: ${s.data_stage} · TravelSpirit: ${s.travelspirit} (${s.travelspirit_write}) · sign-in: ${s.auth}`;
+  if (s.auth !== "sandbox") { $("#people").innerHTML = `<div class="info">Sign in with your Microsoft account.</div>`; return; }
+  const people = await api("/api/signin-people");
+  const next = new URLSearchParams(location.search).get("next");
+  $("#people").innerHTML = ORDER.map(([role, title, what]) => {
+    const ps = people.filter(p => p.role === role);
+    return `<div class="card" style="margin-bottom:14px"><h2>${title}</h2><p class="sub">${what}</p><div class="chips">${ps.map(p =>
+      `<button class="pchip" data-id="${p.id}" data-role="${p.role}">${esc(p.name)}${p.team_id ? ` · ${TEAMS[p.team_id]}` : ""}</button>`).join("")}</div></div>`;
+  }).join("");
+  $$("[data-id]").forEach(b => b.onclick = () => { store.set("me", b.dataset.id); location.href = next && next !== "index.html" ? next : HOME[b.dataset.role]; });
+})();
+</script>
 </body></html>

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Users · Company brain</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="brain.css"></head>
+<body>
+<script src="brain.js"></script>
+<script>
+const app = shell({role: "User management", needs: "users.manage", nav: [["users", "Users"], ["invite", "Invite"]],
+  onNav: v => ({users: viewUsers, invite: viewInvite})[v]()});
+$("#tb-left").textContent = "Roles follow Entra ID app roles";
+let U = null;
+
+async function viewUsers() {
+  U = await api("/api/admin/users");
+  const cols = "grid-template-columns:minmax(0,1.3fr) minmax(0,1.3fr) 170px 110px 150px 110px";
+  $("#view").innerHTML = `<div class="vhead"><span class="label">${U.users.length} people · next access review ${esc(U.next_access_review)}</span><h1>Users</h1>
+    <p>Change a role or remove access the day someone leaves. Every change is written to the audit chain. Nobody here sees performance per person.</p></div>
+    <ul class="list"><li class="row row-head label" style="${cols}"><span>Name</span><span>Email</span><span>Role</span><span>Team</span><span>Last active</span><span></span></li>
+    ${U.users.map(u => `<li class="row" style="${cols};${u.active ? "" : "opacity:.5"}"><b>${esc(u.name)}</b><span class="mono">${esc(u.email || "")}</span>
+      <span><select data-role="${u.id}" style="height:32px;border:1px solid var(--sand);border-radius:6px;background:var(--white)">${Object.entries(U.roles).map(([k, n]) =>
+        `<option value="${k}" ${k === u.role ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></span>
+      <span>${esc(TEAMS[u.team_id] || "")}</span><span class="mono">${u.last_active ? esc(u.last_active.replace("T", " ").slice(0, 16)) : "never"}</span>
+      <span><button class="btn btn-outline btn-sm" data-active="${u.id}" data-now="${u.active}">${u.active ? "Remove access" : "Restore"}</button></span></li>`).join("")}</ul>`;
+  $$("[data-role]").forEach(s => s.onchange = async () => {
+    try { await post(`/api/admin/users/${s.dataset.role}`, {role: s.value}); toast("Role changed (logged)"); } catch (e) { toast(e.message); }
+    viewUsers(); });
+  $$("[data-active]").forEach(b => b.onclick = async () => {
+    try { await post(`/api/admin/users/${b.dataset.active}`, {active: b.dataset.now !== "true"}); toast("Saved (logged)"); } catch (e) { toast(e.message); }
+    viewUsers(); });
+}
+
+function viewInvite() {
+  $("#view").innerHTML = `<div class="vhead"><span class="label">New colleague</span><h1>Invite</h1><p>In Azure this sends an Entra ID invitation with the chosen app role.</p></div>
+    <div class="detail" style="max-width:640px;display:grid;gap:12px">
+      ${[["name", "Name"], ["email", "Work email"]].map(([k, l]) => `<label><span class="label">${l}</span><input id="${k}" style="width:100%;height:40px;border:1px solid var(--sand);border-radius:8px;padding:0 12px;background:var(--white)"></label>`).join("")}
+      <label><span class="label">Role</span><select id="role" style="width:100%;height:40px;border:1px solid var(--sand);border-radius:8px;background:var(--white)">
+        <option value="specialist">Sales specialist</option><option value="back_office">Back office</option><option value="team_lead">Team lead</option>
+        <option value="content">Product and content</option><option value="admin">Admin</option></select></label>
+      <label><span class="label">Team</span><select id="team" style="width:100%;height:40px;border:1px solid var(--sand);border-radius:8px;background:var(--white)">
+        <option value="">None</option>${Object.entries(TEAMS).map(([k, n]) => `<option value="${k}" ${ME.team_id === k ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+      <div class="actions"><button class="btn btn-primary" id="send">Invite</button></div></div>`;
+  $("#send").onclick = async () => {
+    try { await post("/api/admin/users", {name: $("#name").value, email: $("#email").value, role: $("#role").value, team_id: $("#team").value || null});
+      toast("Invited (logged)"); app.go("users"); } catch (e) { toast(e.message); }
+  };
+}
+app.start();
+</script>
+</body></html>

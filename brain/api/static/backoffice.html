@@ -10,13 +10,12 @@
 let team = store.get("bo:team") || "all", openDraft = null;
 const app = shell({
   role: "Back office",
-  nav: [["board", "Partner requests"], ["check", "Mails to check"], ["compare", "Compare offers"], ["partners", "Partners"]],
-  links: [["specialist.html", "Specialist view"], ["teamlead.html", "Team lead view"]],
-  who: `<span class="avatar">RS</span><div>Signed in as Ruben<small>back office</small></div>`,
-  onNav: v => ({board: viewBoard, check: viewCheck, compare: viewCompare, partners: viewPartners})[v](),
+  nav: [["board", "Partner requests"], ["check", "Mails to check"], ["compare", "Compare offers"], ["supplier", "Supplier watch"], ["partners", "Partners"]],
+  needs: "backoffice.board",
+  onNav: v => ({board: viewBoard, check: viewCheck, compare: viewCompare, supplier: viewSupplier, partners: viewPartners})[v](),
 });
 $("#tb-left").textContent = "Partner desk agent";
-const BY = "Ruben Stam";
+const BY = "";
 const COLS = [
   ["to_send", "To approve", "Agent drafted, needs your click"],
   ["waiting", "Sent, waiting", "Reminder after 3 days without a reply"],
@@ -129,6 +128,20 @@ async function viewCompare() {
       <span class="mono">${p.price_eur ? eur(p.price_eur) : ""}</span><span class="mono">${Math.round(p.reliability * 100)}%</span></li>`).join("")}</ul>
     <div class="guard">${icon("book")} After choosing, book in TravelSpirit yourself. The agent never books.</div>`;
 }
+
+async function viewSupplier() {
+  let r = await api("/api/reports/supplier_watch");
+  const K = {price_expired: ["Price expired", "terra"], price_expiring: ["Expires soon", "gold"], price_changed: ["Price changed", "gold"], slow_partner: ["Slow partner", ""]};
+  const cols = "grid-template-columns:150px minmax(0,1.2fr) minmax(0,1.2fr) 130px minmax(0,1.4fr)";
+  $("#view").innerHTML = `<div class="vhead"><span class="label">${r.at ? "Checked " + esc(r.at) : "Not run yet"}</span><h1>Supplier watch</h1>
+    <p>Daily check of partner prices, validity and response times. Nothing is changed automatically.</p></div>
+    <div class="filters"><button class="btn btn-outline btn-sm" id="runsw">Run the check now</button></div>
+    <ul class="list"><li class="row row-head label" style="${cols}"><span>What</span><span>Partner</span><span>Item</span><span>Destination</span><span>Detail</span></li>
+    ${(r.findings || []).map(f => `<li class="row" style="${cols}"><span class="pchip ${K[f.kind][1]}" style="justify-self:start">${K[f.kind][0]}</span><b>${esc(f.partner)}</b><span>${esc(f.item)}</span>
+      <span>${esc((DESTS[f.destination] || f.destination))}</span><span>${esc(f.detail)}</span></li>`).join("") || `<li class="empty"><b>No findings</b></li>`}</ul>`;
+  $("#runsw").onclick = async () => { await post("/api/jobs/run/supplier_watch"); toast("Supplier watch done"); viewSupplier(); };
+}
+const DESTS = {thailand: "Thailand", vietnam: "Vietnam", japan: "Japan", indonesia: "Indonesia", "sri-lanka": "Sri Lanka", "south-africa": "South Africa", tanzania: "Tanzania", "costa-rica": "Costa Rica"};
 
 async function viewPartners() {
   const b = await api("/api/backoffice");
