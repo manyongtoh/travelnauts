@@ -73,7 +73,7 @@ def draft_request_mail(s: Session, partner_request_id: int) -> Draft:
                         "adults": fam.adults, "child_ages": fam.child_ages,
                         "rooms": "one family room" if fam.adults + len(fam.child_ages) <= 4 else "two connecting rooms",
                         "what": pr.what}}
-        out, _ = run_step("partner_request", PartnerMail, REQUEST_INSTRUCTIONS, ctx)
+        out, _ = run_step(s, "partner_request", PartnerMail, REQUEST_INSTRUCTIONS, ctx)
         d = Draft(kind="partner_request", request_id=tr.id, partner_request_id=pr.id, title=out.subject, body=out.body,
                   data={"to": partner.email})
         s.add(d)
@@ -101,7 +101,7 @@ def draft_chase(s: Session, partner_request_id: int) -> Draft:
     with audit(s, "partner_desk", f"{pr.request_id}/{partner.id}", "chase") as box:
         ctx = {"partner": {"name": partner.name}, "reference": f"TN-{pr.request_id.upper()}",
                "sent_at": pr.sent_at.date().isoformat() if pr.sent_at else None, "what": pr.what}
-        out, _ = run_step("partner_chase", PartnerMail, CHASE_INSTRUCTIONS, ctx)
+        out, _ = run_step(s, "partner_chase", PartnerMail, CHASE_INSTRUCTIONS, ctx)
         d = Draft(kind="partner_chase", request_id=pr.request_id, partner_request_id=pr.id, title=out.subject,
                   body=out.body, data={"to": partner.email})
         s.add(d)
@@ -141,3 +141,42 @@ def simulate_replies(s: Session, seed: int = 1) -> int:
             n += 1
     s.commit()
     return n
+
+
+class PartnerReply(BaseModel):
+    available: bool | None
+    price_eur: float | None = None
+    note: str = ""
+    needs_person: bool = False
+
+
+READ_INSTRUCTIONS = (
+    "Read the partner's reply in CONTEXT.mail. Say whether what we asked is available (true, false or null if unclear), "
+    "the total price in euro if given, and a one line note in English. Set needs_person when the reply asks a question "
+    "or proposes something else."
+)
+
+
+def read_reply(s: Session, mail_id: str) -> dict:
+    """A partner answered: record the offer on the right request so the back office can compare."""
+    from ..db import Mail
+    from ..identity import agent
+    from ..toolserver import server
+    me = agent("partner_desk")
+    with audit(s, "partner_desk", mail_id, "reply") as box:
+        info = server.call(s, me, "partners.read_reply", mail_id=mail_id)
+        out, _ = run_step(s, "partner_reply", PartnerReply, READ_INSTRUCTIONS, {"mail": info["mail"]})
+        m = s.get(Mail, mail_id)
+        m.status = "done"
+        if not info["partner_request_id"]:
+            box["output"] = "reply not matched to a request"
+            s.commit()
+            return {"matched": False}
+        pr = s.get(PartnerRequest, info["partner_request_id"])
+        pr.status = "declined" if out.available is False else "answered"
+        pr.answered_at = datetime.utcnow()
+        pr.offer = {"available": out.available, "price_eur": out.price_eur, "note": out.note, "needs_person": out.needs_person,
+                    "mail_id": mail_id}
+        s.commit()
+        box["output"] = f"{pr.status} {out.price_eur or ''}"
+    return {"matched": True, "partner_request_id": pr.id, "status": pr.status}

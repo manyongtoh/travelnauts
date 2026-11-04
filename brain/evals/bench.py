@@ -82,6 +82,45 @@ def run(seed: int | None = None, out_dir: Path | None = None) -> dict:
         rep["anonymiser"] = {"mails": len(all_mails), "passed": len(all_mails) - len(refused), "refused": refused,
                              "known_names_left_in_passed_mails": leaks}
 
+        # Injection: 20 attack mails must all be flagged; ordinary mail must pass -----------------
+        from ..guardrails import detect_injection
+        from .sets import INJECTIONS, KNOWLEDGE_QUESTIONS
+        flagged = sum(detect_injection("Hallo,\n\n" + t)["flagged"] for t in INJECTIONS)
+        fp = [m.id for m in all_mails if detect_injection(f"{m.subject}\n{m.body}")["flagged"]]
+        rep["injection"] = {"attack_mails": len(INJECTIONS), "flagged_pct": pct(flagged, len(INJECTIONS)),
+                            "false_positive_pct": pct(len(fp), len(all_mails)), "false_positives": fp}
+
+        # Knowledge retrieval: right snippet in the top 3, current policy version only -------------
+        from ..knowledge.store import KnowledgeBase
+        kb = KnowledgeBase(s)
+        top3, misses, current, skipped = 0, [], 0, []
+        from ..knowledge.store import searchable
+        live = {i.id for i in s.scalars(searchable()).all()}
+        asked = [x for x in KNOWLEDGE_QUESTIONS if x[1] in live]
+        skipped = [x[1] for x in KNOWLEDGE_QUESTIONS if x[1] not in live]  # not approved: correctly not findable
+        for q, want, role in asked:
+            ids = [h.id for h in kb.search(q, k=3, role=role)]
+            top3 += want in ids
+            if want not in ids:
+                misses.append(f"{q} -> {ids}")
+            if want == "k-policy-payment":
+                current += want in ids and "k-policy-payment-2025" not in ids
+        rep["knowledge_retrieval"] = {"questions": len(asked), "skipped_not_approved": skipped, "top3_pct": pct(top3, len(asked)),
+                                      "current_policy_pct": pct(current, 2), "misses": misses,
+                                      "specialist_cannot_see_margins": not any(h.id == "k-policy-margins" for h in kb.search("marge afspraken hotels", k=5, role="specialist"))}
+
+        # Price check: earlier offers recalculated by the calculation service, exact to the euro ----
+        from ..pricing import calculate
+        offers = s.scalars(select(Draft).where(Draft.kind == "proposal", Draft.status == "approved")).all()
+        exact = 0
+        for d in offers:
+            tr = s.get(TripRequest, d.request_id)
+            fam = s.get(Family, tr.family_id)
+            again = calculate(s, tr.destination, d.data["route"], fam.adults, fam.child_ages,
+                              [a for r in d.data["route"] for a in r.get("activities", [])]).sell
+            exact += abs(again - d.data["price"]["sell_eur"]) < 0.5
+        rep["price_check"] = {"offers": len(offers), "exact_pct": pct(exact, len(offers))}
+
         t0 = time.perf_counter()
         triage.triage_inbox(s)
         triage_ms = (time.perf_counter() - t0) * 1000 / max(len(all_mails), 1)
@@ -162,11 +201,28 @@ def run(seed: int | None = None, out_dir: Path | None = None) -> dict:
         rep["partner_desk"] = {"sampled": len(sample), "right_number_of_requests_pct": pct(pr_ok, len(sample))}
         rep["galileo"] = {"sampled": len(sample), "commands": g_cmds, "format_warnings": g_warn}
 
+    rep["gates"] = gates(rep)
     out_dir = out_dir or ROOT / "data" / "bench"
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "report.json").write_text(json.dumps(rep, indent=2, ensure_ascii=False))
     (out_dir / "report.md").write_text(to_markdown(rep))
     return rep
+
+
+def gates(rep: dict) -> dict:
+    """The thresholds from the architecture. A failed gate blocks the change in CI."""
+    from .sets import GATES
+    out = {}
+    for key, limit in GATES.items():
+        section, field = key.split(".", 1)
+        is_max = field.endswith("_max")
+        name = field.removesuffix("_max")
+        src = {"known_names_left": "known_names_left_in_passed_mails", "false_positive_pct": "false_positive_pct",
+               "unsafe_activities": "unsafe_activities"}.get(name, name)
+        val = rep.get(section, {}).get(src)
+        ok = val is not None and (val <= limit if is_max else val >= limit)
+        out[key] = {"value": val, "limit": limit, "ok": ok}
+    return {"passed": all(g["ok"] for g in out.values()), "checks": out}
 
 
 def to_markdown(rep: dict) -> str:

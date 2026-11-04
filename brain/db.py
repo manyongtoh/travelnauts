@@ -33,7 +33,10 @@ class Employee(Base):
     __tablename__ = "employees"
     id: Mapped[str] = mapped_column(String, primary_key=True)
     name: Mapped[str] = mapped_column(String)
-    role: Mapped[str] = mapped_column(String)  # specialist | back_office | team_lead
+    role: Mapped[str] = mapped_column(String)  # specialist | back_office | team_lead | content | admin
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_active: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    email: Mapped[str | None] = mapped_column(String, nullable=True)
     team_id: Mapped[str | None] = mapped_column(ForeignKey("teams.id"), nullable=True)
     synthetic: Mapped[bool] = mapped_column(Boolean, default=True)
 
@@ -113,6 +116,8 @@ class TripRequest(Base):
     status: Mapped[str] = mapped_column(String, default="new")  # new | proposal_draft | proposal_sent | booked | lost
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     proposal_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    depart_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    flights: Mapped[list] = mapped_column(JSON, default=list)
     last_customer_contact: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     synthetic: Mapped[bool] = mapped_column(Boolean, default=True)
 
@@ -175,11 +180,16 @@ class KnowledgeItem(Base):
     destination: Mapped[str | None] = mapped_column(String, nullable=True)
     topic: Mapped[str] = mapped_column(String)  # season | family | partner | policy | house_voice | entry
     owner_id: Mapped[str] = mapped_column(ForeignKey("employees.id"))
-    status: Mapped[str] = mapped_column(String, default="proposed")  # proposed | approved | retired
+    status: Mapped[str] = mapped_column(String, default="proposed")  # proposed | approved | archived | retired
     approved_by: Mapped[str | None] = mapped_column(String, nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     review_by: Mapped[date] = mapped_column(Date)
     version: Mapped[int] = mapped_column(Integer, default=1)
+    source: Mapped[str | None] = mapped_column(String, nullable=True)  # vault path, e.g. thailand/bangkok.md#met-kinderen
+    roles: Mapped[list] = mapped_column(JSON, default=lambda: ["specialist", "back_office", "team_lead", "content"])
+    content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    valid_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    valid_to: Mapped[date | None] = mapped_column(Date, nullable=True)
     synthetic: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
@@ -208,7 +218,103 @@ class AgentRun(Base):
     ms: Mapped[int] = mapped_column(Integer, default=0)
     ok: Mapped[bool] = mapped_column(Boolean, default=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    trace_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    cost_eur: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class Quote(Base):
+    """Every price given, with the version of the price tables it came from, so any quote is traceable."""
+    __tablename__ = "quotes"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    request_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    destination: Mapped[str] = mapped_column(String)
+    price_version: Mapped[str] = mapped_column(String)
+    sell_eur: Mapped[float] = mapped_column(Float)
+    data: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class ToolCall(Base):
+    """One call through the tool server: who, which tool, how long, allowed or not. No customer content."""
+    __tablename__ = "tool_calls"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    trace_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    caller: Mapped[str] = mapped_column(String)
+    tool: Mapped[str] = mapped_column(String)
+    allowed: Mapped[bool] = mapped_column(Boolean, default=True)
+    cached: Mapped[bool] = mapped_column(Boolean, default=False)
+    args_summary: Mapped[str] = mapped_column(String, default="")
+    ms: Mapped[int] = mapped_column(Integer, default=0)
+    ok: Mapped[bool] = mapped_column(Boolean, default=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class ModelCall(Base):
+    """One model call: tier, model, prompt version, tokens, cost, fallback used."""
+    __tablename__ = "model_calls"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    trace_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    task: Mapped[str] = mapped_column(String)
+    tier: Mapped[str] = mapped_column(String)
+    model: Mapped[str] = mapped_column(String)
+    prompt_version: Mapped[str] = mapped_column(String, default="")
+    tokens_in: Mapped[int] = mapped_column(Integer, default=0)
+    tokens_out: Mapped[int] = mapped_column(Integer, default=0)
+    cost_eur: Mapped[float] = mapped_column(Float, default=0.0)
+    ms: Mapped[int] = mapped_column(Integer, default=0)
+    ok: Mapped[bool] = mapped_column(Boolean, default=True)
+    fallback_from: Mapped[str | None] = mapped_column(String, nullable=True)
+    escalated: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class AuditEntry(Base):
+    """Append-only, hash-chained record of human decisions. Pseudonymous ids and references only."""
+    __tablename__ = "audit_chain"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    actor: Mapped[str] = mapped_column(String)
+    action: Mapped[str] = mapped_column(String)
+    object_type: Mapped[str] = mapped_column(String)
+    object_id: Mapped[str] = mapped_column(String)
+    ref: Mapped[str | None] = mapped_column(String, nullable=True)
+    input_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    prev_hash: Mapped[str] = mapped_column(String)
+    hash: Mapped[str] = mapped_column(String)
+
+
+class Job(Base):
+    """The work queue. Agents pick up jobs; a person never waits on an agent."""
+    __tablename__ = "jobs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String, index=True)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String, default="queued")  # queued | running | done | failed | skipped
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    run_after: Mapped[datetime] = mapped_column(DateTime, default=now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class Setting(Base):
+    """Operational switches: paused agents, budget caps, last run of scheduled jobs."""
+    __tablename__ = "settings"
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[Any] = mapped_column(JSON)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class CacheEntry(Base):
+    __tablename__ = "cache"
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    kind: Mapped[str] = mapped_column(String)  # exact | semantic
+    text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    value: Mapped[Any] = mapped_column(JSON)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
 
 
 _engine = None

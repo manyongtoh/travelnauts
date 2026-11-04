@@ -21,13 +21,26 @@ def edit_share(before: str, after: str) -> float:
     return round(1 - SequenceMatcher(None, before, after).ratio(), 3)
 
 
-def approve_draft(s: Session, draft_id: int, by: str, final_body: str | None = None) -> Draft:
+class BlockedByCheck(ValueError):
+    pass
+
+
+def approve_draft(s: Session, draft_id: int, by: str, final_body: str | None = None, actor_id: str | None = None) -> Draft:
+    from . import auditchain
+    from .guardrails import check_output
     d = s.get(Draft, draft_id)
     if d is None:
         raise KeyError(draft_id)
     if d.status != "draft":
         raise ValueError(f"Draft {draft_id} is already {d.status}")
-    d.final_body = final_body if final_body is not None else d.body
+    text = final_body if final_body is not None else d.body
+    if d.kind in ("proposal", "change"):
+        price = (d.data or {}).get("price") or {}
+        allowed = [price.get("sell_eur")] + [((d.data or {}).get("price_before") or {}).get("sell_eur")]
+        problems = [p for p in check_output(text, [a for a in allowed if a]) if "dashes" not in p]
+        if problems:
+            raise BlockedByCheck("; ".join(problems))
+    d.final_body = text
     d.edit_share = edit_share(d.body, d.final_body)
     d.status = "approved"
     d.decided_at = datetime.utcnow()
@@ -42,6 +55,7 @@ def approve_draft(s: Session, draft_id: int, by: str, final_body: str | None = N
         tr.proposal_sent_at = d.decided_at
     if d.kind == "partner_request" and d.partner_request_id:
         mark_sent(s, d.partner_request_id, d.decided_at)
+    auditchain.append(s, actor_id or by, "approve", f"draft:{d.kind}", d.id, ref=d.request_id, content=d.final_body)
     if d.edit_share > HEAVY_REWRITE and tr:
         KnowledgeBase(s).record_gap(f"{d.kind} voor {tr.destination} werd grotendeels herschreven ({d.title})",
                                     "heavy_rewrite", tr.destination, tr.team_id)
@@ -49,8 +63,12 @@ def approve_draft(s: Session, draft_id: int, by: str, final_body: str | None = N
     return d
 
 
-def reject_draft(s: Session, draft_id: int, by: str, reason: str = "") -> Draft:
+def reject_draft(s: Session, draft_id: int, by: str, reason: str = "", actor_id: str | None = None) -> Draft:
+    from . import auditchain
     d = s.get(Draft, draft_id)
+    if d is None:
+        raise KeyError(draft_id)
+    auditchain.append(s, actor_id or by, "discard", f"draft:{d.kind}", d.id, ref=d.request_id, content=d.body)
     d.status = "rejected"
     d.decided_at = datetime.utcnow()
     d.decided_by = by

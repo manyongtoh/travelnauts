@@ -83,6 +83,10 @@ def build(seed: int = 42, n_families: int = 200, hard: bool = True) -> dict:
                 employees.append(Employee(id=slug(n), name=n, role="specialist", team_id=tid))
         for n in BACK_OFFICE:
             employees.append(Employee(id=slug(n), name=n, role="back_office", team_id=None))
+        employees.append(Employee(id="noor-visser", name="Noor Visser", role="content", team_id=None))
+        employees.append(Employee(id="myt-beheer", name="Myt beheer", role="admin", team_id=None))
+        for e in employees:
+            e.email = f"{e.id}@travelnauts.example"
         s.add_all(employees)
         specialists = {t: [e for e in employees if e.role == "specialist" and e.team_id == t] for t in TEAMS}
 
@@ -188,7 +192,11 @@ def build(seed: int = 42, n_families: int = 200, hard: bool = True) -> dict:
                   review_days=30)
         policy = [
             ("k-policy-payment", "Betaaltermijnen", "Bij boeking betaalt de klant een aanbetaling van 30 procent. Het restant "
-             "betaalt de klant uiterlijk zes weken voor vertrek. (Sandbox voorbeeld, niet de echte voorwaarden.)"),
+             "betaalt de klant uiterlijk zes weken voor vertrek. Geldig vanaf 1 juli 2026. (Sandbox voorbeeld, niet de echte voorwaarden.)"),
+            ("k-policy-payment-2025", "Betaaltermijnen (versie 2025)", "Bij boeking betaalt de klant een aanbetaling van 25 procent. Het restant "
+             "betaalt de klant uiterlijk acht weken voor vertrek. (Sandbox voorbeeld, oude versie.)"),
+            ("k-policy-margins", "Marge-afspraken", "Standaard marges: hotels 22 procent, excursies 25 procent, transfers 20 procent, "
+             "vluchten 6 procent. Afwijken alleen met akkoord van de teamleider. (Sandbox voorbeeld, intern.)"),
             ("k-policy-changes", "Wijzigen na boeking", "Een wijziging na boeking kan zolang partners dat toelaten. We rekenen "
              "wijzigingskosten als de partner die rekent. (Sandbox voorbeeld.)"),
             ("k-policy-insurance", "Reisverzekering", "We raden een doorlopende reisverzekering en annuleringsverzekering aan. "
@@ -201,7 +209,10 @@ def build(seed: int = 42, n_families: int = 200, hard: bool = True) -> dict:
             k.append(KnowledgeItem(id=kid, title=title, body=body, destination=None,
                                    topic="house_voice" if kid == "k-voice" else "policy", owner_id=rng.choice(bo).id,
                                    status="approved", approved_by="Marloes Kuiper", approved_at=today - timedelta(days=40),
-                                   review_by=(today + timedelta(days=150)).date()))
+                                   review_by=(today + timedelta(days=150)).date(),
+                                   valid_from=date(2026, 7, 1) if kid == "k-policy-payment" else (date(2025, 1, 1) if kid.endswith("2025") else None),
+                                   valid_to=date(2026, 6, 30) if kid.endswith("2025") else None,
+                                   roles=["back_office", "team_lead", "content"] if kid == "k-policy-margins" else None))
         s.add_all(k)
         counts["knowledge"] = len(k)
 
@@ -302,6 +313,11 @@ def build(seed: int = 42, n_families: int = 200, hard: bool = True) -> dict:
                              created_at=sent - timedelta(days=3), proposal_sent_at=sent,
                              last_customer_contact=sent - timedelta(days=rng.randint(0, 2)))
             trips.append(tr)
+        for tr in trips:
+            if tr.status == "booked":
+                tr.depart_date = (today + timedelta(days=rng.choice([0, 1, 1, 2, 9, 20]))).date()
+                fl = f"{rng.choice(['KL', 'TK', 'EK', 'QR', 'LH'])}{rng.randint(100, 999)}"
+                tr.flights = [{"number": fl, "date": tr.depart_date.isoformat(), "from": "AMS", "to": DESTINATIONS[tr.destination]["airport"]}]
         s.add_all(trips)
         s.flush()
         pr_n = 0
@@ -377,6 +393,15 @@ def build(seed: int = 42, n_families: int = 200, hard: bool = True) -> dict:
         counts["trips"] = len(trips)
         counts["partner_requests"] = pr_n
         s.commit()
+        for item in s.scalars(select(KnowledgeItem)).all():
+            if item.roles is None:
+                item.roles = ["specialist", "back_office", "team_lead", "content"]
+        s.commit()
+        from ..knowledge import vault
+        import shutil
+        shutil.rmtree(vault.vault_dir(), ignore_errors=True)
+        counts["vault_notes"] = vault.export_from_db(s)
+        counts["reindex"] = vault.reindex(s)
         db.assert_synthetic_only(s)
     return counts
 

@@ -92,3 +92,23 @@ def calculate(s: Session, destination: str, route: list[dict], adults: int, chil
             continue
         calc.lines.append(Line("excursion", ex.name, persons, ex.cost_eur, ex.id))
     return calc
+
+
+def price_version(s: Session, destination: str) -> str:
+    """Hash of the price lines for a destination: changes whenever a price or validity date changes."""
+    import hashlib
+    rows = s.scalars(select(PriceItem).where(PriceItem.destination == destination).order_by(PriceItem.id)).all()
+    raw = "|".join(f"{r.id}:{r.cost_eur}:{r.valid_until}" for r in rows)
+    return hashlib.sha256(raw.encode()).hexdigest()[:12]
+
+
+def quote(s: Session, destination: str, route: list[dict], adults: int, child_ages: list[int],
+          excursions: list[str] | None = None, request_id: str | None = None) -> dict:
+    """The calculation service: price a route and store the quote with its price table version."""
+    from .db import Quote
+    calc = calculate(s, destination, route, adults, child_ages, excursions).as_dict()
+    q = Quote(request_id=request_id, destination=destination, price_version=price_version(s, destination),
+              sell_eur=calc["sell_eur"], data=calc)
+    s.add(q)
+    s.flush()
+    return calc | {"quote_id": q.id, "price_version": q.price_version}

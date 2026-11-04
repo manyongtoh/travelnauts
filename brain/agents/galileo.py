@@ -82,7 +82,13 @@ def write_commands(s: Session, request_id: str) -> Draft:
                           "travellers": travellers, "seats": len(travellers), "class": "Y",
                           "ticket_by": fmt(date.today() + timedelta(days=3))},
                "note": "Dates are the first Saturday of the travel month, to be confirmed with the family."}
-        out, _ = run_step("galileo", GalileoCommands, INSTRUCTIONS, ctx)
+        from ..identity import agent
+        from ..toolserver import server
+        me = agent("galileo_helper")
+        out, _ = run_step(s, "galileo", GalileoCommands, INSTRUCTIONS, ctx)
+        res = server.call(s, me, "galileo.write_commands", commands=[c.cmd for c in out.commands])
+        if not res["ok"]:  # the check in code failed: the large model tries once
+            out, _ = run_step(s, "galileo", GalileoCommands, INSTRUCTIONS, ctx, tier="large", escalated=True)
         warnings = check(out.commands)
         body = "\n".join(f"{c.cmd:<28} {c.explain}" for c in out.commands)
         d = Draft(kind="galileo", request_id=tr.id, title=f"Galileo: AMS {dest['airport']} {fmt(out_date)}",

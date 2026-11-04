@@ -9,9 +9,12 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..db import Draft, Employee, Family, TripRequest
-from ..knowledge.store import KnowledgeBase
+from ..identity import agent
+from ..toolserver import server
 from ..synth.world import DESTINATIONS
 from .common import audit, run_step
+
+ME = agent("follow_up")
 
 
 class FollowUpText(BaseModel):
@@ -40,15 +43,16 @@ def write_followup(s: Session, request_id: str) -> Draft:
     spec = s.get(Employee, tr.specialist_id) if tr.specialist_id else None
     d = DESTINATIONS[tr.destination]
     with audit(s, "follow_up", request_id) as box:
-        hits = KnowledgeBase(s).search(f"beste reistijd {d['nl']}", tr.destination, k=1)
+        hits = server.call(s, ME, "knowledge.search", query=f"beste reistijd {d['nl']}", destination=tr.destination, k=1)
         days_since = (datetime.utcnow() - tr.proposal_sent_at).days if tr.proposal_sent_at else None
         ctx = {"family": {"name": fam.contact_name, "child_ages": fam.child_ages},
                "trip": {"destination": d["nl"], "days": tr.days, "month": tr.depart_month},
                "days_since_proposal": days_since, "specialist": spec.name if spec else "Travelnauts",
-               "knowledge": [{"id": h.id, "text": h.body} for h in hits]}
-        out, _ = run_step("followup", FollowUpText, INSTRUCTIONS, ctx)
+               "knowledge": [{"id": h["id"], "text": h["body"]} for h in hits]}
+        out, _ = run_step(s, "followup", FollowUpText, INSTRUCTIONS, ctx)
         draft = Draft(kind="followup", request_id=tr.id, title=out.subject, body=out.body,
-                      sources=[{"type": "knowledge", **h.cite()} for h in hits], data={"days_since": days_since})
+                      sources=[{"type": "knowledge", **{k: v for k, v in h.items() if k != "body"}} for h in hits],
+                      data={"days_since": days_since})
         s.add(draft)
         s.commit()
         box["sources"] = draft.sources

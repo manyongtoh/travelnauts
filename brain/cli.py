@@ -15,9 +15,14 @@ def main(argv: list[str] | None = None) -> None:
     sv.add_argument("--host", default="127.0.0.1")
     bn = sub.add_parser("bench", help="run the test bench (rebuilds the database)")
     bn.add_argument("--seed", type=int, default=None)
+    bn.add_argument("--gate", action="store_true", help="exit with an error when a gate fails (for CI)")
     sub.add_parser("triage", help="triage all new mail")
     ig = sub.add_parser("ingest", help="load a TravelSpirit export through the anonymiser (anonymised stage)")
     ig.add_argument("path")
+    wk = sub.add_parser("worker", help="run the scheduler and job worker")
+    wk.add_argument("--once", action="store_true")
+    sub.add_parser("mcp", help="serve the tool server over MCP (stdio) as BRAIN_MCP_AGENT")
+    sub.add_parser("reindex", help="re-read the knowledge vault")
     ak = sub.add_parser("ask", help="ask the brain a question")
     ak.add_argument("question")
     a = p.parse_args(argv)
@@ -31,8 +36,13 @@ def main(argv: list[str] | None = None) -> None:
         import uvicorn
         uvicorn.run("brain.api.app:app", host=a.host, port=a.port)
     elif a.cmd == "bench":
+        import sys
         from .evals.bench import run, to_markdown
-        print(to_markdown(run(a.seed)))
+        rep = run(a.seed)
+        print(to_markdown(rep))
+        if a.gate and not rep["gates"]["passed"]:
+            print("GATES FAILED:", [k for k, g in rep["gates"]["checks"].items() if not g["ok"]])
+            sys.exit(1)
     elif a.cmd == "triage":
         from . import db
         from .agents.triage import triage_inbox
@@ -44,6 +54,23 @@ def main(argv: list[str] | None = None) -> None:
         from .ingest import ingest
         db.create_all()
         print(json.dumps(ingest(a.path), indent=2))
+    elif a.cmd == "worker":
+        from . import db
+        from .jobs import loop, schedule_tick, work
+        db.create_all()
+        if a.once:
+            with db.session() as s:
+                print(json.dumps({"scheduled": schedule_tick(s), "worked": work(s)}, indent=2, default=str))
+        else:
+            loop()
+    elif a.cmd == "mcp":
+        from .mcp_server import main as mcp_main
+        mcp_main()
+    elif a.cmd == "reindex":
+        from . import db
+        from .knowledge.vault import reindex
+        with db.session() as s:
+            print(json.dumps(reindex(s), indent=2))
     elif a.cmd == "ask":
         from . import db
         from .agents.knowledge_desk import ask

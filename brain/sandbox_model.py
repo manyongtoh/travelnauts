@@ -46,7 +46,9 @@ def triage(ctx: dict) -> dict:
         if nl.lower() in low:
             dest = key
             break
-    if "news" in m["from"].lower() or "afmelden" in low or "factuur" in low:
+    if re.search(r"tn-r\d{3}", low) and not re.search(r"@example\.org|freemail", m["from"].lower()):
+        cat = "partner_reply"
+    elif "news" in m["from"].lower() or "afmelden" in low or "factuur" in low:
         cat = "other"
     elif any(w in low for w in ["teleurgesteld", "niet tevreden", "echt niet goed", "kwam niet opdagen", "klacht"]):
         cat = "complaint"
@@ -58,7 +60,8 @@ def triage(ctx: dict) -> dict:
         cat = "question"
     else:
         cat = "other"
-    out: dict = {"category": cat, "destination": dest if cat != "other" else None,
+    out: dict = {"category": cat, "confidence": 0.5 if cat == "other" and "?" in text else 0.9,
+                 "destination": dest if cat not in ("other", "partner_reply") else None,
                  "urgent": cat == "complaint" or "snel reageren" in low, "child_ages": [], "wishes": []}
     if cat == "new_request":
         ages = re.search(r"kinderen (?:\(|van |zijn )([\d en]+?)(?: jaar|\)|\.)", low)
@@ -249,7 +252,28 @@ def change_reply(ctx: dict) -> dict:
     return {"subject": f"Aangepast voorstel {ctx['trip']['destination']}", "body": "\n".join(lines)}
 
 
-HANDLERS = {"change_plan": change_plan, "change_reply": change_reply, "triage": triage, "proposal": proposal, "followup": followup, "partner_request": partner_request,
+def partner_reply(ctx: dict) -> dict:
+    t = ctx["mail"]["body"].lower()
+    no = re.search(r"fully booked|unfortunately|not available|volgeboekt|helaas", t)
+    yes = re.search(r"confirm|available|bevestig|beschikbaar|our offer|please find", t)
+    price = re.search(r"eur\s?([\d.,]+)|€\s?([\d.,]+)", t)
+    eur = float((price.group(1) or price.group(2)).replace(",", "").rstrip(".")) if price else None
+    return {"available": False if no else (True if yes else None), "price_eur": eur,
+            "note": ctx["mail"]["body"].split("\n\n")[1][:120] if "\n\n" in ctx["mail"]["body"] else "",
+            "needs_person": bool(re.search(r"\?|can offer|instead|alternative", t))}
+
+
+def trip_alert(ctx: dict) -> dict:
+    f, st = ctx["flight"], ctx["status"]
+    first = ctx["family"]["name"].split()[0]
+    what = "is geannuleerd" if st["status"] == "cancelled" else f"heeft ongeveer {st['delay_minutes']} minuten vertraging"
+    body = (f"Beste {first},\n\nJullie vlucht {f['number']} op {f['date']} {what}. We kijken nu naar de mogelijkheden "
+            f"en laten zo snel mogelijk weten wat dat voor de transfer en het eerste hotel betekent.\n\n"
+            f"Is het dringend? Bel dan onze 24/7 lijn: {ctx['emergency_line']}.\n\nHartelijke groet,\n{ctx['specialist']}")
+    return {"subject": f"Jullie vlucht {f['number']}", "body": body}
+
+
+HANDLERS = {"partner_reply": partner_reply, "trip_alert": trip_alert, "change_plan": change_plan, "change_reply": change_reply, "triage": triage, "proposal": proposal, "followup": followup, "partner_request": partner_request,
             "partner_chase": partner_chase, "galileo": galileo, "answer": answer}
 
 

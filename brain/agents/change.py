@@ -11,10 +11,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import Draft, Employee, Family, Mail, TripRequest
-from ..pricing import calculate
+from ..identity import agent
+from ..toolserver import server
 from ..synth.world import DESTINATIONS
 from .common import audit, run_step
 
+ME = agent("change")
 AUTO_OPS = ("extend_stop", "shorten_stop", "remove_stop")
 
 
@@ -85,14 +87,15 @@ def handle_change(s: Session, mail_id: str) -> Draft:
     spec = s.get(Employee, tr.specialist_id) if tr.specialist_id else None
     with audit(s, "change", rid, m.subject) as box:
         route = base.data["route"]
-        plan, _ = run_step("change_plan", ChangePlan, PLAN_INSTRUCTIONS,
+        plan, _ = run_step(s, "change_plan", ChangePlan, PLAN_INSTRUCTIONS,
                            {"mail": {"subject": m.subject, "body": m.body}, "route": route})
         new_route, applied, manual = apply_ops(route, plan.ops)
         before = base.data["price"]
         acts = [a for r in new_route for a in r.get("activities", [])]
-        after = calculate(s, tr.destination, new_route, fam.adults, fam.child_ages, acts).as_dict()
+        after = server.call(s, ME, "calc.quote", destination=tr.destination, route=new_route, adults=fam.adults,
+                            child_ages=fam.child_ages, excursions=acts, request_id=rid)
         days_after = sum(r["nights"] for r in new_route) + 2
-        reply, _ = run_step("change_reply", ChangeReply, REPLY_INSTRUCTIONS, {
+        reply, _ = run_step(s, "change_reply", ChangeReply, REPLY_INSTRUCTIONS, {
             "family": {"name": fam.contact_name}, "trip": {"destination": DESTINATIONS[tr.destination]["nl"]},
             "applied": [o.model_dump() for o in applied], "manual": [o.model_dump() for o in manual],
             "route_after": new_route, "days_after": days_after,
