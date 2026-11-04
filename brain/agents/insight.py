@@ -46,6 +46,8 @@ STUCK = {"new": timedelta(days=2), "proposal_draft": timedelta(days=2), "change_
 def team_insight(s: Session) -> dict:
     with audit(s, "team_insight", "hourly") as box:
         rows = server.call(s, agent("team_insight"), "stats.requests")
+        from ..db import Employee
+        active = {e.id for e in s.scalars(__import__("sqlalchemy").select(Employee).where(Employee.active.is_(True))).all()}
         now = utcnow()
         report = {"at": now.isoformat(timespec="minutes"), "teams": {}}
         per_team = defaultdict(list)
@@ -64,6 +66,9 @@ def team_insight(s: Session) -> dict:
                 "waiting_for_specialist": sum(r["status"] in ("new", "proposal_draft", "change_requested") for r in rs),
                 "avg_hours_to_first_draft": round(sum(leads) / len(leads), 2) if leads else None,
                 "stuck": sorted(stuck, key=lambda x: -x["days"])[:10],
+                # requests whose specialist has left: they need a new owner today
+                "ownerless": [r["id"] for r in rs if r.get("specialist_id") and r["specialist_id"] not in active
+                              and r["status"] in ("new", "proposal_draft", "proposal_sent", "change_requested")],
             }
         s.merge(Setting(key="report:team_insight", value=report))
         s.commit()

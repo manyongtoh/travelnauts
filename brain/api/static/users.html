@@ -26,7 +26,8 @@ async function viewUsers() {
     try { await post(`/api/admin/users/${s.dataset.role}`, {role: s.value}); toast("Role changed (logged)"); } catch (e) { toast(e.message); }
     viewUsers(); });
   $$("[data-active]").forEach(b => b.onclick = async () => {
-    try { await post(`/api/admin/users/${b.dataset.active}`, {active: b.dataset.now !== "true"}); toast("Saved (logged)"); } catch (e) { toast(e.message); }
+    try { const r = await post(`/api/admin/users/${b.dataset.active}`, {active: b.dataset.now !== "true"});
+      toast(r.open_requests_to_reassign && r.open_requests_to_reassign.length ? `Access removed. ${r.open_requests_to_reassign.length} open requests need a new owner: see Insight` : "Saved (logged)"); } catch (e) { toast(e.message); }
     viewUsers(); });
 }
 

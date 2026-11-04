@@ -24,6 +24,7 @@ from ..toolserver import server
 from .change import latest_version
 from .common import audit, run_step
 from ..clock import utcnow
+from ..clock import today as clock_today
 
 
 # Invoices ------------------------------------------------------------------------------------
@@ -173,7 +174,7 @@ def booking_check(s: Session) -> dict:
                 missing.append("no flights in the file")
             if t["payment_status"] != "paid":
                 dd = date.fromisoformat(t["depart_date"]) if t["depart_date"] else None
-                if dd and dd - date.today() <= timedelta(weeks=6):
+                if dd and dd - clock_today() <= timedelta(weeks=6):
                     missing.append("final payment due (less than 6 weeks to departure)")
             if not t["insurance"]:
                 missing.append("no proof of travel insurance")

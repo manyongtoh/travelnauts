@@ -11,6 +11,7 @@ from ..identity import agent
 from ..toolserver import server
 from .common import audit
 from ..clock import utcnow
+from ..clock import today as clock_today
 
 ME = agent("supplier_watcher")
 
@@ -21,7 +22,7 @@ def watch(s: Session) -> dict:
         partners = {p["id"]: p for p in server.call(s, ME, "partners.list")}
         prev = s.get(Setting, "snapshot:prices")
         before = prev.value if prev else {}
-        today = date.today()
+        today = clock_today()
         findings = []
         for p in prices:
             vu = date.fromisoformat(p["valid_until"]) if p["valid_until"] else None

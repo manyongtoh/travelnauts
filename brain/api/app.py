@@ -32,7 +32,12 @@ CUSTOMER_DRAFTS = {"proposal", "change", "followup", "answer", "trip_alert", "ga
 MONEY_WORDS = ("terugbetal", "refund", "compensatie", "vergoed", "korting", "geld terug", "compensation", "discount")
 PARTNER_DRAFTS = {"partner_request", "partner_chase"}
 
-app = FastAPI(title="Travelnauts company brain (sandbox)", version="0.2.0")
+import os as _os
+
+_TEST = _os.getenv("BRAIN_ENV", "test") == "test"
+# API documentation only in the test environment; in pilot and live it would map the attack surface for free.
+app = FastAPI(title="Travelnauts company brain (sandbox)", version="0.3.0",
+              docs_url="/docs" if _TEST else None, redoc_url=None, openapi_url="/openapi.json" if _TEST else None)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
@@ -54,6 +59,19 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 MAX_BODY = 1_000_000
+SECURITY_HEADERS = {
+    # Screens use inline scripts, so 'unsafe-inline' is needed; everything else is locked to this site, the
+    # Microsoft login and the font and MSAL CDNs. Output is always escaped in the screens (tested for XSS).
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; "
+                               "img-src 'self' data: blob:; connect-src 'self' https://login.microsoftonline.com; "
+                               "frame-src https://login.microsoftonline.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+}
 AGENT_ACTIONS_PER_MINUTE = 30
 _buckets: dict = _dd(list)
 
@@ -63,6 +81,13 @@ async def limits(request: Request, call_next):
     size = int(request.headers.get("content-length") or 0)
     if size > MAX_BODY:
         return JSONResponse({"detail": "Request too large"}, status_code=413)
+    # NUL bytes have no business in a path, query or JSON body; Postgres refuses them, so stop them at the door
+    if "\x00" in request.url.path or b"%00" in request.scope.get("query_string", b""):
+        return JSONResponse({"detail": "Invalid characters in request"}, status_code=400)
+    if request.method in ("POST", "PUT", "PATCH") and size:
+        body = await request.body()
+        if b"\x00" in body or b"\\u0000" in body:
+            return JSONResponse({"detail": "Invalid characters in request"}, status_code=400)
     if request.method == "POST" and request.url.path.startswith("/api/") and not request.url.path.startswith("/api/admin"):
         who = request.headers.get("x-brain-user") or request.headers.get("authorization", "")[-24:] or request.client.host
         now_ = _time.time()
@@ -70,7 +95,12 @@ async def limits(request: Request, call_next):
         if len(_buckets[who]) > AGENT_ACTIONS_PER_MINUTE:
             return JSONResponse({"detail": "Too many actions in a minute, try again shortly"}, status_code=429)
     try:
-        return await call_next(request)
+        response = await call_next(request)
+        for k, v in SECURITY_HEADERS.items():
+            response.headers.setdefault(k, v)
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"  # customer data never sits in a browser or proxy cache
+        return response
     except Exception as e:  # noqa: BLE001  never show a stack trace to a user
         import logging
         logging.getLogger("brain").exception("unhandled")
@@ -816,11 +846,17 @@ def change_user(eid: str, c: RoleChange, user: Principal = Depends(need("users.m
                 raise HTTPException(400, "Unknown role")
             auditchain.append(s, user.id, "role_change", "user", eid, ref=f"{e.role}->{c.role}")
             e.role = c.role
+        open_reqs = []
         if c.active is not None:
             auditchain.append(s, user.id, "access_removed" if not c.active else "access_restored", "user", eid)
             e.active = c.active
+            if not c.active:  # what they leave behind must get a new owner
+                open_reqs = [t.id for t in s.scalars(select(TripRequest).where(TripRequest.specialist_id == eid, TripRequest.status.in_(
+                    ["new", "proposal_draft", "proposal_sent", "change_requested"]))).all()]
+                from .. import jobs as _jobs
+                _jobs.enqueue(s, "team_insight")
         s.commit()
-        return {"id": eid, "role": e.role, "active": e.active}
+        return {"id": eid, "role": e.role, "active": e.active, "open_requests_to_reassign": open_reqs}
 
 
 @app.post("/api/reset")

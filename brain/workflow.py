@@ -111,8 +111,10 @@ def teamlead_overview(s: Session) -> dict:
     team_of = {dest: tid for tid, t in ((t.id, t) for t in s.scalars(select(Team)).all()) for dest in t.destinations}
     return {"teams": out, "review_due": [{"id": k.id, "title": k.title, "review_by": k.review_by.isoformat(),
                                           "owner": k.owner_id, "team_id": team_of.get(k.destination)} for k in due],
-            "proposed_knowledge": [{"id": k.id, "title": k.title, "owner": k.owner_id, "team_id": team_of.get(k.destination)} for k in
-                                   s.scalars(select(KnowledgeItem).where(KnowledgeItem.status == "proposed")).all()],
+            "proposed_knowledge": [{"id": k.id, "title": k.title + (" (change)" if k.pending_body else ""), "owner": k.owner_id,
+                                    "team_id": team_of.get(k.destination)} for k in
+                                   s.scalars(select(KnowledgeItem).where((KnowledgeItem.status == "proposed") |
+                                                                         (KnowledgeItem.pending_body.is_not(None)))).all()],
             "inbox": dict(Counter(m.status for m in s.scalars(select(Mail)).all())),
             "agent_runs_24h": s.query(AgentRun).filter(AgentRun.created_at >= utcnow() - timedelta(days=1)).count()}
 

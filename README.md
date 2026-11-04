@@ -7,7 +7,8 @@ nineteen agents (including alternatives, complaints, next-trip and extras adviso
 roadbooks and vouchers as PDF, and booking file checks),
 evals that gate CI, and five screens (specialist, team lead, back office, maintenance, user management).
 See [docs/architecture-coverage.md](docs/architecture-coverage.md) for what is built, what is a stand-in
-and what still needs Azure, and [docs/operations.md](docs/operations.md) for how it scales and what keeps it robust.
+and what still needs Azure, [docs/operations.md](docs/operations.md) for how it scales and what keeps it robust, [docs/runbook.md](docs/runbook.md)
+for daily checks and incidents, and [docs/test-reports](docs/test-reports/README.md) for the latest operations and security results.
 
 Nothing here is Travelnauts data. Families, partners, hotels, prices and staff are invented.
 Agents only ever write drafts; a person approves every mail before it goes out.

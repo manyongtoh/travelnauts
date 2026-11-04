@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from ..db import Draft, Family, TripRequest
 from ..synth.world import DESTINATIONS
 from .common import audit, run_step
+from ..clock import today as clock_today
 
 MONTHS_NL = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober",
              "november", "december"]
@@ -50,7 +51,7 @@ INSTRUCTIONS = (
 
 
 def first_saturday(month_nl: str, today: date | None = None) -> date:
-    today = today or date.today()
+    today = today or clock_today()
     m = MONTHS_NL.index(month_nl) + 1 if month_nl in MONTHS_NL else today.month
     y = today.year if m > today.month else today.year + 1
     d = date(y, m, 1)
@@ -80,7 +81,7 @@ def write_commands(s: Session, request_id: str) -> Draft:
             travellers.append({"surname": fam.surname.upper().replace(" ", ""), "first": f"KIND{i + 1}", "type": "child", "age": age})
         ctx = {"flight": {"from": "AMS", "to": dest["airport"], "out": fmt(out_date), "back": fmt(back_date),
                           "travellers": travellers, "seats": len(travellers), "class": "Y",
-                          "ticket_by": fmt(date.today() + timedelta(days=3))},
+                          "ticket_by": fmt(clock_today() + timedelta(days=3))},
                "note": "Dates are the first Saturday of the travel month, to be confirmed with the family."}
         from ..identity import agent
         from ..toolserver import server

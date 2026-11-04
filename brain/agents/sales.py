@@ -27,6 +27,7 @@ from ..synth.world import DESTINATIONS
 from ..toolserver import server
 from .change import latest_version
 from .common import audit, run_step
+from ..clock import today as clock_today
 
 
 class MailText(BaseModel):
@@ -252,7 +253,7 @@ def call_notes(s: Session, request_id: str, notes: str) -> Draft:
                           "Wijzigingen: " + (", ".join(out.changes) or "geen"),
                           "Open vragen: " + (", ".join(out.open_questions) or "geen"),
                           "Volgende stappen: " + (", ".join(out.next_steps) or "geen")])
-        d = Draft(kind="call_notes", request_id=request_id, title=f"Gespreksnotitie {date.today().isoformat()}", body=body,
+        d = Draft(kind="call_notes", request_id=request_id, title=f"Gespreksnotitie {clock_today().isoformat()}", body=body,
                   data=out.model_dump(), status="approved", final_body=body, edit_share=0.0)
         s.add(d)
         s.commit()

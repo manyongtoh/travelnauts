@@ -226,7 +226,7 @@ def stats_requests(s: Session) -> list[dict]:
     out = []
     for t in s.scalars(select(TripRequest)).all():
         fd = first.get(t.id)
-        out.append({"id": t.id, "team_id": t.team_id, "destination": t.destination, "days": t.days,
+        out.append({"id": t.id, "team_id": t.team_id, "specialist_id": t.specialist_id, "destination": t.destination, "days": t.days,
                     "depart_month": t.depart_month, "budget_eur": t.budget_eur, "wishes": t.wishes, "status": t.status,
                     "last_change": (t.last_customer_contact or t.created_at).isoformat(),
                     "hours_to_first_draft": round((fd - t.created_at).total_seconds() / 3600, 2) if fd and t.mail_id else None})

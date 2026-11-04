@@ -76,7 +76,17 @@ def triage_mail(s: Session, mail_id: str) -> dict:
         return (m.triage or {}) | {"skipped": "already triaged"}
     with audit(s, "triage", mail_id, m.subject) as box:
         mail = server.call(s, ME, "ts.read_mail", mail_id=mail_id)
-        inj = detect_injection(f"{mail['subject']}\n{mail['body']}")
+        attachment_text = ""
+        for a in (m.attachments or []):  # instructions can hide in an attachment just as well as in the mail
+            if a.get("mime") == "application/pdf":
+                from ..files import pdf_text
+                try:
+                    attachment_text += "\n" + pdf_text(a["path"])[:20000]
+                except Exception:  # noqa: BLE001  an unreadable PDF is suspicious too
+                    attachment_text += "\n[unreadable attachment]"
+        inj = detect_injection(f"{mail['subject']}\n{mail['body']}{attachment_text}")
+        if "[unreadable attachment]" in attachment_text:
+            inj = inj | {"flagged": True, "reasons": inj["reasons"] + ["unreadable_attachment"]}
         if inj["flagged"]:
             out = {"category": "flagged", "flagged": True, "injection": inj, "team_id": None,
                    "summary": "Mogelijk gemanipuleerde mail: een collega kijkt ernaar, geen concept gemaakt"}

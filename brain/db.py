@@ -196,6 +196,9 @@ class KnowledgeItem(Base):
     source: Mapped[str | None] = mapped_column(String, nullable=True)  # vault path, e.g. thailand/bangkok.md#met-kinderen
     roles: Mapped[list] = mapped_column(JSON, default=lambda: ["specialist", "back_office", "team_lead", "content"])
     content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    # A changed note waits here for approval; until then agents keep using the approved body above.
+    pending_body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pending_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     valid_from: Mapped[date | None] = mapped_column(Date, nullable=True)
     valid_to: Mapped[date | None] = mapped_column(Date, nullable=True)
     synthetic: Mapped[bool] = mapped_column(Boolean, default=True)

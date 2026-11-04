@@ -26,6 +26,7 @@ from ..config import ROOT
 from ..db import Employee, KnowledgeItem, Setting
 from .store import clear_semantic_cache
 from ..clock import utcnow
+from ..clock import today as clock_today
 
 ALL_STAFF = ["specialist", "back_office", "team_lead", "content"]
 MAX_WORDS = 300
@@ -95,7 +96,7 @@ def export_from_db(s: Session, root: Path | None = None) -> int:
 
 def reindex(s: Session, root: Path | None = None) -> dict:
     root = root or vault_dir()
-    today = date.today()
+    today = clock_today()
     seen, added, changed, archived = set(), 0, 0, 0
     owners = {e.id for e in s.scalars(select(Employee)).all()}
     for path in sorted(root.rglob("*.md")):
@@ -118,9 +119,15 @@ def reindex(s: Session, root: Path | None = None) -> dict:
                 s.flush()
                 added += 1
             else:
-                if item.content_hash and item.content_hash != h:
-                    item.status, item.version, item.approved_by, item.approved_at = "proposed", item.version + 1, None, None
+                if item.content_hash and item.content_hash != h and item.pending_hash != h:
                     changed += 1
+                    if item.status == "approved":  # keep serving the approved text; the new text waits for approval
+                        item.pending_body, item.pending_hash = text, h
+                        fields = {k: v for k, v in fields.items() if k not in ("body", "content_hash", "title")}
+                    else:
+                        item.version += 1
+                elif item.pending_hash == h:
+                    fields = {k: v for k, v in fields.items() if k not in ("body", "content_hash", "title")}
                 for k, v in fields.items():
                     setattr(item, k, v)
             if vt and vt < today:
@@ -141,7 +148,7 @@ def reindex(s: Session, root: Path | None = None) -> dict:
 
 def review_reminders(s: Session) -> dict:
     """Owners of knowledge past its review date get a reminder (listed on the team lead and content screens)."""
-    due = s.scalars(select(KnowledgeItem).where(KnowledgeItem.status == "approved", KnowledgeItem.review_by < date.today())).all()
+    due = s.scalars(select(KnowledgeItem).where(KnowledgeItem.status == "approved", KnowledgeItem.review_by < clock_today())).all()
     by_owner: dict[str, list[str]] = {}
     for k in due:
         by_owner.setdefault(k.owner_id, []).append(k.id)

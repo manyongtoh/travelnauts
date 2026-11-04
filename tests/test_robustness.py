@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from brain import auditchain, jobs
 from brain.agents import knowledge_desk, proposal, triage
@@ -91,6 +91,15 @@ def test_two_schedulers_queue_each_job_once(world):
     assert kinds.count("followups") == 1
 
 
+def test_scheduler_runs_again_after_the_interval(world):
+    from datetime import timedelta
+    from brain.clock import utcnow
+    jobs.schedule_tick(world, utcnow())
+    later = jobs.schedule_tick(world, utcnow() + timedelta(hours=2))  # the compare and set path, not the first insert
+    assert "trip_monitor" in later and "followups" not in later
+    assert jobs.schedule_tick(world, utcnow() + timedelta(hours=2)) == []
+
+
 def test_audit_chain_cannot_fork(world):
     a = auditchain.append(world, "a", "approve", "draft", 1)
     world.commit()
@@ -141,3 +150,55 @@ def test_parallel_workers_never_double_process(tmp_path):
         assert len(triaged) == len(set(triaged)) and s.query(Mail).filter(Mail.status == "new").count() == 0
         assert all(j.status == "done" for j in s.scalars(select(Job)).all())
     db.reset_engine()
+
+
+def test_an_edited_note_keeps_its_approved_text_until_the_change_is_approved(world):
+    from brain.db import KnowledgeItem
+    from brain.knowledge import vault
+    from brain.knowledge.store import KnowledgeBase
+    item = world.get(KnowledgeItem, "k-japan-season")
+    old = item.body
+    note = vault.vault_dir() / item.source
+    note.write_text(note.read_text().replace(old, old + " Let op: de kersenbloesem valt eind maart."))
+    vault.reindex(world)
+    world.refresh(item)
+    assert item.status == "approved" and item.body == old and "kersenbloesem" in item.pending_body
+    assert KnowledgeBase(world).search("beste reistijd japan", k=1)[0].body == old
+    KnowledgeBase(world).approve("k-japan-season", "Marloes Kuiper")
+    assert "kersenbloesem" in KnowledgeBase(world).search("beste reistijd japan", k=1)[0].body
+    vault.reindex(world)
+    assert world.get(KnowledgeItem, "k-japan-season").pending_body is None
+
+
+def test_verify_reports_counts_and_catches_a_changed_audit_entry(world):
+    from sqlalchemy import update
+    from brain.db import AuditEntry
+    from brain.ops_verify import verify_database
+    for i in range(3):
+        auditchain.append(world, "test", "approve", "draft", f"d{i}")
+    world.commit()
+    r = verify_database()
+    assert r["ok"] and r["rows"]["requests"] > 0 and r["audit_chain"]["entries"] == 3
+    first = world.scalars(select(AuditEntry).order_by(AuditEntry.id)).first()
+    world.execute(update(AuditEntry).where(AuditEntry.id == first.id).values(actor="someone-else"))
+    world.commit()
+    r = verify_database()
+    assert not r["ok"] and "audit chain broken" in r["problems"][0]
+
+
+def test_migrate_adopts_a_matching_database_and_refuses_a_different_one(world, tmp_path):
+    import pytest as _pt
+    from alembic.config import Config
+    from brain.config import ROOT
+    from brain.ops_verify import adopt_unmanaged
+    cfg = Config(str(ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(ROOT / "migrations"))
+    if world.bind.dialect.name != "sqlite":
+        _pt.skip("schema surgery below is written for SQLite")
+    assert "newest migration" in adopt_unmanaged(cfg)
+    assert adopt_unmanaged(cfg) is None  # already managed: nothing to do
+    world.execute(text("drop table alembic_version"))
+    world.execute(text("alter table knowledge drop column pending_hash"))
+    world.commit()
+    with _pt.raises(SystemExit, match="differs from the code"):
+        adopt_unmanaged(cfg)

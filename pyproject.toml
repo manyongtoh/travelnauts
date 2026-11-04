@@ -15,7 +15,7 @@ dependencies = [
   "pyjwt[crypto]>=2.8",
   "alembic>=1.13",
   "reportlab>=4",
-  "pypdf>=4",
+  "pypdf>=6.21.4",  # reads partner PDFs (untrusted): keep current, checked by pip-audit in CI
 ]
 
 [project.optional-dependencies]

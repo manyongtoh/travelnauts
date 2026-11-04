@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .db import PriceItem
+from .clock import today as clock_today
 
 MARGIN = {"flight": 0.06, "hotel": 0.22, "excursion": 0.25, "transfer": 0.20, "car": 0.18}
 
@@ -66,7 +67,7 @@ def calculate(s: Session, destination: str, route: list[dict], adults: int, chil
     rooms = math.ceil(persons / 4)
     items = list(s.scalars(select(PriceItem).where(PriceItem.destination == destination)).all())
     calc = Calculation(persons=persons)
-    today = date.today()
+    today = clock_today()
 
     flight = next((i for i in items if i.kind == "flight"), None)
     if flight:

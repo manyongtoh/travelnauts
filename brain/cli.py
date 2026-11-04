@@ -27,7 +27,10 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("migrate", help="bring the database schema up to date (Alembic)")
     n8 = sub.add_parser("n8n", help="inventory of exported n8n workflows")
     n8.add_argument("paths", nargs="+")
+    sub.add_parser("verify", help="row counts, audit chain and schema version (use after a restore)")
     sub.add_parser("envcheck", help="check this environment's configuration (test, pilot, live)")
+    sm = sub.add_parser("simulate", help="two weeks of daily operation with incidents (clock fast-forwarded)")
+    sm.add_argument("--days", type=int, default=14)
     lt = sub.add_parser("loadtest", help="many mails and several workers at once (use Postgres)")
     lt.add_argument("--mails", type=int, default=600)
     lt.add_argument("--workers", type=int, default=4)
@@ -91,6 +94,10 @@ def main(argv: list[str] | None = None) -> None:
         base = Path.cwd() if (Path.cwd() / "alembic.ini").exists() else ROOT
         cfg = Config(str(base / "alembic.ini"))
         cfg.set_main_option("script_location", str(base / "migrations"))
+        from .ops_verify import adopt_unmanaged
+        adopted = adopt_unmanaged(cfg)  # a database built without migrations is adopted only if it matches the code
+        if adopted:
+            print(adopted)
         command.upgrade(cfg, "head")
         print("schema up to date")
     elif a.cmd == "reindex":
@@ -101,12 +108,28 @@ def main(argv: list[str] | None = None) -> None:
     elif a.cmd == "n8n":
         from .n8n_inventory import main as n8n_main
         n8n_main(a.paths)
+    elif a.cmd == "verify":
+        import sys
+        from .ops_verify import verify_database
+        r = verify_database()
+        print(json.dumps(r, indent=2, default=str))
+        sys.exit(0 if r["ok"] else 1)
     elif a.cmd == "envcheck":
         import sys
         from .environments import check
         c = check()
         print(json.dumps({"env": c.env, "ok": c.ok, "problems": c.problems}, indent=2))
         sys.exit(0 if c.ok else 1)
+    elif a.cmd == "simulate":
+        from pathlib import Path
+        from .config import ROOT
+        from .evals.operations import run as sim_run, to_markdown as sim_md
+        rep = sim_run(a.days)
+        out = ROOT / "data" / "ops"
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "simulation.json").write_text(json.dumps(rep, indent=2, default=str))
+        (out / "simulation.md").write_text(sim_md(rep))
+        print(sim_md(rep))
     elif a.cmd == "loadtest":
         from .evals.load import run as load_run
         print(json.dumps(load_run(a.mails, a.workers), indent=2, default=str))

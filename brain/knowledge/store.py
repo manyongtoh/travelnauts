@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from ..db import CacheEntry, Employee, KnowledgeGap, KnowledgeItem
 from .embed import embedder
 from ..clock import utcnow
+from ..clock import today as clock_today
 
 MIN_SCORE = 0.18  # keyword score below which a hit is not good enough to answer from
 STOPWORDS_NL = ["de", "het", "een", "en", "van", "in", "is", "op", "te", "dat", "die", "voor", "met", "zijn", "we", "wij",
@@ -48,7 +49,7 @@ class Hit:
 
 
 def searchable(today: date | None = None):
-    today = today or date.today()
+    today = today or clock_today()
     return select(KnowledgeItem).where(KnowledgeItem.status == "approved",
                                        (KnowledgeItem.valid_from.is_(None)) | (KnowledgeItem.valid_from <= today),
                                        (KnowledgeItem.valid_to.is_(None)) | (KnowledgeItem.valid_to >= today))
@@ -83,7 +84,7 @@ class KnowledgeBase:
         rank_vs = {j: r for r, j in enumerate(sorted(range(len(vs)), key=lambda j: -vs[j]))}
         owners = {e.id: e.name for e in self.s.scalars(select(Employee)).all()}
         kw_max = max(float(kw.max()), 1e-6)
-        today = date.today()
+        today = clock_today()
         hits = []
         for j, iid in enumerate(idx["ids"]):
             item = items.get(iid)
@@ -112,20 +113,23 @@ class KnowledgeBase:
         item = self.s.get(KnowledgeItem, item_id)
         if item is None:
             raise KeyError(item_id)
+        if item.pending_body is not None:  # approving a change: the new text becomes the approved text
+            item.body, item.content_hash, item.version = item.pending_body, item.pending_hash, item.version + 1
+            item.pending_body = item.pending_hash = None
         item.status = "approved"
         item.approved_by = approver
         item.approved_at = utcnow()
         if review_by:
             item.review_by = review_by
-        elif item.review_by < date.today():
-            item.review_by = date.today() + timedelta(days=180)
+        elif item.review_by < clock_today():
+            item.review_by = clock_today() + timedelta(days=180)
         clear_semantic_cache(self.s)
         self.s.commit()
         return item
 
     def review_due(self) -> list[KnowledgeItem]:
         return list(self.s.scalars(select(KnowledgeItem).where(KnowledgeItem.status == "approved",
-                                                               KnowledgeItem.review_by < date.today())
+                                                               KnowledgeItem.review_by < clock_today())
                                    .order_by(KnowledgeItem.review_by)).all())
 
     # Gaps ----------------------------------------------------------------------------------

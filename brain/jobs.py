@@ -114,7 +114,10 @@ def _claim_setting(s: Session, key: str, old, new) -> bool:
             return True
         except IntegrityError:
             return False
-    res = s.execute(update(Setting).where(Setting.key == key, Setting.value == old).values(value=new))
+    import json
+    from sqlalchemy import String, cast
+    # Compare as text: works for JSON on Postgres and SQLite alike.
+    res = s.execute(update(Setting).where(Setting.key == key, cast(Setting.value, String) == json.dumps(old)).values(value=new))
     return res.rowcount == 1
 
 
@@ -188,7 +191,14 @@ def work(s: Session, limit: int = 200, worker: str | None = None) -> list[dict]:
             s.rollback()
             j = s.get(Job, jid)
             j.error = f"{type(e).__name__}: {e}"[:1000]
-            permanent = type(e).__name__ in ("BudgetExceeded", "ValueError", "KeyError", "PrivacyError", "AgentPaused")
+            if type(e).__name__ in ("BudgetExceeded", "AgentPaused"):
+                # Not the job's fault: wait and try again (every 15 minutes), without using up its attempts.
+                j.status, j.attempts, j.run_after = "queued", max(j.attempts - 1, 0), utcnow() + timedelta(minutes=15)
+                j.finished_at, j.worker, j.lease_until = utcnow(), worker, None
+                s.commit()
+                done.append({"id": j.id, "kind": j.kind, "status": "waiting", "error": j.error})
+                continue
+            permanent = type(e).__name__ in ("ValueError", "KeyError", "PrivacyError")
             if j.attempts >= MAX_ATTEMPTS or permanent:
                 j.status = "failed"
             else:
@@ -211,7 +221,9 @@ def loop(interval: int = 15) -> None:  # pragma: no cover - long running
 def retention(s: Session, days: int = 30) -> dict:
     """Logs of prompts, tool calls and runs are kept 30 days (architecture: after PII masking, 30 days).
     The audit chain, drafts and approvals are not touched. Expired cache entries go too."""
+    import os
     from .db import AgentRun, CacheEntry, ModelCall, ToolCall
+    days = int(os.getenv("BRAIN_RETENTION_DAYS", days))
     cutoff = utcnow() - timedelta(days=days)
     out = {}
     for model in (ToolCall, ModelCall, AgentRun):
