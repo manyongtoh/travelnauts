@@ -7,8 +7,8 @@ each change, so this report can be reproduced with the commands at the bottom.
 
 | Area | Result |
 |---|---|
-| Test suite on SQLite | 132 passed |
-| Test suite on Postgres 16 | 131 passed, 1 skipped (a SQLite-only schema test) |
+| Test suite on SQLite | 162 passed |
+| Test suite on Postgres 16 | 161 passed, 1 skipped (a SQLite-only schema test) |
 | Quality bench (`brain bench --gate`) | all 11 limits met |
 | Security tests | 17 passed (16 API tests, 1 browser test on 7 screens) |
 | Dependency scan (pip-audit) | no known vulnerabilities |
@@ -21,7 +21,7 @@ each change, so this report can be reproduced with the commands at the bottom.
 
 ## What the tests found, and what was fixed
 
-Twenty-three problems surfaced. All are fixed and each now has a test, so they cannot come back unnoticed.
+Thirty problems surfaced. All are fixed and each now has a test, so they cannot come back unnoticed.
 
 | # | Found by | Problem | Fix |
 |---|---|---|---|
@@ -47,6 +47,13 @@ Twenty-three problems surfaced. All are fixed and each now has a test, so they c
 | 21 | Journey | Families who had travelled never got a next-trip idea, and in pilot and live the job did nothing at all. | Two months after coming home, at most once a year, on real data too. |
 | 22 | Parallel workers on Postgres | Two workers caching the same tool answer at once undid one agent run. | The cache write is a single upsert. |
 | 23 | Simulation | On its first run the booking check drafted extras and roadbooks for every booked trip, including trips long past. | Only trips still to come; extras only while more than three weeks remain. |
+| 24 | Sign-off names | On real-looking mail the name rule got 25 of 89 right and 12 wrong; on replies it named the family after our own specialist from the quoted history. | Quoted history, footers and company signatures are read like a person would; 89 of 89 right, 0 wrong; on 24 unseen cases 16 right and 0 wrong before tuning. |
+| 25 | Addresses | One address shared by two families was matched to whichever came first. | Never guessed: a person picks, with suggestions. |
+| 26 | Addresses | A second parent or a new address could not be linked, so their mail waited for ever. | Team lead list with suggested families; one click links the mail and remembers the address. |
+| 27 | Hostile model | A follow-up, extras or next-trip mail promising money, inventing a price or saying "booked" could be approved by a specialist. | Every customer mail is checked: prices from the calculation, money only with the team lead, no "booked" unless it is. |
+| 28 | TravelSpirit faults | Every job failed for good after about 6 minutes of TravelSpirit being down. | Jobs wait up to 12 hours without using retries; it is not hammered; alert after an hour. |
+| 29 | TravelSpirit faults | Failed and refused tool calls disappeared from the log when the work was undone. | They are written back after the rollback. |
+| 30 | Availability | A proposal could go out while every partner was still checking, without saying so. | One setting: add "onder voorbehoud", or wait for all; a partner that said no always stops it. |
 | 10 | Backup drill | `brain migrate` failed on a database that was built without migrations. | It now adopts such a database only if it matches the code exactly, and otherwise stops without changing anything. |
 
 Two code scan warnings (a fixed temporary folder in the simulation, a table name in a query) were low risk in
@@ -94,6 +101,21 @@ scheduler every hour and the night jobs at 02:00. One incident on six of the day
 
 Across all 14 days: 0 failed jobs, the queue empty every night, no mail left untriaged or triaged twice, the
 audit chain intact every day, and the log size stable at about 3,500 rows with 7-day retention.
+
+## Security: a successful injection, or a model gone wrong
+
+Detection rules catch all 30 attacks they were written for and none of the 8 innocent look-alikes, but only 2 of
+8 attacks written afterwards. That is expected of rules. What protects Travelnauts is that a successful attack
+can do nothing. `tests/security/test_hostile_model.py` swaps the model for a hostile one and shows:
+
+| Guarantee | Result |
+|---|---|
+| The model only sees the family it works on | holds: no other family's name or address in anything it was shown |
+| The model cannot call tools | holds: code calls the tools; the model only returns text and fields |
+| Nothing is sent without a person approving | holds |
+| A specialist cannot approve invented prices, money promises or "your booking is confirmed" | holds, after fix 27 |
+
+Next layer: Azure AI Content Safety Prompt Shields, in the Azure test environment.
 
 ## One family's journey
 

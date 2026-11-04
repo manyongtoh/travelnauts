@@ -2,6 +2,7 @@
 the back office. Team lead figures are per team, never per employee (agreed in the proposal)."""
 from __future__ import annotations
 
+import re
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from difflib import SequenceMatcher
@@ -26,7 +27,65 @@ class BlockedByCheck(ValueError):
     pass
 
 
-def approve_draft(s: Session, draft_id: int, by: str, final_body: str | None = None, actor_id: str | None = None) -> Draft:
+CUSTOMER_KINDS = {"followup", "extras", "next_trip", "complaint_reply", "trip_alert", "roadbook", "alternatives", "change_reply"}
+MONEY = ("terugbetal", "refund", "compensatie", "vergoed", "korting", "geld terug", "compensation", "discount", "gratis", "for free")
+BOOKED_CLAIM = re.compile(r"\b(boeking|reis)\s+(is\s+)?(nu\s+)?(definitief\s+)?bevestigd|\bbooking\s+(is\s+)?confirmed|"
+                          r"\bwe\s+hebben\s+(jullie\s+reis\s+|alles\s+)?geboekt", re.I)
+
+
+def promise_problems(s: Session, d: Draft, text: str, team_lead: bool = False) -> list[str]:
+    """Customer mail other than proposals and changes (those have their own check). Whatever wrote the text, a
+    model gone wrong or one led by an injection, it may not invent prices, promise money or claim a booking."""
+    if d.kind not in CUSTOMER_KINDS:
+        return []
+    from .guardrails import _amounts, _walk
+    allowed = [float(v) for k, v in _walk(d.data or {}) if isinstance(v, (int, float)) and not isinstance(v, bool)
+               and k and ("eur" in k.lower() or "price" in k.lower())]
+    tr = s.get(TripRequest, d.request_id) if d.request_id else None
+    if tr:
+        for p in s.scalars(select(Draft).where(Draft.request_id == tr.id, Draft.kind.in_(["proposal", "change"]),
+                                               Draft.status == "approved")).all():
+            allowed.append(float(((p.data or {}).get("price") or {}).get("sell_eur") or 0))
+    problems = [f"Price {a} euro is not from the calculation or the offer" for a in _amounts(text)
+                if all(abs(a - p) > 1 for p in allowed)]
+    if not team_lead and any(w in text.lower() for w in MONEY) and d.kind != "complaint_reply":
+        problems.append("Promises money or a discount: the team lead approves this")
+    if BOOKED_CLAIM.search(text) and not (tr and tr.status == "booked"):
+        problems.append("Says the trip is booked, but it is not booked")
+    return problems
+
+
+CAVEAT = "Let op: de beschikbaarheid van de accommodaties bevestigen we nog; tot dan is dit voorstel onder voorbehoud."
+CAVEAT_WORDS = ("onder voorbehoud", "beschikbaarheid", "subject to availability")
+
+
+def availability(s: Session, request_id: str) -> dict:
+    """Where the partner checks for this request stand."""
+    prs = s.scalars(select(PartnerRequest).where(PartnerRequest.request_id == request_id)).all()
+    no = [pr for pr in prs if pr.status == "declined" or (pr.status == "answered" and (pr.offer or {}).get("available") is False)]
+    ok = [pr for pr in prs if pr.status == "answered" and (pr.offer or {}).get("available") is not False]
+    from .config import get_settings
+    return {"asked": len(prs), "confirmed": len(ok), "not_available": len(no), "open": len(prs) - len(ok) - len(no),
+            "rule": get_settings().availability_rule}
+
+
+def availability_check(s: Session, d: Draft, text: str) -> tuple[list[str], str]:
+    """For a proposal or change: problems that block it, and the text to send (with a caveat when needed)."""
+    if d.kind not in ("proposal", "change") or not d.request_id:
+        return [], text
+    a = availability(s, d.request_id)
+    if a["not_available"]:
+        return [f"{a['not_available']} partner(s) said not available: choose an alternative before sending"], text
+    if a["rule"] == "block" and (a["asked"] == 0 or a["open"]):
+        return ["Wait until all partners confirm availability before sending this proposal"
+                if a["asked"] else "Ask the partners for availability first (rule: wait for confirmation)"], text
+    if a["rule"] == "warn" and (a["asked"] == 0 or a["open"]) and not any(w in text.lower() for w in CAVEAT_WORDS):
+        return [], text.rstrip() + "\n\n" + CAVEAT
+    return [], text
+
+
+def approve_draft(s: Session, draft_id: int, by: str, final_body: str | None = None, actor_id: str | None = None,
+                  team_lead: bool = False) -> Draft:
     from . import auditchain
     from .guardrails import check_output
     d = s.get(Draft, draft_id)
@@ -38,6 +97,12 @@ def approve_draft(s: Session, draft_id: int, by: str, final_body: str | None = N
     stale = stale_reason(s, d)
     if stale:
         raise BlockedByCheck(stale)
+    promises = promise_problems(s, d, text, team_lead)
+    if promises:
+        raise BlockedByCheck("; ".join(promises))
+    avail, text = availability_check(s, d, text)
+    if avail:
+        raise BlockedByCheck("; ".join(avail))
     if d.kind in ("proposal", "change"):
         price = (d.data or {}).get("price") or {}
         allowed = [price.get("sell_eur")] + [((d.data or {}).get("price_before") or {}).get("sell_eur")]

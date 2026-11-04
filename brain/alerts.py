@@ -60,6 +60,13 @@ def checks(s: Session, now: datetime | None = None) -> list[Alert]:
         out.append(Alert("failed_jobs", CRITICAL if failed >= 5 else WARNING, f"{failed} failed job(s)",
                          "Kinds: " + ", ".join(kinds), "Find the cause in the job error, then Retry all failed in Maintenance."))
 
+    waiting_ts = s.scalars(select(Job).where(Job.status == "queued", Job.error.like("waiting for TravelSpirit%"))).all()
+    if waiting_ts:
+        oldest = min(j.created_at for j in waiting_ts)
+        level = CRITICAL if now - oldest > timedelta(hours=1) else WARNING
+        out.append(Alert("travelspirit", level, "TravelSpirit is not answering",
+                         f"{len(waiting_ts)} job(s) waiting since {oldest:%H:%M} UTC; they retry by themselves.",
+                         "Check with the TravelSpirit administrator (runbook: TravelSpirit is unreachable)."))
     stuck = s.scalar(select(func.count()).select_from(Job).where(
         Job.status == "queued", Job.run_after < now - timedelta(minutes=30))) or 0
     if stuck:
@@ -92,7 +99,8 @@ def checks(s: Session, now: datetime | None = None) -> list[Alert]:
     # outage, are not the agent's fault and would only repeat another alert.
     per: dict[str, list[int]] = {}
     for agent, ok, error in s.execute(select(AgentRun.agent, AgentRun.ok, AgentRun.error).where(AgentRun.created_at >= hour)):
-        if error and (error.split(":")[0] in ("BudgetExceeded", "AgentPaused") or "All models failed" in error):
+        if error and (error.split(":")[0] in ("BudgetExceeded", "AgentPaused", "TravelSpiritUnavailable", "TimeoutError")
+                      or "All models failed" in error):
             continue
         per.setdefault(agent, [0, 0])
         per[agent][0] += 1

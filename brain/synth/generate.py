@@ -432,6 +432,8 @@ def build(seed: int = 42, n_families: int = 200, hard: bool = True) -> dict:
             spare = [t for t in sent_trips if t not in used] + [t for t in used]
             prs = list(s.scalars(select(PartnerRequest).where(PartnerRequest.status.in_(["waiting", "chased"]))).all())
             add_hard_mails(rng, families, spare, prs, {p.id: p for v in partners.values() for p in v} | {air.id: air}, mail, today)
+            from .english import add_english_mails
+            add_english_mails(random.Random(9), families, mail, today)  # own random stream: the rest of the world stays the same
         s.add_all(mails[n_before:])
         counts["mails"] = len(mails)
         counts["trips"] = len(trips)

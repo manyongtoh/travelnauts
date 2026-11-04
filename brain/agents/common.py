@@ -143,6 +143,8 @@ def audit(s: Session, agent: str, subject: str | None, input_summary: str = ""):
                 s.rollback()
                 for c in calls:  # cost and failures are kept even when the work is undone
                     s.add(ModelCall(**c))
+                from ..toolserver import keep_failed_calls
+                keep_failed_calls(s)
             _export_langfuse(run, [ModelCall(**c) for c in calls])
             s.add(run)
             real_commit()

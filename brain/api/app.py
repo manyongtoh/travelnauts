@@ -224,6 +224,59 @@ def inbox(status: str | None = None, limit: int = 200, offset: int = 0, user: Pr
         return [{k: v for k, v in as_dict(m).items() if k != "truth"} for m in s.scalars(q).all()]
 
 
+@app.get("/api/mails/unlinked")
+def unlinked_mail(user: Principal = Depends(need("mail.link"))):
+    """Mail from an address we do not know, waiting for a person to say which family wrote it."""
+    with db.session() as s:
+        rows = s.scalars(select(Mail).where(Mail.family_id.is_(None), Mail.status == "triaged")
+                         .order_by(Mail.received_at.desc()).limit(200)).all()
+        out = []
+        for m in rows:
+            t = m.triage or {}
+            if not t.get("unknown_sender"):
+                continue
+            if "team_lead" in user.roles and t.get("team_id") not in (None, user.team_id):
+                continue
+            cands = []
+            for c in t.get("candidates", []):
+                f = s.get(Family, c["family_id"])
+                if f:
+                    cands.append(c | {"name": f.contact_name or f"familie {f.surname}".strip()})
+            out.append({"id": m.id, "received_at": m.received_at, "sender": m.sender, "subject": m.subject,
+                        "category": t.get("category"), "summary": t.get("summary"), "shared_address": t.get("shared_address", False),
+                        "candidates": cands})
+        return out
+
+
+class LinkMail(BaseModel):
+    family_id: str
+    remember_address: bool = True
+
+
+@app.post("/api/mails/{mail_id}/link")
+def link_mail(mail_id: str, body: LinkMail, user: Principal = Depends(need("mail.link"))):
+    """A person says which family wrote this. The mail is triaged again with that family; the address is
+    remembered for next time unless the person says it is a one-off (a shared or borrowed address)."""
+    from ..agents.triage import original_sender
+    from ..db import FamilyAddress
+    with db.session() as s:
+        m = s.get(Mail, mail_id) or _404("mail")
+        f = s.get(Family, body.family_id) or _404("family")
+        if m.family_id:
+            raise HTTPException(400, "This mail is already linked")
+        m.family_id, m.status = f.id, "new"
+        addr = original_sender(m.sender, m.body)
+        remembered = False
+        if body.remember_address and addr and addr != (f.email or "").lower() and not s.get(FamilyAddress, addr):
+            s.add(FamilyAddress(email=addr, family_id=f.id, added_by=user.id))
+            remembered = True
+        auditchain.append(s, user.id, "link_mail", "mail", mail_id, ref=f.id)
+        s.commit()
+        jobs.enqueue(s, "triage_mail", {"mail_id": mail_id})
+        s.commit()
+        return {"mail_id": mail_id, "family_id": f.id, "address_remembered": remembered}
+
+
 @app.post("/api/triage")
 def triage_all(limit: int | None = None, user: Principal = Depends(need("triage.run"))):
     with db.session() as s:
@@ -280,7 +333,8 @@ def request_detail(rid: str, user: Principal = Depends(current_user)):
                     select(Mail).where(Mail.family_id == r.family_id).order_by(Mail.received_at)).all()
                     if (m.triage or {}).get("category") == "change" and (m.triage or {}).get("request_id") == rid],
                 "mail": {k: v for k, v in as_dict(mail).items() if k != "truth"} if mail else None,
-                "partners": partner_desk.compare_offers(s, rid)}
+                "partners": partner_desk.compare_offers(s, rid),
+                "availability": __import__("brain.workflow", fromlist=["availability"]).availability(s, rid)}
 
 
 @app.post("/api/requests/{rid}/proposal")
@@ -531,7 +585,7 @@ def approve(did: int, d: Decision, user: Principal = Depends(current_user)):
         draft = s.get(Draft, did) or _404("draft")
         _may_decide(s, user, draft, d.final_body)
         try:
-            return as_dict(approve_draft(s, did, user.name, d.final_body, actor_id=user.id))
+            return as_dict(approve_draft(s, did, user.name, d.final_body, actor_id=user.id, team_lead="team_lead" in user.roles))
         except BlockedByCheck as e:
             raise HTTPException(422, f"Check failed: {e}")
         except ValueError as e:

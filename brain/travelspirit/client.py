@@ -26,6 +26,10 @@ class TravelSpirit(Protocol):
     def draft_reisplan(self, request_id: str, plan: dict) -> dict: ...
 
 
+class TravelSpiritUnavailable(ConnectionError):
+    """TravelSpirit did not answer (down, overloaded, network). Jobs wait and try again; nothing is lost."""
+
+
 class FakeTravelSpirit:
     """Serves the synthetic data in the shape we expect from the real API."""
 
@@ -79,8 +83,38 @@ class RealTravelSpirit:  # pragma: no cover - needs API documentation and test a
         )
 
 
+class FaultyTravelSpirit:
+    """Test environment only: the fake TravelSpirit with outages switched on (setting 'ts_faults'):
+    {"mode": "down"} every call fails; {"mode": "flaky", "rate": 0.3} some fail; {"mode": "slow", "rate": 0.5}
+    some time out. Used by tests/test_travelspirit_faults.py and the operations simulation."""
+    _n = 0
+
+    def __init__(self, inner: FakeTravelSpirit, faults: dict):
+        self.inner, self.faults = inner, faults
+
+    def __getattr__(self, name):
+        fn = getattr(self.inner, name)
+
+        def call(*a, **kw):
+            import random
+            FaultyTravelSpirit._n += 1
+            mode, rate = self.faults.get("mode"), float(self.faults.get("rate", 1.0))
+            hit = mode == "down" or random.Random(FaultyTravelSpirit._n * 7919 + int(self.faults.get("seed", 0))).random() < rate
+            if mode in ("down", "flaky") and hit:
+                raise TravelSpiritUnavailable(f"TravelSpirit {name}: 503 Service Unavailable")
+            if mode == "slow" and hit:
+                raise TimeoutError(f"TravelSpirit {name}: no answer within 10 seconds")
+            return fn(*a, **kw)
+        return call
+
+
 def get_travelspirit(s: Session) -> TravelSpirit:
     mode = get_settings().travelspirit_mode
     if mode == "fake":
+        import os
+        from ..db import Setting
+        st = s.get(Setting, "ts_faults")
+        if st and st.value and os.getenv("BRAIN_ENV", "test") == "test":
+            return FaultyTravelSpirit(FakeTravelSpirit(s), st.value)
         return FakeTravelSpirit(s)
     raise NotImplementedError("Only the fake TravelSpirit is available in the sandbox")

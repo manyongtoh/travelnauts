@@ -21,6 +21,8 @@ from .db import Job, Mail, Setting
 from .clock import utcnow
 
 MAX_ATTEMPTS = 3
+UPSTREAM = ("TravelSpiritUnavailable", "TimeoutError", "ConnectionError", "ConnectTimeout", "ReadTimeout")
+UPSTREAM_PATIENCE = timedelta(hours=12)  # how long a job waits for TravelSpirit before it counts as failed
 
 # kind -> (agent name for pausing, interval in minutes or None for event jobs)
 SCHEDULE: dict[str, tuple[str, int | None]] = {
@@ -202,15 +204,25 @@ def work(s: Session, limit: int = 200, worker: str | None = None) -> list[dict]:
     worker = worker or f"{socket.gethostname()}:{os.getpid()}"
     reap(s)
     done = []
+    upstream_down = False
     for jid in claim(s, worker, limit):
         j = s.get(Job, jid)
         s.expire(j)
+        if upstream_down:  # TravelSpirit just failed: do not hammer it, give the rest back to the queue
+            j.status, j.attempts, j.worker, j.lease_until = "queued", max(j.attempts - 1, 0), None, None
+            j.run_after = utcnow() + timedelta(minutes=5)
+            s.commit()
+            done.append({"id": j.id, "kind": j.kind, "status": "waiting", "error": j.error})
+            continue
+        from .toolserver import forget_failed_calls, keep_failed_calls
+        forget_failed_calls()
         try:
             res = handlers[j.kind](s, j.payload)
             j = s.get(Job, jid)
             j.status, j.result = "done", res if isinstance(res, dict) else {"result": str(res)[:500]}
         except Exception as e:  # noqa: BLE001
             s.rollback()
+            keep_failed_calls(s)
             j = s.get(Job, jid)
             j.error = f"{type(e).__name__}: {e}"[:1000]
             if type(e).__name__ in ("BudgetExceeded", "AgentPaused"):
@@ -218,6 +230,17 @@ def work(s: Session, limit: int = 200, worker: str | None = None) -> list[dict]:
                 j.status, j.attempts, j.run_after = "queued", max(j.attempts - 1, 0), utcnow() + timedelta(minutes=15)
                 j.finished_at, j.worker, j.lease_until = utcnow(), worker, None
                 s.commit()
+                done.append({"id": j.id, "kind": j.kind, "status": "waiting", "error": j.error})
+                continue
+            if type(e).__name__ in UPSTREAM and utcnow() - j.created_at < UPSTREAM_PATIENCE:
+                # TravelSpirit is down or slow: not the job's fault. Wait longer each time (5, 10, 20, 40, 60 minutes).
+                waits = int((j.result or {}).get("upstream_waits", 0)) + 1
+                j.status, j.attempts = "queued", max(j.attempts - 1, 0)
+                j.run_after = utcnow() + timedelta(minutes=min(60, 5 * 2 ** (waits - 1)))
+                j.result, j.error = {"upstream_waits": waits}, f"waiting for TravelSpirit: {e}"[:1000]
+                j.finished_at, j.worker, j.lease_until = utcnow(), worker, None
+                s.commit()
+                upstream_down = True
                 done.append({"id": j.id, "kind": j.kind, "status": "waiting", "error": j.error})
                 continue
             permanent = type(e).__name__ in ("ValueError", "KeyError", "PrivacyError")

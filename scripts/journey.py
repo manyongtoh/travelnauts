@@ -134,8 +134,19 @@ def main():
     prop = next((d for d in det.get("drafts", []) if d["kind"] == "proposal" and d["status"] == "draft"), None)
     if prop:
         r = c.post(f"/api/drafts/{prop['id']}/approve", json={}, headers=as_(spec))
+        if r.status_code == 422:  # rule "block": the proposal waits for the partners
+            note("specialist", "proposal waits for partners", detail=r.json()["detail"][:90], availability=det.get("availability"))
+            at(T0 + timedelta(days=2, hours=2))
+            with db.session() as s:
+                from brain.db import PartnerRequest
+                for pr in s.scalars(select(PartnerRequest).where(PartnerRequest.request_id == rid)).all():
+                    pr.status, pr.offer, pr.answered_at = "answered", {"available": True, "price_eur": 900}, clock.utcnow()
+                s.commit()
+            r = c.post(f"/api/drafts/{prop['id']}/approve", json={}, headers=as_(spec))
+        sent = c.get(f"/api/requests/{rid}", headers=as_(spec)).json()
+        body = next((d.get("final_body") or "" for d in sent["drafts"] if d["id"] == prop["id"]), "")
         note("specialist", "approves and sends proposal", status=r.status_code,
-             proposal_reflects_availability=("availability" in json.dumps(prop.get("data", {})).lower()))
+             with_caveat="onder voorbehoud" in body, availability=sent.get("availability"))
 
     # silence: follow-up
     for d in (3, 5, 8):

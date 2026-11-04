@@ -23,6 +23,7 @@ PERMISSIONS = {
     "requests.own": {"specialist", "team_lead"},
     "requests.all": {"team_lead", "back_office"},
     "requests.reassign": {"team_lead"},
+    "mail.link": {"specialist", "team_lead"},  # link a mail from an unknown address to a family
     "drafts.approve_customer": {"specialist"},          # only on own requests
     "drafts.approve_partner": {"back_office"},
     "knowledge.search": {"specialist", "back_office", "team_lead", "content"},

@@ -45,6 +45,15 @@ class Employee(Base):
     synthetic: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
+class FamilyAddress(Base):
+    """Other addresses a family writes from (the second parent, a new address). Added when a person links a mail."""
+    __tablename__ = "family_addresses"
+    email: Mapped[str] = mapped_column(String, primary_key=True)  # normalised, see triage.normalise_address
+    family_id: Mapped[str] = mapped_column(ForeignKey("families.id"), index=True)
+    added_by: Mapped[str] = mapped_column(String)
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
 class Family(Base):
     __tablename__ = "families"
     id: Mapped[str] = mapped_column(String, primary_key=True)

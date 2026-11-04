@@ -9,6 +9,7 @@ Order of work:
 """
 from __future__ import annotations
 
+import os
 import re
 from typing import Literal
 
@@ -108,12 +109,13 @@ def triage_mail(s: Session, mail_id: str) -> dict:
         team = team_for(s, res.destination)
         out = res.model_dump() | {"team_id": team.id if team else None, "escalated": escalated}
         if not m.family_id:  # real mail carries an address, not a family: match it, or open a new relation
-            fam = resolve_family(s, m.sender, res, m.body)  # the stored address; the model only ever sees the domain
+            fam, notes = resolve_family(s, m.sender, res, m.body, m.subject)  # stored address; the model sees the domain
+            out.update(notes)
             if fam is not None:
                 m.family_id = fam.id
                 out["new_relation"] = fam.id.startswith("f-new-")
-            elif res.category in ("change", "complaint"):
-                out["unknown_sender"] = True  # a person links it to the right family
+            elif res.category in ("new_request", "change", "complaint", "question"):
+                out["unknown_sender"] = True  # a person links it to the right family, helped by the candidates
         if res.category == "new_request" and m.family_id and res.destination:
             spec = least_loaded_specialist(s, team.id) if team else None
             from ..db import next_number
@@ -166,37 +168,201 @@ def triage_inbox(s: Session, limit: int | None = None) -> list[dict]:
     return [triage_mail(s, i) for i in ids[:limit]]
 
 
-SIGN_OFF = re.compile(r"(?i:groet(?:en)?|groetjes|vriendelijke groet(?:en)?|hartelijke groet(?:en)?|liefs|regards)[,!.]?\s*\n?\s*"
-                      r"([A-Z][a-z\u00e0-\u00ff]+(?:(?:\s+(?:van|de|der|den|ter|ten|het|'t)){0,3}\s+[A-Z][a-z\u00e0-\u00ff'-]+)*)\s*$")
+# Name from the sign-off ---------------------------------------------------------------------------------------
+# Rule: never a wrong name. A family named after our own specialist, or after "Team Marketing", is worse than none.
+
+REPLY_HEADER = re.compile(r"^\s*(>|_{8,}|op .{4,80} schreef|on .{4,80} wrote:|-{3,}\s*(oorspronkelijk|original|doorgestuurd|forwarded)"
+                          r"|(van|from|verzonden|sent|aan|to|onderwerp|subject):\s)", re.I)
+FOOTER = re.compile(r"^\s*(verstuurd (vanaf|met)|verzonden (vanaf|met)|sent from|get outlook|outlook voor)", re.I)
+DISCLAIMER = re.compile(r"^\s*(disclaimer|dit (e-?mail)?bericht is (vertrouwelijk|uitsluitend)|this (e-?mail|message) is confidential)", re.I)
+GREETING = re.compile(r"^\s*(?:(?:hoi|hallo|hi|hey)[!,.]*\s+)?(met\s+)?(vriendelijke|hartelijke|lieve|warme|beste|kind|best|warm|many)?\s*"
+                      r"(groet(en|jes)?|regards|wishes|liefs|mvg|m\.v\.g\.?|gr\.?|best|cheers|thanks|thank you|bedankt|"
+                      r"dank je wel|dank jullie wel|alvast bedankt|tot snel|tot gauw)\b"
+                      r"(?:\s+(?:alvast|a lot|so much|van ons allemaal|van ons|uit \w+|vanuit \w+|en tot snel))?"
+                      r"(?:\s*/\s*kind regards)?[,!.]*\s*", re.I)
+PARTICLES = {"van", "de", "der", "den", "ter", "ten", "het", "'t", "in", "la", "le", "da", "di", "du", "el", "al", "op"}
+NOT_A_NAME = {"team", "marketing", "sales", "afdeling", "gezin", "hele", "ons", "onze", "wij", "we", "papa", "mama", "opa",
+              "oma", "uit", "from", "the", "kids", "kinderen", "iedereen", "allemaal", "bv", "b.v.", "nv", "holding",
+              "travel", "reizen", "reisbureau", "reisgezelschap", "travelnauts", "company", "group", "groep", "stichting",
+              "vereniging", "zonnebloem", "x"}
+FAMILY = re.compile(r"^(?:de\s+|the\s+)?(?:familie|fam\.?|family)\s+(.+)$|^(?:the\s+)?(.+?)\s+family$", re.I)
+
+
+def _first_name(tok: str) -> bool:
+    from ..names import FIRST_NAMES
+    parts = tok.lower().replace("\u00eb", "e").replace("\u00ef", "i").split("-")
+    return all(p in FIRST_NAMES or p.replace("e", "\u00eb") in FIRST_NAMES for p in parts) or tok.lower() in FIRST_NAMES
+
+
+def _person(text: str) -> tuple[str, str] | None:
+    """'Jan van der Berg' -> (full, 'van der Berg'); 'Anouk en Pieter' -> (full, ''); not a person -> None."""
+    toks = text.split()
+    if not toks or len(toks) > 7 or any(t.lower().strip(".,") in NOT_A_NAME for t in toks):
+        return None
+    if all(t.isupper() or t.islower() for t in toks if t.isalpha()):  # MARIEKE VISSER, marieke: fix the case only if sure
+        if not _first_name(toks[0]):
+            return None
+        toks = [t.lower() if t.lower() in PARTICLES else t[:1].upper() + t[1:].lower() for t in toks]
+    # split couples: "Marieke en Johan Visser", "Daan & Iris de Wit"
+    joiner = next((i for i, t in enumerate(toks) if t.lower() in ("en", "&", "and")), None)
+    firsts, rest = ([toks[0]], toks[1:]) if joiner is None else (toks[:joiner] + [toks[joiner + 1]], toks[joiner + 2:])
+    if joiner is not None and (joiner != 1 or len(toks) < 3):
+        return None
+    for f in firsts:
+        initial = re.fullmatch(r"[A-Z]\.", f)
+        if not (initial or (f[:1].isupper() and _first_name(f))):
+            return None
+    surname = []
+    for t in rest:
+        if t.lower() in PARTICLES:
+            surname.append(t.lower() if t != "El" else t)  # "El Amrani" keeps its capital
+        elif t[:1].isupper() and re.fullmatch(r"[A-Z][\w'\u00e0-\u00ff-]+", t):
+            surname.append(t)
+        else:
+            return None
+    if surname and surname[-1].lower() in PARTICLES:
+        return None
+    if firsts[0].endswith(".") and not surname:
+        return None
+    return " ".join(toks), " ".join(surname)
 
 
 def name_from_sign_off(body: str | None) -> tuple[str, str]:
-    """'Groet, Marieke van der Berg' gives ('Marieke van der Berg', 'van der Berg'). Nothing found gives ('', '')."""
-    lines = [ln for ln in (body or "").strip().splitlines()
-             if not re.match(r"\s*(verstuurd (vanaf|met)|sent from|get outlook|op .* schreef)", ln, re.I)]
-    m = SIGN_OFF.search("\n".join(lines).strip()[-200:])
-    if not m:
+    """(contact name, surname) as a person would read them from how the mail is signed. ('', '') when unsure;
+    ('', 'Jansen') for 'Groeten, familie Jansen'. Only the family's own text counts, never quoted history."""
+    lines = []
+    for ln in (body or "").splitlines():
+        if REPLY_HEADER.match(ln):
+            break  # everything below is quoted history: often signed by our own specialist
+        if DISCLAIMER.match(ln):
+            break  # a disclaimer ends the family's own text
+        if not FOOTER.match(ln):
+            lines.append(ln.rstrip())
+    while lines and not lines[-1].strip():
+        lines.pop()
+    tail = lines[-12:]
+    if any("travelnauts" in ln.lower() for ln in tail[-4:]):
+        return "", ""  # our own signature (a forward or a test mail)
+    cand = None
+    for i in range(len(tail) - 1, -1, -1):
+        ln = tail[i].strip()
+        m = GREETING.match(ln)
+        if m and len(ln) - m.end() < 60:
+            rest = ln[m.end():].strip()
+            after = next((x.strip() for x in tail[i + 1:] if x.strip()), "")
+            cand = rest or after
+            break
+        if ln in ("--", "-- "):
+            cand = next((x.strip() for x in tail[i + 1:] if x.strip()), "")
+            break
+    if not cand:
         return "", ""
-    full = " ".join(m.group(1).split())
-    parts = full.split(" ", 1)
-    return full, (parts[1] if len(parts) > 1 else "")
+    cand = re.split(r"\s*[|,(]|\s+\+?\d[\d\s-]{6,}|\s+\S+@\S+|\s+(?:www\.|https?://)", cand)[0]
+    cand = re.sub(r"[^\w\s'&.\u00c0-\u024f-]", "", cand).strip(" .!")
+    cand = re.sub(r"\s+(xx+|x)$", "", cand, flags=re.I)  # kisses after the name
+    fam = FAMILY.match(cand)
+    if fam:
+        sur = (fam.group(1) or fam.group(2) or "").strip()
+        sur = re.sub(r"s$", "", sur) if fam.group(2) and sur.endswith("s") and " " not in sur else sur
+        p = _surname_only(sur)
+        return ("", p) if p else ("", "")
+    got = _person(cand)
+    return got if got else ("", "")
 
 
-def resolve_family(s: Session, sender: str | None, res, body: str | None = None) -> "Family | None":
-    """Which family wrote this? By exact address (case-insensitive) against the relations. A first enquiry from an
-    unknown address opens a new relation, marked for the specialist to check and create in TravelSpirit."""
-    from ..db import Family, next_number
-    addr = (sender or "").strip().lower()
-    if not addr or "@" not in addr:
+def _surname_only(text: str) -> str | None:
+    toks = text.split()
+    if not toks or len(toks) > 4 or any(t.lower() in NOT_A_NAME for t in toks):
         return None
-    fam = s.scalars(select(Family).where(func.lower(Family.email) == addr)).first()
-    if fam is not None or res.category != "new_request":
-        return fam
-    n = next_number(s, "new_relation")
+    if not toks[-1][:1].isupper() or not all(t.lower() in PARTICLES or t[:1].isupper() for t in toks):
+        return None
+    return " ".join(t.lower() if t.lower() in PARTICLES else t for t in toks)
+
+
+OWN_DOMAINS = {d.strip().lower() for d in os.getenv("BRAIN_OWN_DOMAINS", "travelnauts.nl,travelnauts.example").split(",") if d.strip()}
+FWD_FROM = re.compile(r"^\s*(?:van|from)\s*:\s*(?:.*?<)?([\w.+'-]+@[\w-]+(?:\.[\w-]+)+)>?", re.I | re.M)
+
+
+def normalise_address(addr: str | None) -> str:
+    """'Marieke Visser <Marieke.Visser+reizen@Ziggo.nl>' -> 'marieke.visser@ziggo.nl'."""
+    from email.utils import parseaddr
+    a = parseaddr(addr or "")[1].strip().lower()
+    if "@" not in a:
+        return ""
+    local, domain = a.rsplit("@", 1)
+    return local.split("+", 1)[0] + "@" + domain
+
+
+def original_sender(sender: str | None, body: str | None) -> str:
+    """A colleague forwarding a family's mail: the family is the 'Van:' inside, not the colleague."""
+    addr = normalise_address(sender)
+    if addr.rsplit("@", 1)[-1] in OWN_DOMAINS:
+        for m in FWD_FROM.finditer(body or ""):
+            inner = normalise_address(m.group(1))
+            if inner and inner.rsplit("@", 1)[-1] not in OWN_DOMAINS:
+                return inner
+    return addr
+
+
+def families_for_address(s: Session, addr: str) -> list:
+    from ..db import Family, FamilyAddress
+    if not addr:
+        return []
+    fams = {f.id: f for f in s.scalars(select(Family).where(func.lower(Family.email) == addr)).all()}
+    for fa in s.scalars(select(FamilyAddress).where(FamilyAddress.email == addr)).all():
+        fams.setdefault(fa.family_id, s.get(Family, fa.family_id))
+    if not fams:  # stored addresses may carry a +tag or capitals
+        for f in s.scalars(select(Family).where(Family.email.is_not(None))).all():
+            if normalise_address(f.email) == addr:
+                fams[f.id] = f
+    return list(fams.values())
+
+
+def suggest_families(s: Session, surname: str, subject: str, body: str) -> list[dict]:
+    """Likely families for a mail from an unknown address, for a person to confirm. Never linked automatically:
+    a booking number or a surname is easy to type, and the reply would go to that address."""
+    from ..db import Family
+    out: dict[str, dict] = {}
+    for ref in re.findall(r"\bTN-?R?(\d{3,})\b", f"{subject} {body}", re.I):
+        tr = s.get(TripRequest, f"r{int(ref):03d}")
+        if tr:
+            out.setdefault(tr.family_id, {"family_id": tr.family_id, "why": [], "request_id": tr.id})["why"].append(
+                f"mentions booking TN-R{int(ref):03d}")
+    if surname:
+        for f in s.scalars(select(Family).where(func.lower(Family.surname) == surname.lower()).limit(5)).all():
+            out.setdefault(f.id, {"family_id": f.id, "why": []})["why"].append(f"same surname ({surname})")
+    return sorted(out.values(), key=lambda x: -len(x["why"]))[:5]
+
+
+def resolve_family(s: Session, sender: str | None, res, body: str | None = None, subject: str = "") -> tuple:
+    """Which family wrote this? Returns (family or None, notes). Exact address match only, including addresses
+    a person linked before. A first enquiry from an unknown address opens a new relation for the specialist to
+    check; anything else from an unknown address waits for a person, with suggestions."""
+    from ..db import Family, next_number
+    addr = original_sender(sender, body)
+    notes: dict = {}
+    if addr != normalise_address(sender):
+        notes["forwarded_from"] = addr
+    if not addr:
+        return None, notes
+    found = families_for_address(s, addr)
+    if len(found) == 1:
+        return found[0], notes
     name, surname = name_from_sign_off(body)
+    if len(found) > 1:  # one address, several families (shared address, grandparents): do not guess
+        notes["shared_address"] = True
+        notes["candidates"] = [{"family_id": f.id, "why": ["writes from this address"]} for f in found]
+        return None, notes
+    sugg = suggest_families(s, surname, subject, body or "")
+    if res.category != "new_request":
+        notes["candidates"] = sugg
+        return None, notes
+    n = next_number(s, "new_relation")
     fam = Family(id=f"f-new-{n:04d}", surname=surname, contact_name=name, email=addr, adults=res.adults or 2,
-                 child_ages=list(res.child_ages or []), notes="Nieuwe relatie uit een eerste mail: controleer en maak aan in TravelSpirit.",
-                 synthetic=False)
+                 child_ages=list(res.child_ages or []), synthetic=False,
+                 notes="Nieuwe relatie uit een eerste mail: controleer en maak aan in TravelSpirit.")
     s.add(fam)
     s.flush()
-    return fam
+    if sugg:
+        notes["possible_duplicate_of"] = sugg  # e.g. the other parent already has a relation
+    return fam, notes

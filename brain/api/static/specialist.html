@@ -7,7 +7,7 @@
 <body>
 <script src="brain.js"></script>
 <script>
-let reqs = [], current = null;
+let reqs = [], current = null, AV = null;
 
 const app = shell({
   role: "Specialist dashboard",
@@ -123,6 +123,9 @@ function draftHtml(d) {
       ${warns.length ? `<div class="check"><b>Check:</b> ${warns.map(esc).join(" · ")}</div>` : ""}
     </div>
     ${(d.sources || []).some(s => s.title) ? `<p class="label sect">Sources</p>${sourcesList(d.sources)}` : ""}
+    ${d.status === "draft" && (d.kind === "proposal" || d.kind === "change") && AV ? `<div class="check" style="margin-top:12px"><b>Availability:</b>
+      ${AV.asked ? `${AV.confirmed} of ${AV.asked} partners confirmed${AV.open ? `, ${AV.open} still checking` : ""}${AV.not_available ? `, <b style="color:var(--terra-ink)">${AV.not_available} not available: choose an alternative</b>` : ""}` : "partners not asked yet"}.
+      ${AV.not_available ? "" : AV.rule === "block" && (AV.open || !AV.asked) ? "This proposal waits until all partners confirm." : AV.rule === "warn" && (AV.open || !AV.asked) ? "Sending adds: availability still to be confirmed." : ""}</div>` : ""}
     ${d.status === "draft" ? `<div class="actions"><button class="btn btn-primary btn-lg" onclick="approve(${d.id})">${icon("check")} ${approveLabel}</button>
       <button class="btn btn-outline" onclick="copyText('body-${d.id}')">Copy for TravelSpirit</button>
       <button class="btn-link" onclick="reject(${d.id})">Discard</button></div>` : ""}`;
@@ -132,6 +135,7 @@ async function openReq(id) {
   current = id;
   $$(".ditem").forEach(b => b.setAttribute("aria-current", b.dataset.id === id));
   const r = await api(`/api/requests/${id}`);
+  AV = r.availability || null;
   const q = r.request, f = r.family;
   const latest = r.drafts.filter(d => d.kind === "proposal" || d.kind === "change").slice(-1)[0];
   const pending = (r.changes || []).filter(m => m.status === "triaged");

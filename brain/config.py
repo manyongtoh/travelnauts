@@ -29,6 +29,8 @@ class Settings:
     seed: int = field(default_factory=lambda: int(os.getenv("BRAIN_SEED", "42")))
     # Days after which the follow-up agent drafts a reminder, and the partner desk chases.
     followup_after_days: int = 5
+    # Proposal while partners still check availability: "warn" (send with a caveat), "block" (wait for all), "off".
+    availability_rule: str = field(default_factory=lambda: os.getenv("BRAIN_AVAILABILITY_RULE", "warn"))
     chase_partner_after_days: int = 3
 
     def check(self) -> None:

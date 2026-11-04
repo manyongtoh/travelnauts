@@ -177,6 +177,22 @@ def run(days: int = 14, seed: int = 7, mails_per_day: int = 25) -> dict:
             worked += tick(day.replace(hour=9, minute=20))  # lease (10 min) has run out: jobs come back
             with db.session() as s:
                 checks["jobs_stuck_after_20_min"] = s.query(Job).filter(Job.status == "running").count()
+        if n == 3:  # TravelSpirit down for two and a half hours in the morning
+            from .. import alerts as _alerts
+            with db.session() as s:
+                s.merge(Setting(key="ts_faults", value={"mode": "down"}))
+                s.commit()
+                new_mails(s, day.replace(hour=9, minute=30), 8)
+            for hh, mm in ((10, 0), (10, 30), (11, 0), (11, 45)):
+                worked += tick(day.replace(hour=hh, minute=mm))
+            with db.session() as s:
+                checks["jobs_failed_while_travelspirit_down"] = s.query(Job).filter(Job.status == "failed").count()
+                checks["jobs_waiting_for_travelspirit"] = s.query(Job).filter(Job.status == "queued",
+                                                                            Job.error.like("waiting for TravelSpirit%")).count()
+                checks["travelspirit_alert"] = next((a.level for a in _alerts.checks(s) if a.key == "travelspirit"), "none")
+                s.merge(Setting(key="ts_faults", value=None))
+                s.commit()
+            events.append("TravelSpirit down 09:30 to 12:00")
         if n == 4:  # model outage
             os.environ["BRAIN_MODEL_SMALL"] = "test:broken"
             os.environ["BRAIN_MODEL_LARGE"] = "test:broken"

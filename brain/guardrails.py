@@ -31,6 +31,23 @@ INJECTION_PATTERNS = [
     (r"\b(BEGIN|END)\s+(INSTRUCTIONS|PROMPT|SYSTEM)\b", "instruction_block"),
     (r"[A-Za-z0-9+/]{120,}={0,2}", "encoded_blob"),
     (r"\b(book|boek|confirm|bevestig)\b.{0,40}\b(without|zonder)\b.{0,30}\b(approval|goedkeuring|specialist|check)", "bypass_human"),
+    # broader families of the same attacks (written for intent, not for one sentence)
+    (r"\b(ignore|disregard|forget|override|negeer|vergeet)\b.{0,40}\b(what you were told|your (rules|instructions|guidelines|programming)|"
+     r"(the|all|any|je|jouw|alle) (rules|instructions|guidelines|regels|instructies))", "override"),
+    (r"\b(instructions?|message|note|opdracht|bericht)\s+(for|to|voor|aan)\s+(the\s+|de\s+)?(ai|assistant|bot|model|llm|agent|assistent)\b", "addressing_ai"),
+    (r"\b(hey|hi|dear|attention|beste|hallo)\s+(ai|assistant|bot|chatgpt|claude|gpt|assistent)\b|<!--\s*ai\b", "addressing_ai"),
+    (r"\b(print|show|reveal|repeat|output|toon|laat zien|herhaal)\b.{0,30}\b(hidden|secret|system|initial|original|verborgen|geheime)\s+"
+     r"(instructions|prompt|rules|instructies|regels)", "prompt_leak"),
+    (r"\b(this is your|i am (the|your)|as (the|your)|ik ben (de|je|jouw))\s+(developer|administrator|admin|system administrator|operator|"
+     r"beheerder|ontwikkelaar)\b", "false_authority"),
+    (r"\b(maintenance|debug|admin|god|onderhouds)\s?(mode|modus)\b|\bskip\s+(all\s+)?(checks|approval|verification)\b", "false_authority"),
+    (r"\b(then|and|en)\s+(do|doe)\s+(exactly\s+|precies\s+)?(what it says|wat er staat)", "indirect"),
+    (r"\bbelow cost\b|\bonder (de )?kostprijs\b", "price_manipulation"),
+    (r"\b(reduction|discount|korting|price|prijs)\b.{0,60}\b(no need to check|without (checking|asking)|(manager|director|boss) (has )?agreed|"
+     r"already agreed|zonder (te )?(controleren|overleg)|al afgesproken)", "price_manipulation"),
+    (r"\b(include|send|list|give|share|tell|stuur|geef|noem)\b.{0,40}\b(other|all|andere|alle)\s+(bookings|customers|families|guests|clients|"
+     r"klanten|boekingen|families|gezinnen|reizigers)\b", "exfiltration"),
+    (r"\b(margin|marge|markup|opslag)\b.{0,30}\b(you add|you put|jullie (rekenen|zetten)|on (the )?hotels|op (de )?hotels)", "exfiltration"),
 ]
 
 

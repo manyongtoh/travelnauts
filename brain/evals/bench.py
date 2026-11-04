@@ -89,6 +89,17 @@ def run(seed: int | None = None, out_dir: Path | None = None) -> dict:
         fp = [m.id for m in all_mails if detect_injection(f"{m.subject}\n{m.body}")["flagged"]]
         rep["injection"] = {"attack_mails": len(INJECTIONS), "flagged_pct": pct(flagged, len(INJECTIONS)),
                             "false_positive_pct": pct(len(fp), len(all_mails)), "false_positives": fp}
+        from ..synth.english import ATTACKS, ATTACKS_HELD_OUT, BENIGN_LOOKALIKES
+        missed = [a for a in ATTACKS if not detect_injection("Hello,\n\n" + a)["flagged"]]
+        held = [a for a in ATTACKS_HELD_OUT if not detect_injection("Hello,\n\n" + a)["flagged"]]
+        look = [a for a in BENIGN_LOOKALIKES if detect_injection("Hello,\n\n" + a)["flagged"]]
+        rep["injection_english"] = {
+            "attacks": len(ATTACKS), "flagged_pct": pct(len(ATTACKS) - len(missed), len(ATTACKS)), "missed": missed,
+            "lookalikes": len(BENIGN_LOOKALIKES), "lookalike_false_positives": len(look),
+            "held_out_attacks": len(ATTACKS_HELD_OUT), "held_out_flagged_pct": pct(len(ATTACKS_HELD_OUT) - len(held), len(ATTACKS_HELD_OUT)),
+            "held_out_missed": held,
+            "note": "rules are a first filter only; tests/security/test_hostile_model.py shows a successful injection still cannot "
+                    "send, invent prices, promise money or see other customers. Next layer: Azure Prompt Shields."}
 
         # Knowledge retrieval: right snippet in the top 3, current policy version only -------------
         from ..knowledge.store import KnowledgeBase
@@ -125,10 +136,12 @@ def run(seed: int | None = None, out_dir: Path | None = None) -> dict:
         triage.triage_inbox(s)
         triage_ms = (time.perf_counter() - t0) * 1000 / max(len(all_mails), 1)
         mails = list(s.scalars(select(Mail)).all())
-        clean = [m for m in mails if m.truth.get("set") != "hard"]
+        clean = [m for m in mails if m.truth.get("set") not in ("hard", "english")]
+        english = [m for m in mails if m.truth.get("set") == "english"]
         hard = [m for m in mails if m.truth.get("set") == "hard"]
         rep["triage_clean"] = triage_report(clean) | {"avg_ms": round(triage_ms, 1)}
         rep["triage_hard"] = triage_report(hard)
+        rep["triage_english"] = triage_report(english) | {"note": "stand-in rules are Dutch: this score is for the real model"}
 
         # Jobs that triage queued: partner replies (incl. PDFs), invoices, complaints ---------------
         from .. import jobs as _jobs

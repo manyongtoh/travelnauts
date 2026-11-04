@@ -30,6 +30,7 @@ def test_a_family_goes_from_first_mail_to_next_trip_without_anyone_remembering_a
     # the proposal is ready before the specialist starts
     assert ("proposal", "draft") in j["drafts after triage"]["drafts"]
     assert j["approves and sends proposal"]["status"] == 200
+    assert j["approves and sends proposal"]["with_caveat"] is True  # default rule "warn": partners were still checking
     # silence: a follow-up; after booking it is withdrawn so nobody sends it by mistake
     assert ("followup", "draft") in j["follow-up after silence"]["drafts"]
     assert ("followup", "rejected") in j["day after booking"]["drafts"]
@@ -50,12 +51,12 @@ def test_family_is_found_by_address_and_named_from_the_sign_off(world):
     from brain.db import Family
     known = world.query(Family).filter(Family.email.is_not(None)).first()
     res = SimpleNamespace(category="change", adults=None, child_ages=[])
-    assert resolve_family(world, known.email.upper(), res).id == known.id  # case does not matter
-    assert resolve_family(world, "nobody@x.example", res) is None  # unknown and not a new request: a person links it
-    new = resolve_family(world, "nieuw@x.example", SimpleNamespace(category="new_request", adults=2, child_ages=[6]),
-                         "Hoi!\n\nGroeten,\nJan van der Berg\nVerstuurd vanaf mijn iPhone")
+    assert resolve_family(world, known.email.upper(), res)[0].id == known.id  # case does not matter
+    assert resolve_family(world, "nobody@x.example", res)[0] is None  # unknown and not a new request: a person links it
+    new, _ = resolve_family(world, "nieuw@x.example", SimpleNamespace(category="new_request", adults=2, child_ages=[6]),
+                            "Hoi!\n\nGroeten,\nJan van der Berg\nVerstuurd vanaf mijn iPhone")
     assert new.id.startswith("f-new-") and new.contact_name == "Jan van der Berg" and new.surname == "van der Berg"
-    assert name_from_sign_off("Groeten, de familie Jansen") == ("", "")  # not a name: better none than wrong
+    assert name_from_sign_off("Groeten, de familie Jansen") == ("", "Jansen")  # a surname, but no person to greet
 
 
 def test_a_follow_up_cannot_be_sent_after_the_family_booked(world):
@@ -93,3 +94,27 @@ def test_go_live_does_not_flood_old_bookings_with_drafts(world):
     assert ("extras", soon.id) not in queued                  # too late for extras
     assert not any(rid == past.id for _, rid in queued)       # already travelled: nothing
     assert sum(k == "extras" for k, _ in queued) == 1
+
+
+def test_names_from_sign_offs_are_never_wrong():
+    """Test #8. A wrong name (our own specialist from quoted history, 'Team Marketing') is worse than none."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent / "fixtures"))
+    from signoffs import cases, held_out
+    from brain.agents.triage import name_from_sign_off
+    for label, data, need in (("main", cases(), 0.95), ("held out", held_out(), 0.9)):
+        got = [(name_from_sign_off(b), (n, s)) for b, n, s in data]
+        wrong = [(g, e) for g, e in got if g != e and g != ("", "")]
+        assert not wrong, (label, wrong)
+        assert sum(g == e for g, e in got) / len(got) >= need, label
+
+
+
+def test_with_the_block_rule_the_proposal_waits_for_the_partners_and_the_journey_still_completes(tmp_path, monkeypatch):
+    monkeypatch.setenv("BRAIN_AVAILABILITY_RULE", "block")
+    j = run_journey(tmp_path, monkeypatch)
+    assert "partners confirm" in j["proposal waits for partners"]["detail"]
+    sent = j["approves and sends proposal"]
+    assert sent["status"] == 200 and sent["with_caveat"] is False and sent["availability"]["open"] == 0
+    assert ("roadbook", "draft") in j["before departure"]["drafts"]
+    assert j["next trip idea for this family"]["drafted"] is True and j["jobs failed"]["n"] == 0

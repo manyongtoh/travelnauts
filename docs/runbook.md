@@ -18,6 +18,7 @@ You do not have to look for problems: the brain checks every 15 minutes and tell
 | Model errors | warning | over 20% of model calls failed in the last hour |
 | Agent failing often | warning | one agent failed over 30% of its runs in the last hour (not counting budget waits or a model outage, which have their own alert) |
 | Requests without an owner | warning | open requests of someone who is no longer active |
+| TravelSpirit not answering | warning, critical after an hour | jobs waiting for TravelSpirit |
 
 Where they go:
 - **Maintenance screen:** open alerts at the top, with what to do.
@@ -87,10 +88,20 @@ Each incident lists what you see, what the system already does on its own, and w
 - **Tested in:** simulation day 9 (39 jobs waited, 0 failed, all done once the budget was raised).
 
 ### TravelSpirit is unreachable
-- **You see:** tool calls to TravelSpirit fail in the agent log.
-- **The system:** the agent run fails cleanly and the job is retried with a longer wait each time. In pilot the
-  brain only reads, so nothing is written half way.
-- **You do:** check with the TravelSpirit administrator. After it is back, retry failed jobs.
+- **You see:** the alert "TravelSpirit is not answering" (warning, critical after an hour); failed TravelSpirit
+  calls in the tool log.
+- **The system:** jobs wait and try again by themselves (after 5, 10, 20, 40, then every 60 minutes) for up to
+  12 hours, without using up their retries. After a failure it stops calling TravelSpirit for the rest of that
+  pass, so a struggling TravelSpirit is not hammered. Every agent run is one transaction: nothing is half saved.
+- **You do:** check with the TravelSpirit administrator. Nothing else: when it answers again, the queue clears by
+  itself and the alert resolves. Only jobs older than 12 hours end up failed; retry those.
+- **Tested in:** tests/test_travelspirit_faults.py (flaky, slow, two hours down) and simulation day 4.
+
+### Mail from an address we do not know
+- **You see:** "Mail from an unknown address" at the top of Team lead > Insight, with suggested families.
+- **You do:** pick the family. Tick "remember this address" for a parent's own address; untick it for a one-off
+  (a hotel lobby, a borrowed phone). The mail is then handled as usual. The brain never links an unknown address
+  by itself, because its replies would go to that address.
 
 ### An agent does something wrong
 - **You see:** a specialist or team lead reports drafts that are wrong in the same way.

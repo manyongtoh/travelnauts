@@ -83,6 +83,13 @@ class ToolServer:
             log.ms = int((time.perf_counter() - t0) * 1000)
             s.add(log)
             s.flush()
+            if not log.ok or not log.allowed:
+                rows = _failed_calls.get()
+                if rows is None:
+                    rows = []
+                    _failed_calls.set(rows)
+                rows.append({k: getattr(log, k) for k in ("trace_id", "caller", "tool", "allowed", "cached", "args_summary",
+                                                           "ms", "ok", "error", "created_at") if getattr(log, k, None) is not None})
 
     def describe(self) -> list[dict]:
         return [{"name": t.name, "access": t.access, "description": t.description,
@@ -90,6 +97,24 @@ class ToolServer:
 
 
 server = ToolServer()
+
+# Failed or refused tool calls must stay in the log even when the work around them is undone (rolled back):
+# otherwise an outage or an attempt to use a forbidden tool leaves no trace.
+import contextvars as _cv  # noqa: E402
+_failed_calls: _cv.ContextVar[list | None] = _cv.ContextVar("failed_tool_calls", default=None)
+
+
+def keep_failed_calls(s: Session) -> int:
+    """After a rollback: write the failed and refused tool calls of the undone work back to the log."""
+    rows = _failed_calls.get() or []
+    for r in rows:
+        s.add(ToolCall(**r))
+    _failed_calls.set([])
+    return len(rows)
+
+
+def forget_failed_calls() -> None:
+    _failed_calls.set([])
 
 
 # TravelSpirit (through the connector) ----------------------------------------------------------
