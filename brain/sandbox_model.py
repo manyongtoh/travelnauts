@@ -50,7 +50,7 @@ def triage(ctx: dict) -> dict:
         cat = "other"
     elif re.search(r"\b(invoice|factuur)\b", low) and not re.search(r"@example\.org|freemail", m["from"].lower()):
         cat = "invoice"
-    elif re.search(r"tn-r\d{3}", low) and not re.search(r"@example\.org|freemail", m["from"].lower()):
+    elif re.search(r"tn-r\d{3,}", low) and not re.search(r"@example\.org|freemail", m["from"].lower()):
         cat = "partner_reply"
     elif any(w in low for w in ["teleurgesteld", "niet tevreden", "echt niet goed", "kwam niet opdagen", "klacht"]):
         cat = "complaint"
@@ -352,7 +352,7 @@ def call_notes(ctx: dict) -> dict:
 def invoice_extract(ctx: dict) -> dict:
     t = ctx["mail"]["subject"] + "\n" + ctx["mail"]["body"] + "\n" + "\n".join(a["text"] for a in ctx["mail"].get("attachments", []))
     no = re.search(r"\bINV-[\w-]+", t) or re.search(r"factuur\s*(?:nr\.?|nummer)?\s*([\d][\w-]+)", t, re.I)
-    ref = re.search(r"TN-R\d{2,3}", t, re.I)
+    ref = re.search(r"TN-R\d{2,}", t, re.I)
     amt = re.search(r"(?:EUR|€)\s?([\d.,]+)", t)
     days = re.search(r"within (\d+) days|binnen (\d+) dagen", t, re.I)
     amount = float(amt.group(1).replace(",", "").rstrip(".")) if amt else None
@@ -385,3 +385,23 @@ def _respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
 
 def sandbox_model() -> FunctionModel:
     return FunctionModel(_respond, model_name="sandbox")
+
+
+_flaky_state: dict[str, int] = {}
+
+
+def test_model(kind: str) -> FunctionModel:
+    """Models that misbehave on purpose: 'broken' always errors, 'garbage' first returns invalid output and then
+    a valid one, 'slow' raises a timeout."""
+    def fn(messages, info: AgentInfo) -> ModelResponse:
+        if kind == "broken":
+            raise ConnectionError("model endpoint unreachable")
+        if kind == "slow":
+            raise TimeoutError("model did not answer in time")
+        if kind == "garbage":
+            n = _flaky_state.get("garbage", 0)
+            _flaky_state["garbage"] = n + 1
+            if n % 2 == 0:
+                return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, {"nonsense": True})])
+        return _respond(messages, info)
+    return FunctionModel(fn, model_name=f"test:{kind}")

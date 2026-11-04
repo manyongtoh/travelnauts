@@ -76,6 +76,10 @@ def apply_ops(route: list[dict], ops: list[ChangeOp]) -> tuple[list[dict], list[
 
 def handle_change(s: Session, mail_id: str) -> Draft:
     m = s.get(Mail, mail_id)
+    if m.status == "done":  # safe to repeat
+        prev = [d for d in s.scalars(select(Draft).where(Draft.kind == "change")).all() if (d.data or {}).get("mail_id") == mail_id]
+        if prev:
+            return prev[0]
     rid = (m.triage or {}).get("request_id")
     if not rid:
         raise ValueError("This mail is not linked to a trip")

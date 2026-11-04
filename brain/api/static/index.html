@@ -22,7 +22,12 @@ const ORDER = [["specialist", "Sales specialists", "Own requests and drafts, kno
 (async () => {
   const s = await api("/api/status");
   $("#status").textContent = `Model: ${s.model} · data: ${s.data_stage} · TravelSpirit: ${s.travelspirit} (${s.travelspirit_write}) · sign-in: ${s.auth}`;
-  if (s.auth !== "sandbox") { $("#people").innerHTML = `<div class="info">Sign in with your Microsoft account.</div>`; return; }
+  if (s.auth !== "sandbox") {
+    const me = await loadMe();
+    const home = HOME[me.roles[0]] || "specialist.html";
+    $("#people").innerHTML = `<div class="info">Signed in with Microsoft as <b>${esc(me.name)}</b>. <a href="${home}">Continue</a></div>`;
+    return;
+  }
   const people = await api("/api/signin-people");
   const next = new URLSearchParams(location.search).get("next");
   $("#people").innerHTML = ORDER.map(([role, title, what]) => {

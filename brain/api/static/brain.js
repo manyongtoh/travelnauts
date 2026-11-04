@@ -1,8 +1,27 @@
 // Shared helpers and the app shell (sidebar, banner, topbar), same layout as the demo dashboards.
+// Sign-in. Sandbox: the person picked on the sign-in screen. Pilot and live: Microsoft (Entra ID) through
+// MSAL, the access token goes with every request and the API checks it and its app roles.
+let AUTH = null, MSAL = null, TOKEN = null;
+const authReady = (async () => {
+  try { AUTH = await (await fetch("/api/auth-config")).json(); } catch { AUTH = {mode: "sandbox"}; }
+  if (AUTH.mode !== "entra" || !AUTH.client_id) return;
+  await new Promise((ok, fail) => { const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.27.0/lib/msal-browser.min.js"; s.onload = ok; s.onerror = fail; document.head.append(s); });
+  MSAL = new msal.PublicClientApplication({auth: {clientId: AUTH.client_id, authority: `https://login.microsoftonline.com/${AUTH.tenant_id}`,
+    redirectUri: location.origin + "/static/index.html"}, cache: {cacheLocation: "sessionStorage"}});
+  await MSAL.initialize();
+  const res = await MSAL.handleRedirectPromise();
+  const account = (res && res.account) || MSAL.getAllAccounts()[0];
+  if (!account) { await MSAL.loginRedirect({scopes: [AUTH.api_scope]}); return; }
+  TOKEN = (await MSAL.acquireTokenSilent({account, scopes: [AUTH.api_scope]}).catch(() => MSAL.acquireTokenRedirect({scopes: [AUTH.api_scope]}))).accessToken;
+})();
+
 const api = async (path, opts = {}) => {
+  await authReady;
   const headers = {"Content-Type": "application/json"};
   const who = store.get("me");
-  if (who) headers["X-Brain-User"] = who;
+  if (TOKEN) headers["Authorization"] = "Bearer " + TOKEN;
+  else if (who) headers["X-Brain-User"] = who;
   const r = await fetch(path, {headers, ...opts, body: opts.body ? JSON.stringify(opts.body) : undefined});
   if (r.status === 401 && !location.pathname.endsWith("index.html")) {
     location.href = "/static/index.html?next=" + encodeURIComponent(location.pathname.split("/").pop());
@@ -105,7 +124,8 @@ async function copyText(id) {
 }
 
 async function openFile(path) {
-  const r = await fetch(path, {headers: {"X-Brain-User": store.get("me") || ""}});
+  await authReady;
+  const r = await fetch(path, {headers: TOKEN ? {"Authorization": "Bearer " + TOKEN} : {"X-Brain-User": store.get("me") || ""}});
   if (!r.ok) { toast("Cannot open this file"); return; }
   const url = URL.createObjectURL(await r.blob());
   window.open(url, "_blank");

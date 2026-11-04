@@ -7,7 +7,7 @@ nineteen agents (including alternatives, complaints, next-trip and extras adviso
 roadbooks and vouchers as PDF, and booking file checks),
 evals that gate CI, and five screens (specialist, team lead, back office, maintenance, user management).
 See [docs/architecture-coverage.md](docs/architecture-coverage.md) for what is built, what is a stand-in
-and what still needs Azure.
+and what still needs Azure, and [docs/operations.md](docs/operations.md) for how it scales and what keeps it robust.
 
 Nothing here is Travelnauts data. Families, partners, hotels, prices and staff are invented.
 Agents only ever write drafts; a person approves every mail before it goes out.
@@ -19,11 +19,14 @@ pip install -e ".[dev]"
 brain seed            # build the synthetic database and knowledge vault (data/)
 brain worker --once   # run the scheduler and the queue once (triage, follow-ups, insight, ...)
 brain serve           # open http://127.0.0.1:8000 and pick who you are
-pytest -q             # 83 tests
+pytest -q             # 95 tests (BRAIN_TEST_DATABASE_URL=postgresql+psycopg://... for Postgres)
 brain bench --gate    # evals; fails when a gate from the architecture is not met
 brain mcp             # the tool server over MCP, as BRAIN_MCP_AGENT
 brain envcheck        # check the test, pilot or live configuration
 brain n8n export.json # inventory of exported n8n workflows
+brain migrate         # database migrations (pilot and live)
+brain worker --drain  # scaled workers: work the queue until it is empty
+brain loadtest        # many mails, several workers at once (use Postgres)
 ```
 
 With the full stack (Postgres and Ollama with Gemma):

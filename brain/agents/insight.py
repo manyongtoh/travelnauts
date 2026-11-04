@@ -11,6 +11,7 @@ from ..identity import agent
 from ..synth.world import DESTINATIONS
 from ..toolserver import server
 from .common import audit
+from ..clock import utcnow
 
 
 def customer_insight(s: Session) -> dict:
@@ -19,7 +20,7 @@ def customer_insight(s: Session) -> dict:
         per_team = defaultdict(list)
         for r in rows:
             per_team[r["team_id"] or "none"].append(r)
-        report = {"at": datetime.utcnow().isoformat(timespec="minutes"), "teams": {}}
+        report = {"at": utcnow().isoformat(timespec="minutes"), "teams": {}}
         for team, rs in per_team.items():
             booked = sum(r["status"] == "booked" for r in rs)
             offered = sum(r["status"] in ("proposal_sent", "booked", "lost") for r in rs)
@@ -45,7 +46,7 @@ STUCK = {"new": timedelta(days=2), "proposal_draft": timedelta(days=2), "change_
 def team_insight(s: Session) -> dict:
     with audit(s, "team_insight", "hourly") as box:
         rows = server.call(s, agent("team_insight"), "stats.requests")
-        now = datetime.utcnow()
+        now = utcnow()
         report = {"at": now.isoformat(timespec="minutes"), "teams": {}}
         per_team = defaultdict(list)
         for r in rows:

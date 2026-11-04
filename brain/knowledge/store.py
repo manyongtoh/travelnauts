@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from ..db import CacheEntry, Employee, KnowledgeGap, KnowledgeItem
 from .embed import embedder
+from ..clock import utcnow
 
 MIN_SCORE = 0.18  # keyword score below which a hit is not good enough to answer from
 STOPWORDS_NL = ["de", "het", "een", "en", "van", "in", "is", "op", "te", "dat", "die", "voor", "met", "zijn", "we", "wij",
@@ -113,7 +114,7 @@ class KnowledgeBase:
             raise KeyError(item_id)
         item.status = "approved"
         item.approved_by = approver
-        item.approved_at = datetime.utcnow()
+        item.approved_at = utcnow()
         if review_by:
             item.review_by = review_by
         elif item.review_by < date.today():
@@ -150,7 +151,7 @@ class KnowledgeBase:
 # Semantic cache: only for internal knowledge questions, never anything with customer data ----------
 
 def semantic_lookup(s: Session, question: str, role: str | None, threshold: float = 0.92) -> dict | None:
-    rows = [c for c in s.scalars(select(CacheEntry).where(CacheEntry.kind == "semantic")).all() if c.expires_at > datetime.utcnow()
+    rows = [c for c in s.scalars(select(CacheEntry).where(CacheEntry.kind == "semantic")).all() if c.expires_at > utcnow()
             and (c.value or {}).get("role") == role]
     if not rows:
         return None
@@ -163,7 +164,7 @@ def semantic_lookup(s: Session, question: str, role: str | None, threshold: floa
 def semantic_store(s: Session, question: str, role: str | None, answer: dict, hours: int = 24) -> None:
     key = "semantic:" + hashlib.sha256(f"{role}|{question.lower().strip()}".encode()).hexdigest()
     s.merge(CacheEntry(key=key, kind="semantic", text=question, value={"role": role, "answer": answer},
-                       expires_at=datetime.utcnow() + timedelta(hours=hours)))
+                       expires_at=utcnow() + timedelta(hours=hours)))
 
 
 def clear_semantic_cache(s: Session) -> None:

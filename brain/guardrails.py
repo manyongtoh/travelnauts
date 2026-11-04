@@ -59,7 +59,12 @@ def prompt_shields(text: str) -> bool:  # pragma: no cover - needs Azure
 # --- Privacy: pseudonymise before the model, restore after ---------------------------------------
 
 PARTICLES = {"van", "de", "der", "den", "ter", "ten", "het", "la", "le", "da", "di", "von", "zu"}
-NAME_KEYS = {"name", "surname", "contact_name", "first", "family_name", "first_name"}
+NAME_KEYS = {"name", "surname", "contact_name", "first", "family_name", "first_name", "first_names", "traveller_names"}
+NAME_WITH_AGE = re.compile(r"\b([A-Z][a-zé'-]{1,20})\s?(?:\(\d{1,2}\)|van \d{1,2}\b|is \d{1,2}\b|\d{1,2} jaar)")
+
+
+class PrivacyError(RuntimeError):
+    """A known or likely name is still in the text that would go to the model: the call is refused."""
 SENSITIVE = {"EMAIL", "TELEFOON", "IBAN", "BSN", "DOCUMENT", "GEBOORTEDATUM", "ADRES", "POSTCODE"}
 
 
@@ -88,6 +93,16 @@ class Pseudonymiser:
                     if len(part) > 1 and part.lower() not in PARTICLES | {"travelnauts", "gezin"}:
                         self._tag("NAAM", part)
             free_text = "\n" in obj or len(obj) > 80  # names are only searched in mail-like text, not in field values
+            if free_text:
+                from .anonymise import _travel_words
+                from .names import FIRST_NAMES
+                travel = _travel_words()
+                for w in re.findall(r"\b[A-Z][a-zé'-]{1,20}\b", obj):
+                    if w.lower() in FIRST_NAMES and w.lower() not in travel:
+                        self._tag("NAAM", w)
+                for m in NAME_WITH_AGE.finditer(obj):
+                    if m.group(1).lower() not in travel and m.group(1).lower() not in PARTICLES | {"Kinderen", "Zoon", "Dochter"}:
+                        self._tag("NAAM", m.group(1))
             for f in Anonymiser().detect(obj):
                 if f.kind in SENSITIVE:
                     self._tag(f.kind, f.value)
@@ -109,7 +124,21 @@ class Pseudonymiser:
 
     def mask(self, context: dict) -> dict:
         self._collect(context)
-        return self._apply(context, self.forward)
+        masked = self._apply(context, self.forward)
+        self.check(masked)
+        return masked
+
+    def check(self, masked: dict) -> None:
+        """Fail closed: refuse if any name we know of, or a likely first name, is still in the text."""
+        import json as _json
+        from .names import FIRST_NAMES
+        text = _json.dumps(masked, ensure_ascii=False)
+        left = [v for v, tag in self.forward.items() if tag.startswith("[NAAM") and re.search(rf"(?<![\w\[]){re.escape(v)}(?![\w\]])", text)]
+        mails = [v for k, v in _walk(masked) if isinstance(v, str) and ("\n" in v or len(v) > 80)]
+        likely = [w for t in mails for w in re.findall(r"\b[A-Z][a-zé'-]{1,20}\b", t) if w.lower() in FIRST_NAMES
+                  and w.lower() not in __import__("brain.anonymise", fromlist=["_travel_words"])._travel_words()]
+        if left or likely:
+            raise PrivacyError(f"Names would reach the model ({len(left) + len(likely)}); the call is refused")
 
     def unmask(self, output: Any) -> Any:
         return self._apply(output, self.back)
@@ -151,3 +180,14 @@ def check_output(text: str, allowed_prices: list[float] | None = None, known_hot
 
 def fix_dashes(text: str) -> str:
     return DASHES.sub(",", text)
+
+
+def _walk(obj, key=None):
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            yield from _walk(v, k)
+    elif isinstance(obj, list):
+        for v in obj:
+            yield from _walk(v, key)
+    else:
+        yield key, obj

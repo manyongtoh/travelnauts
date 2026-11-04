@@ -13,6 +13,7 @@ from ..config import get_settings
 from ..db import Draft, Family, Partner, PartnerRequest, TripRequest
 from ..synth.world import DESTINATIONS
 from .common import audit, run_step
+from ..clock import utcnow
 
 
 class PartnerMail(BaseModel):
@@ -85,12 +86,12 @@ def draft_request_mail(s: Session, partner_request_id: int) -> Draft:
 def mark_sent(s: Session, partner_request_id: int, when: datetime | None = None) -> None:
     pr = s.get(PartnerRequest, partner_request_id)
     pr.status = "waiting"
-    pr.sent_at = when or datetime.utcnow()
+    pr.sent_at = when or utcnow()
     s.commit()
 
 
 def due_chases(s: Session, now: datetime | None = None) -> list[PartnerRequest]:
-    now = now or datetime.utcnow()
+    now = now or utcnow()
     cutoff = now - timedelta(days=get_settings().chase_partner_after_days)
     return list(s.scalars(select(PartnerRequest).where(PartnerRequest.status == "waiting", PartnerRequest.sent_at <= cutoff)).all())
 
@@ -106,7 +107,7 @@ def draft_chase(s: Session, partner_request_id: int) -> Draft:
                   body=out.body, data={"to": partner.email})
         s.add(d)
         pr.status = "chased"
-        pr.chased_at = datetime.utcnow()
+        pr.chased_at = utcnow()
         s.commit()
         box["output"] = out.subject
     return d
@@ -120,7 +121,7 @@ def compare_offers(s: Session, request_id: str) -> list[dict]:
         rows.append({"partner_request_id": pr.id, "partner": p.name, "kind": p.kind, "status": pr.status, "what": pr.what,
                      "available": (pr.offer or {}).get("available"), "price_eur": (pr.offer or {}).get("price_eur"),
                      "note": (pr.offer or {}).get("note"), "reliability": p.reliability,
-                     "waiting_days": (datetime.utcnow() - pr.sent_at).days if pr.sent_at and pr.status in ("waiting", "chased") else None})
+                     "waiting_days": (utcnow() - pr.sent_at).days if pr.sent_at and pr.status in ("waiting", "chased") else None})
     rows.sort(key=lambda r: (r["status"] != "answered", r["available"] is not True, r["price_eur"] or 1e9, -r["reliability"]))
     return rows
 
@@ -131,10 +132,10 @@ def simulate_replies(s: Session, seed: int = 1) -> int:
     n = 0
     for pr in s.scalars(select(PartnerRequest).where(PartnerRequest.status.in_(["waiting", "chased"]))).all():
         p = s.get(Partner, pr.partner_id)
-        waited = (datetime.utcnow() - pr.sent_at).days if pr.sent_at else 0
+        waited = (utcnow() - pr.sent_at).days if pr.sent_at else 0
         if waited >= p.avg_reply_days and rng.random() < p.reliability:
             pr.status = "answered"
-            pr.answered_at = datetime.utcnow()
+            pr.answered_at = utcnow()
             pr.offer = {"price_eur": rng.choice([680, 790, 940, 1120, 1380]), "available": rng.random() < 0.85,
                         "note": rng.choice(["Family room available", "Two separate rooms only", "Breakfast included",
                                             "Free cancellation until 45 days before arrival"])}
@@ -160,9 +161,11 @@ READ_INSTRUCTIONS = (
 def read_reply(s: Session, mail_id: str) -> dict:
     """A partner answered: record the offer on the right request so the back office can compare."""
     from ..db import Mail
-    from ..identity import agent
+    from ..identity import agent  # noqa: F811
     from ..toolserver import server
     me = agent("partner_desk")
+    if s.get(Mail, mail_id).status == "done":
+        return {"skipped": "already read"}
     with audit(s, "partner_desk", mail_id, "reply") as box:
         info = server.call(s, me, "partners.read_reply", mail_id=mail_id)
         out, _ = run_step(s, "partner_reply", PartnerReply, READ_INSTRUCTIONS, {"mail": info["mail"]})
@@ -174,7 +177,7 @@ def read_reply(s: Session, mail_id: str) -> dict:
             return {"matched": False}
         pr = s.get(PartnerRequest, info["partner_request_id"])
         pr.status = "declined" if out.available is False else "answered"
-        pr.answered_at = datetime.utcnow()
+        pr.answered_at = utcnow()
         pr.offer = {"available": out.available, "price_eur": out.price_eur, "note": out.note, "needs_person": out.needs_person,
                     "mail_id": mail_id}
         s.commit()

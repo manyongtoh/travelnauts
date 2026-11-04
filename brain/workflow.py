@@ -13,6 +13,7 @@ from .agents.followup import due_followups
 from .agents.partner_desk import due_chases, mark_sent
 from .db import AgentRun, Draft, KnowledgeItem, Mail, Partner, PartnerRequest, Team, TripRequest
 from .knowledge.store import KnowledgeBase
+from .clock import utcnow
 
 HEAVY_REWRITE = 0.5  # more than half changed: the brain was missing something
 
@@ -43,7 +44,7 @@ def approve_draft(s: Session, draft_id: int, by: str, final_body: str | None = N
     d.final_body = text
     d.edit_share = edit_share(d.body, d.final_body)
     d.status = "approved"
-    d.decided_at = datetime.utcnow()
+    d.decided_at = utcnow()
     d.decided_by = by
     tr = s.get(TripRequest, d.request_id) if d.request_id else None
     if d.kind == "proposal" and tr:
@@ -70,7 +71,7 @@ def reject_draft(s: Session, draft_id: int, by: str, reason: str = "", actor_id:
         raise KeyError(draft_id)
     auditchain.append(s, actor_id or by, "discard", f"draft:{d.kind}", d.id, ref=d.request_id, content=d.body)
     d.status = "rejected"
-    d.decided_at = datetime.utcnow()
+    d.decided_at = utcnow()
     d.decided_by = by
     d.data = (d.data or {}) | {"reject_reason": reason}
     s.commit()
@@ -113,7 +114,7 @@ def teamlead_overview(s: Session) -> dict:
             "proposed_knowledge": [{"id": k.id, "title": k.title, "owner": k.owner_id, "team_id": team_of.get(k.destination)} for k in
                                    s.scalars(select(KnowledgeItem).where(KnowledgeItem.status == "proposed")).all()],
             "inbox": dict(Counter(m.status for m in s.scalars(select(Mail)).all())),
-            "agent_runs_24h": s.query(AgentRun).filter(AgentRun.created_at >= datetime.utcnow() - timedelta(days=1)).count()}
+            "agent_runs_24h": s.query(AgentRun).filter(AgentRun.created_at >= utcnow() - timedelta(days=1)).count()}
 
 
 def backoffice_overview(s: Session) -> dict:
@@ -134,10 +135,10 @@ def backoffice_overview(s: Session) -> dict:
                       "destination": DESTINATIONS[tr.destination]["name"] if tr else None,
                       "team_id": tr.team_id if tr else None, "family": fam.surname if fam else None,
                       "draft_id": pending.get(pr.id),
-                      "age_hours": int(((datetime.utcnow() - (pr.answered_at or pr.chased_at or pr.sent_at)).total_seconds()) // 3600)
+                      "age_hours": int(((utcnow() - (pr.answered_at or pr.chased_at or pr.sent_at)).total_seconds()) // 3600)
                       if (pr.answered_at or pr.chased_at or pr.sent_at) else None,
                       "status": pr.status, "sent_at": pr.sent_at.isoformat() if pr.sent_at else None,
-                      "waiting_days": (datetime.utcnow() - pr.sent_at).days if pr.sent_at and pr.status in ("waiting", "chased") else None,
+                      "waiting_days": (utcnow() - pr.sent_at).days if pr.sent_at and pr.status in ("waiting", "chased") else None,
                       "chase_due": pr.id in chase_ids, "offer": pr.offer})
     slow = sorted(({"partner": p.name, "kind": p.kind, "destination": DESTINATIONS.get(p.destination, {}).get("name", "All"),
                     "avg_reply_days": p.avg_reply_days, "reliability": p.reliability}

@@ -20,12 +20,17 @@ def main(argv: list[str] | None = None) -> None:
     ig = sub.add_parser("ingest", help="load a TravelSpirit export through the anonymiser (anonymised stage)")
     ig.add_argument("path")
     wk = sub.add_parser("worker", help="run the scheduler and job worker")
-    wk.add_argument("--once", action="store_true")
+    wk.add_argument("--once", action="store_true", help="one scheduler tick and one pass over the queue")
+    wk.add_argument("--drain", action="store_true", help="work the queue until it is empty, no scheduling (scaled workers)")
     sub.add_parser("mcp", help="serve the tool server over MCP (stdio) as BRAIN_MCP_AGENT")
     sub.add_parser("reindex", help="re-read the knowledge vault")
+    sub.add_parser("migrate", help="bring the database schema up to date (Alembic)")
     n8 = sub.add_parser("n8n", help="inventory of exported n8n workflows")
     n8.add_argument("paths", nargs="+")
     sub.add_parser("envcheck", help="check this environment's configuration (test, pilot, live)")
+    lt = sub.add_parser("loadtest", help="many mails and several workers at once (use Postgres)")
+    lt.add_argument("--mails", type=int, default=600)
+    lt.add_argument("--workers", type=int, default=4)
     ak = sub.add_parser("ask", help="ask the brain a question")
     ak.add_argument("question")
     a = p.parse_args(argv)
@@ -61,7 +66,16 @@ def main(argv: list[str] | None = None) -> None:
         from . import db
         from .jobs import loop, schedule_tick, work
         db.create_all()
-        if a.once:
+        if a.drain:
+            total = 0
+            with db.session() as s:
+                while True:
+                    done = work(s, limit=50)
+                    total += len(done)
+                    if not done:
+                        break
+            print(json.dumps({"worked": total}))
+        elif a.once:
             with db.session() as s:
                 print(json.dumps({"scheduled": schedule_tick(s), "worked": work(s)}, indent=2, default=str))
         else:
@@ -69,6 +83,16 @@ def main(argv: list[str] | None = None) -> None:
     elif a.cmd == "mcp":
         from .mcp_server import main as mcp_main
         mcp_main()
+    elif a.cmd == "migrate":
+        from alembic import command
+        from alembic.config import Config
+        from .config import ROOT
+        from pathlib import Path
+        base = Path.cwd() if (Path.cwd() / "alembic.ini").exists() else ROOT
+        cfg = Config(str(base / "alembic.ini"))
+        cfg.set_main_option("script_location", str(base / "migrations"))
+        command.upgrade(cfg, "head")
+        print("schema up to date")
     elif a.cmd == "reindex":
         from . import db
         from .knowledge.vault import reindex
@@ -83,6 +107,9 @@ def main(argv: list[str] | None = None) -> None:
         c = check()
         print(json.dumps({"env": c.env, "ok": c.ok, "problems": c.problems}, indent=2))
         sys.exit(0 if c.ok else 1)
+    elif a.cmd == "loadtest":
+        from .evals.load import run as load_run
+        print(json.dumps(load_run(a.mails, a.workers), indent=2, default=str))
     elif a.cmd == "ask":
         from . import db
         from .agents.knowledge_desk import ask

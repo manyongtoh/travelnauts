@@ -72,6 +72,8 @@ def triage_mail(s: Session, mail_id: str) -> dict:
     m = s.get(Mail, mail_id)
     if m is None:
         raise KeyError(mail_id)
+    if m.status != "new":  # safe to repeat: a mail is triaged once
+        return (m.triage or {}) | {"skipped": "already triaged"}
     with audit(s, "triage", mail_id, m.subject) as box:
         mail = server.call(s, ME, "ts.read_mail", mail_id=mail_id)
         inj = detect_injection(f"{mail['subject']}\n{mail['body']}")
@@ -96,8 +98,9 @@ def triage_mail(s: Session, mail_id: str) -> dict:
         out = res.model_dump() | {"team_id": team.id if team else None, "escalated": escalated}
         if res.category == "new_request" and m.family_id and res.destination:
             spec = least_loaded_specialist(s, team.id) if team else None
-            n = s.scalar(select(func.count()).select_from(TripRequest)) or 0
-            tr = TripRequest(id=f"r{n + 1:03d}", family_id=m.family_id, mail_id=m.id, team_id=team.id if team else None,
+            from ..db import next_number
+            n = next_number(s, "request", start_from=s.scalar(select(func.count()).select_from(TripRequest)) or 0)
+            tr = TripRequest(id=f"r{n:03d}", family_id=m.family_id, mail_id=m.id, team_id=team.id if team else None,
                              specialist_id=spec.id if spec else None, destination=res.destination, days=res.days or 21,
                              depart_month=res.month or "onbekend", budget_eur=res.budget_eur, wishes=res.wishes,
                              status="new", last_customer_contact=m.received_at)

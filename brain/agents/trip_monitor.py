@@ -14,6 +14,7 @@ from ..identity import agent
 from ..synth.world import DESTINATIONS
 from ..toolserver import server
 from .common import audit, run_step
+from ..clock import utcnow
 
 ME = agent("trip_monitor")
 
@@ -31,7 +32,7 @@ INSTRUCTIONS = (
 
 
 def run(s: Session, now: datetime | None = None) -> dict:
-    now = now or datetime.utcnow()
+    now = now or utcnow()
     alerts = 0
     with audit(s, "trip_monitor", "hourly") as box:
         trips = [t for t in server.call(s, ME, "ts.list_trips", status="booked")

@@ -86,7 +86,7 @@ resource containers 'Microsoft.Storage/storageAccounts/blobServices/containers@2
 resource pg 'Microsoft.DBforPostgreSQL/flexibleServers@2022-12-01' = {
   name: 'pg-${name}'
   location: location
-  sku: isLive ? { name: 'Standard_D2ds_v4', tier: 'GeneralPurpose' } : { name: 'Standard_B1ms', tier: 'Burstable' }
+  sku: isLive ? { name: 'Standard_D2ds_v4', tier: 'GeneralPurpose' } : { name: 'Standard_B2s', tier: 'Burstable' }
   properties: {
     version: '16'
     administratorLogin: pgAdmin
@@ -162,11 +162,57 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
     }
     template: {
       containers: [{ name: 'api', image: image, env: commonEnv, resources: { cpu: json('0.5'), memory: '1Gi' }
-        command: ['brain', 'serve', '--host', '0.0.0.0', '--port', '8000'] }]
-      scale: { minReplicas: isLive ? 1 : 0, maxReplicas: 3 }
+        command: ['sh', '-c', 'brain migrate && brain serve --host 0.0.0.0 --port 8000']
+        probes: [
+          { type: 'Liveness', httpGet: { path: '/healthz', port: 8000 }, periodSeconds: 30 }
+          { type: 'Readiness', httpGet: { path: '/readyz', port: 8000 }, periodSeconds: 10 }
+        ] }]
+      // The API is stateless: more people means more replicas, each with its own connection pool.
+      scale: { minReplicas: isLive ? 2 : 0, maxReplicas: isLive ? 10 : 3
+        rules: [{ name: 'http', http: { metadata: { concurrentRequests: '30' } } }] }
     }
   }
   dependsOn: [kvRoles, acrRoles, pgSecret]
+}
+
+// Two worker jobs: the scheduler (every 5 minutes, queues periodic work and does one pass) and the scaled
+// workers, started by KEDA when jobs are waiting: one replica per 20 queued jobs, up to 10 at once. Jobs are
+// claimed with row locks, so any number of workers can run side by side.
+resource drain 'Microsoft.App/jobs@2024-03-01' = {
+  name: 'cj-${name}-drain'
+  location: location
+  identity: { type: 'UserAssigned', userAssignedIdentities: { '${idWorker.id}': {} } }
+  properties: {
+    environmentId: cae.id
+    configuration: {
+      triggerType: 'Event'
+      eventTriggerConfig: {
+        parallelism: 1
+        replicaCompletionCount: 1
+        scale: { minExecutions: 0, maxExecutions: 10, pollingInterval: 30
+          rules: [{ name: 'queue', type: 'postgresql', auth: [{ secretRef: 'database-conn', triggerParameter: 'connection' }]
+            metadata: { query: 'SELECT COUNT(*) FROM jobs WHERE status = \'queued\' AND run_after <= now()', targetQueryValue: '20' } }] }
+      }
+      replicaTimeout: 1800
+      replicaRetryLimit: 1
+      registries: [{ server: acr.properties.loginServer, identity: idWorker.id }]
+      secrets: [
+        { name: 'database-url', keyVaultUrl: '${kv.properties.vaultUri}secrets/database-url', identity: idWorker.id }
+        { name: 'database-conn', keyVaultUrl: '${kv.properties.vaultUri}secrets/database-conn', identity: idWorker.id }
+      ]
+    }
+    template: {
+      containers: [{ name: 'worker', image: image, env: commonEnv, resources: { cpu: json('0.5'), memory: '1Gi' }
+        command: ['brain', 'worker', '--drain'] }]
+    }
+  }
+  dependsOn: [kvRoles, acrRoles, pgSecret, pgConn]
+}
+
+resource pgConn 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: kv
+  name: 'database-conn'
+  properties: { value: 'host=${pg.properties.fullyQualifiedDomainName} port=5432 user=${pgAdmin} password=${pgPassword} dbname=brain sslmode=require' }
 }
 
 resource worker 'Microsoft.App/jobs@2024-03-01' = {

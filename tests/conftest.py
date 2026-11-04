@@ -13,7 +13,7 @@ def world(tmp_path):
     from brain.synth.generate import build
     os.environ["BRAIN_VAULT"] = str(tmp_path / "vault")
     os.environ["BRAIN_FILES"] = str(tmp_path / "files")
-    db.reset_engine(f"sqlite:///{tmp_path / 'test.db'}")
+    db.reset_engine(os.getenv("BRAIN_TEST_DATABASE_URL") or f"sqlite:///{tmp_path / 'test.db'}")
     build(seed=7, n_families=60, hard=False)
     with db.session() as s:
         yield s

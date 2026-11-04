@@ -20,6 +20,9 @@ def build_model(name: str | None = None):
     if name == "sandbox":
         from .sandbox_model import sandbox_model
         return sandbox_model()
+    if name.startswith("test:"):  # misbehaving models for robustness tests
+        from .sandbox_model import test_model
+        return test_model(name.split(":", 1)[1])
     from pydantic_ai.models.openai import OpenAIChatModel
     from pydantic_ai.providers.openai import OpenAIProvider
     if name.startswith("ollama:"):

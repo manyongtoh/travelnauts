@@ -16,7 +16,9 @@ from typing import Callable
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .clock import utcnow
 from .db import Job, Mail, Setting
+from .clock import utcnow
 
 MAX_ATTEMPTS = 3
 
@@ -38,11 +40,12 @@ SCHEDULE: dict[str, tuple[str, int | None]] = {
     "complaint": ("complaints", None),
     "booking_check": ("booking_check", 24 * 60),
     "next_trips": ("next_trip", 7 * 24 * 60),
+    "retention": ("maintenance", 24 * 60),
 }
 
 
 def enqueue(s: Session, kind: str, payload: dict | None = None, run_after: datetime | None = None) -> Job:
-    j = Job(kind=kind, payload=payload or {}, run_after=run_after or datetime.utcnow())
+    j = Job(kind=kind, payload=payload or {}, run_after=run_after or utcnow())
     s.add(j)
     s.flush()
     return j
@@ -90,6 +93,7 @@ def _handlers() -> dict[str, Callable[[Session, dict], dict]]:
         "complaint": lambda s, p: {"draft_id": sales.complaint(s, p["mail_id"]).id},
         "booking_check": lambda s, p: backoffice.booking_check(s),
         "next_trips": next_trips,
+        "retention": lambda s, p: retention(s),
     }
 
 
@@ -99,46 +103,97 @@ def is_paused(s: Session, kind: str) -> bool:
     return bool(st and st.value)
 
 
+def _claim_setting(s: Session, key: str, old, new) -> bool:
+    """Compare and set: only one scheduler wins when several run at once."""
+    from sqlalchemy import update
+    from sqlalchemy.exc import IntegrityError
+    if old is None:
+        try:
+            with s.begin_nested():
+                s.add(Setting(key=key, value=new))
+            return True
+        except IntegrityError:
+            return False
+    res = s.execute(update(Setting).where(Setting.key == key, Setting.value == old).values(value=new))
+    return res.rowcount == 1
+
+
 def schedule_tick(s: Session, now: datetime | None = None) -> list[str]:
-    """Queue periodic jobs whose interval has passed since their last run."""
-    now = now or datetime.utcnow()
+    """Queue periodic jobs whose interval has passed since their last run. Safe with several schedulers."""
+    now = now or utcnow()
     added = []
     for kind, (_, minutes) in SCHEDULE.items():
         if not minutes:
             continue
         st = s.get(Setting, f"last_run:{kind}")
-        last = datetime.fromisoformat(st.value) if st else None
+        old = st.value if st else None
+        last = datetime.fromisoformat(old) if old else None
         if last is None or now - last >= timedelta(minutes=minutes):
-            enqueue(s, kind)
-            s.merge(Setting(key=f"last_run:{kind}", value=now.isoformat()))
-            added.append(kind)
+            if _claim_setting(s, f"last_run:{kind}", old, now.isoformat()):
+                enqueue(s, kind)
+                added.append(kind)
     s.commit()
     return added
 
 
-def work(s: Session, limit: int = 200) -> list[dict]:
-    """Run due jobs, oldest first."""
-    handlers = _handlers()
-    done = []
-    jobs = s.scalars(select(Job).where(Job.status == "queued", Job.run_after <= datetime.utcnow())
-                     .order_by(Job.id).limit(limit)).all()
-    for j in jobs:
-        if is_paused(s, j.kind):
+LEASE = timedelta(minutes=10)
+
+
+def reap(s: Session) -> int:
+    """Jobs whose worker died (lease ran out) go back in the queue."""
+    from sqlalchemy import update
+    res = s.execute(update(Job).where(Job.status == "running", Job.lease_until < utcnow())
+                    .values(status="queued", worker=None, lease_until=None))
+    s.commit()
+    return res.rowcount
+
+
+def claim(s: Session, worker: str, limit: int) -> list[int]:
+    """Claim due jobs for this worker. Postgres skips rows another worker is claiming; the guarded update makes
+    sure that a job is only ever claimed once, also on SQLite."""
+    from sqlalchemy import update
+    q = (select(Job.id).where(Job.status == "queued", Job.run_after <= utcnow()).order_by(Job.id).limit(limit))
+    if s.get_bind().dialect.name == "postgresql":
+        q = q.with_for_update(skip_locked=True)
+    ids = list(s.scalars(q).all())
+    mine = []
+    for jid in ids:
+        kind = s.get(Job, jid).kind
+        if is_paused(s, kind):
             continue
-        j.status, j.attempts = "running", j.attempts + 1
-        s.commit()
+        res = s.execute(update(Job).where(Job.id == jid, Job.status == "queued")
+                        .values(status="running", worker=worker, lease_until=utcnow() + LEASE, attempts=Job.attempts + 1))
+        if res.rowcount == 1:
+            mine.append(jid)
+    s.commit()
+    return mine
+
+
+def work(s: Session, limit: int = 200, worker: str | None = None) -> list[dict]:
+    """Claim and run due jobs, oldest first. Several workers can run this at the same time."""
+    import os
+    import socket
+    handlers = _handlers()
+    worker = worker or f"{socket.gethostname()}:{os.getpid()}"
+    reap(s)
+    done = []
+    for jid in claim(s, worker, limit):
+        j = s.get(Job, jid)
+        s.expire(j)
         try:
             res = handlers[j.kind](s, j.payload)
+            j = s.get(Job, jid)
             j.status, j.result = "done", res if isinstance(res, dict) else {"result": str(res)[:500]}
         except Exception as e:  # noqa: BLE001
             s.rollback()
-            j = s.get(Job, j.id)
+            j = s.get(Job, jid)
             j.error = f"{type(e).__name__}: {e}"[:1000]
-            if j.attempts >= MAX_ATTEMPTS or type(e).__name__ in ("BudgetExceeded", "ValueError", "KeyError"):
+            permanent = type(e).__name__ in ("BudgetExceeded", "ValueError", "KeyError", "PrivacyError", "AgentPaused")
+            if j.attempts >= MAX_ATTEMPTS or permanent:
                 j.status = "failed"
             else:
-                j.status, j.run_after = "queued", datetime.utcnow() + timedelta(minutes=2 ** j.attempts)
-        j.finished_at = datetime.utcnow()
+                j.status, j.run_after = "queued", utcnow() + timedelta(minutes=2 ** j.attempts)
+        j.finished_at, j.worker, j.lease_until = utcnow(), worker, None
         s.commit()
         done.append({"id": j.id, "kind": j.kind, "status": j.status, "error": j.error})
     return done
@@ -151,3 +206,17 @@ def loop(interval: int = 15) -> None:  # pragma: no cover - long running
             schedule_tick(s)
             work(s)
         time.sleep(interval)
+
+
+def retention(s: Session, days: int = 30) -> dict:
+    """Logs of prompts, tool calls and runs are kept 30 days (architecture: after PII masking, 30 days).
+    The audit chain, drafts and approvals are not touched. Expired cache entries go too."""
+    from .db import AgentRun, CacheEntry, ModelCall, ToolCall
+    cutoff = utcnow() - timedelta(days=days)
+    out = {}
+    for model in (ToolCall, ModelCall, AgentRun):
+        out[model.__tablename__] = s.query(model).filter(model.created_at < cutoff).delete()
+    out["cache"] = s.query(CacheEntry).filter(CacheEntry.expires_at < utcnow()).delete()
+    out["jobs"] = s.query(Job).filter(Job.status == "done", Job.finished_at < cutoff).delete()
+    s.commit()
+    return out

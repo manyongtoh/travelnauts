@@ -17,6 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .db import ModelCall, Setting
+from .clock import utcnow
 
 TASK_TIER = {
     "triage": "small", "followup": "small", "partner_request": "small", "partner_chase": "small",
@@ -65,7 +66,7 @@ def daily_cap(s: Session) -> float:
 
 
 def spent_today(s: Session) -> float:
-    start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    start = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     return float(s.scalar(select(func.coalesce(func.sum(ModelCall.cost_eur), 0.0)).where(ModelCall.created_at >= start)) or 0.0)
 
 

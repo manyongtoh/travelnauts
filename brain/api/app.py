@@ -24,6 +24,7 @@ from ..router import daily_cap, spent_today
 from ..synth.world import DESTINATIONS
 from ..toolserver import server as toolserver
 from ..workflow import BlockedByCheck, approve_draft, backoffice_overview, reject_draft, teamlead_overview
+from ..clock import utcnow
 
 STATIC = Path(__file__).parent / "static"
 CUSTOMER_DRAFTS = {"proposal", "change", "followup", "answer", "trip_alert", "galileo", "alternatives", "extras",
@@ -37,9 +38,60 @@ app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 @app.on_event("startup")
 def _startup() -> None:
-    db.create_all()
+    import os
+    if os.getenv("BRAIN_ENV", "test") == "test":
+        db.create_all()  # pilot and live get their schema only from migrations (brain migrate)
     with db.session() as s:
         db.assert_synthetic_only(s)
+
+
+# Limits: request size, and agent actions per person per minute (per replica) -------------------------
+
+import time as _time
+from collections import defaultdict as _dd
+
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+MAX_BODY = 1_000_000
+AGENT_ACTIONS_PER_MINUTE = 30
+_buckets: dict = _dd(list)
+
+
+@app.middleware("http")
+async def limits(request: Request, call_next):
+    size = int(request.headers.get("content-length") or 0)
+    if size > MAX_BODY:
+        return JSONResponse({"detail": "Request too large"}, status_code=413)
+    if request.method == "POST" and request.url.path.startswith("/api/") and not request.url.path.startswith("/api/admin"):
+        who = request.headers.get("x-brain-user") or request.headers.get("authorization", "")[-24:] or request.client.host
+        now_ = _time.time()
+        _buckets[who] = [t for t in _buckets[who] if now_ - t < 60] + [now_]
+        if len(_buckets[who]) > AGENT_ACTIONS_PER_MINUTE:
+            return JSONResponse({"detail": "Too many actions in a minute, try again shortly"}, status_code=429)
+    try:
+        return await call_next(request)
+    except Exception as e:  # noqa: BLE001  never show a stack trace to a user
+        import logging
+        logging.getLogger("brain").exception("unhandled")
+        return JSONResponse({"detail": f"Something went wrong ({type(e).__name__}). It is logged; try again or ask the admin."},
+                            status_code=500)
+
+
+@app.get("/healthz", include_in_schema=False)
+def healthz():
+    return {"ok": True}
+
+
+@app.get("/readyz", include_in_schema=False)
+def readyz():
+    from sqlalchemy import text
+    try:
+        with db.session() as s:
+            s.execute(text("select 1"))
+        return {"ok": True}
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"ok": False, "error": type(e).__name__}, status_code=503)
 
 
 # Sign-in and roles ------------------------------------------------------------------------------
@@ -66,7 +118,7 @@ def current_user(x_brain_user: str | None = Header(None), authorization: str | N
             if e is None or not e.active:
                 raise HTTPException(401, "Unknown or inactive user")
             p = from_employee(e)
-        e.last_active = datetime.utcnow()
+        e.last_active = utcnow()
         s.commit()
         return p
 
@@ -95,6 +147,14 @@ def _404(what: str):
 @app.get("/", include_in_schema=False)
 def home():
     return RedirectResponse("/static/index.html")
+
+
+@app.get("/api/auth-config")
+def auth_config():
+    """What the screens need to start a Microsoft sign-in (public values only)."""
+    import os
+    return {"mode": auth_mode(), "tenant_id": os.getenv("ENTRA_TENANT_ID", ""), "client_id": os.getenv("ENTRA_SPA_CLIENT_ID", ""),
+            "api_scope": f"{os.getenv('ENTRA_CLIENT_ID', '')}/.default" if os.getenv("ENTRA_CLIENT_ID") else ""}
 
 
 @app.get("/api/status")
@@ -126,9 +186,9 @@ def me(user: Principal = Depends(current_user)):
 # Inbox and requests -----------------------------------------------------------------------------
 
 @app.get("/api/inbox")
-def inbox(status: str | None = None, user: Principal = Depends(need("triage.run"))):
+def inbox(status: str | None = None, limit: int = 200, offset: int = 0, user: Principal = Depends(need("triage.run"))):
     with db.session() as s:
-        q = select(Mail).order_by(Mail.received_at.desc())
+        q = select(Mail).order_by(Mail.received_at.desc()).limit(min(limit, 500)).offset(offset)
         if status:
             q = q.where(Mail.status == status)
         return [{k: v for k, v in as_dict(m).items() if k != "truth"} for m in s.scalars(q).all()]
@@ -141,9 +201,10 @@ def triage_all(limit: int | None = None, user: Principal = Depends(need("triage.
 
 
 @app.get("/api/requests")
-def requests(team: str | None = None, specialist: str | None = None, user: Principal = Depends(current_user)):
+def requests(team: str | None = None, specialist: str | None = None, limit: int = 200, offset: int = 0,
+             user: Principal = Depends(current_user)):
     with db.session() as s:
-        q = select(TripRequest).order_by(TripRequest.created_at.desc())
+        q = select(TripRequest).order_by(TripRequest.created_at.desc()).limit(min(limit, 500)).offset(offset)
         if "back_office" in user.roles:
             pass
         elif "team_lead" in user.roles:
@@ -284,7 +345,7 @@ def get_file(kind: str, name: str, user: Principal = Depends(current_user)):
     if not path.exists():
         _404("file")
     import re as _re
-    ref = _re.search(r"(r\d{3})", name.lower()) or _re.search(r"tn-(r\d{3})", name.lower())
+    ref = _re.search(r"(r\d{3,})", name.lower()) or _re.search(r"tn-(r\d{3,})", name.lower())
     with db.session() as s:
         if ref and not ("back_office" in user.roles):
             _visible_request(s, ref.group(1), user)
@@ -413,9 +474,10 @@ def _may_decide(s, user: Principal, d: Draft, final_text: str | None = None) -> 
 
 
 @app.get("/api/drafts")
-def drafts(kind: str | None = None, status: str | None = "draft", user: Principal = Depends(current_user)):
+def drafts(kind: str | None = None, status: str | None = "draft", limit: int = 300, offset: int = 0,
+           user: Principal = Depends(current_user)):
     with db.session() as s:
-        q = select(Draft).order_by(Draft.id.desc())
+        q = select(Draft).order_by(Draft.id.desc()).limit(min(limit, 1000)).offset(offset)
         if kind:
             q = q.where(Draft.kind.in_(kind.split(",")))
         if status:
@@ -549,7 +611,7 @@ def metrics_csv(user: Principal = Depends(need("team.metrics"))):
     w.writerow(["date", "team", "open_requests", "proposals_drafted", "proposals_approved", "avg_edit_share",
                 "avg_minutes_to_first_draft", "followups_due", "open_gaps"])
     for tid, t in data["teams"].items():
-        w.writerow([datetime.utcnow().date().isoformat(), tid, t["open_requests"], t["proposals_drafted"],
+        w.writerow([utcnow().date().isoformat(), tid, t["open_requests"], t["proposals_drafted"],
                     t["proposals_approved"], t["avg_edit_share"], t["avg_minutes_to_first_draft"], t["followups_due"], len(t["gaps"])])
     return buf.getvalue()
 
@@ -592,7 +654,7 @@ AGENT_NAMES = ["triage", "proposal_writer", "change", "follow_up", "partner_desk
 def health(user: Principal = Depends(need("maintenance"))):
     from datetime import timedelta
     with db.session() as s:
-        since = datetime.utcnow() - timedelta(hours=24)
+        since = utcnow() - timedelta(hours=24)
         st = get_settings()
         paused = {a: bool((s.get(Setting, f"paused:{a}") or Setting(key="", value=False)).value) for a in AGENT_NAMES}
         runs = s.scalars(select(AgentRun).where(AgentRun.created_at >= since)).all()
@@ -607,7 +669,7 @@ def health(user: Principal = Depends(need("maintenance"))):
         tc = s.scalars(select(ToolCall).where(ToolCall.created_at >= since)).all()
         mc = s.scalars(select(ModelCall).where(ModelCall.created_at >= since)).all()
         stuck = s.scalars(select(Job).where(Job.status.in_(["queued", "running"]),
-                                            Job.created_at < datetime.utcnow() - timedelta(hours=1))).all()
+                                            Job.created_at < utcnow() - timedelta(hours=1))).all()
         bench = Path(__file__).resolve().parents[2] / "data" / "bench" / "report.json"
         return {
             "connections": [
@@ -665,7 +727,7 @@ def set_budget(b: Budget, user: Principal = Depends(need("maintenance"))):
 def retry_job(jid: int, user: Principal = Depends(need("maintenance"))):
     with db.session() as s:
         j = s.get(Job, jid) or _404("job")
-        j.status, j.attempts, j.error, j.run_after = "queued", 0, None, datetime.utcnow()
+        j.status, j.attempts, j.error, j.run_after = "queued", 0, None, utcnow()
         s.commit()
         return as_dict(j)
 

@@ -11,6 +11,7 @@ from .. import db
 from ..db import (AgentRun, Draft, Employee, Family, KnowledgeGap, KnowledgeItem, Mail, Partner, PartnerRequest,
                   PastProposal, PriceItem, Team, TripRequest)
 from .world import BACK_OFFICE, CITIES, DESTINATIONS, FIRST_NAMES, STAFF, SURNAMES, TEAMS, WISHES
+from ..clock import utcnow
 
 MONTHS = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober",
           "november", "december"]
@@ -69,13 +70,14 @@ def past_proposal_text(dest: str, route: list[dict], party: str, rng: random.Ran
 
 def build(seed: int = 42, n_families: int = 200, hard: bool = True) -> dict:
     rng = random.Random(seed)
-    today = datetime.utcnow().replace(hour=9, minute=0, second=0, microsecond=0)
+    today = utcnow().replace(hour=9, minute=0, second=0, microsecond=0)
     counts: dict[str, int] = {}
     db.create_all(drop=True)
     with db.session() as s:
         # Teams and staff
         for tid, (name, dests) in TEAMS.items():
             s.add(Team(id=tid, name=name, destinations=dests))
+        s.flush()
         employees = []
         for tid, staff in STAFF.items():
             employees.append(Employee(id=slug(staff["lead"]), name=staff["lead"], role="team_lead", team_id=tid))
@@ -88,6 +90,7 @@ def build(seed: int = 42, n_families: int = 200, hard: bool = True) -> dict:
         for e in employees:
             e.email = f"{e.id}@travelnauts.example"
         s.add_all(employees)
+        s.flush()
         specialists = {t: [e for e in employees if e.role == "specialist" and e.team_id == t] for t in TEAMS}
 
         # Partners and price list
@@ -100,12 +103,14 @@ def build(seed: int = 42, n_families: int = 200, hard: bool = True) -> dict:
                             reliability=round(rng.uniform(0.75, 0.98), 2))
             partners[dest] = [local]
             s.add(local)
+            s.flush()
             for stop, _, hotels, excursions in d["stops"]:
                 for h in hotels:
                     hp = Partner(id=slug(h), name=h, kind="hotel", destination=dest, email=f"booking@{slug(h)}.example",
                                  avg_reply_days=round(rng.uniform(0.5, 4.0), 1), reliability=round(rng.uniform(0.6, 0.97), 2))
                     partners[dest].append(hp)
                     s.add(hp)
+                    s.flush()
                     price_n += 1
                     s.add(PriceItem(id=f"p{price_n}", destination=dest, kind="hotel", name=h, stop=stop, unit="per_room_night",
                                     cost_eur=rng.choice([75, 95, 120, 150, 180, 220, 260]) * (1.6 if dest in ("tanzania", "south-africa") and "Camp" in h else 1), partner_id=hp.id,
@@ -143,6 +148,7 @@ def build(seed: int = 42, n_families: int = 200, hard: bool = True) -> dict:
                          past_destinations=rng.sample(list(DESTINATIONS), k=rng.choice([0, 0, 1, 1, 2])))
             families.append(fam)
         s.add_all(families)
+        s.flush()
         counts["families"] = len(families)
 
         # Past proposals: the examples for routes and house voice
@@ -297,7 +303,9 @@ def build(seed: int = 42, n_families: int = 200, hard: bool = True) -> dict:
             mail(received_at=today - timedelta(hours=rng.randint(1, 30)), sender="news@travelnewsletter.example",
                  subject=rng.choice(["Nieuwsbrief november", "Webinar: duurzame reisbranche", "Uw factuur software"]),
                  body="Dit is een nieuwsbrief. Klik hier om af te melden.", truth={"category": "other"})
+        s.flush()
         s.add_all(mails)
+        s.flush()
         counts["mails"] = len(mails)
 
         # Trips already in progress, for the follow-up agent and the partner desk

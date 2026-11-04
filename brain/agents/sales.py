@@ -109,6 +109,9 @@ MONEY = ("terugbetal", "refund", "compensatie", "vergoed", "korting", "geld teru
 def complaint(s: Session, mail_id: str) -> Draft:
     me = agent("complaints")
     m = s.get(Mail, mail_id)
+    done = [d for d in s.scalars(select(Draft).where(Draft.kind == "complaint_reply")).all() if (d.data or {}).get("mail_id") == mail_id]
+    if done:  # safe to repeat
+        return done[0]
     with audit(s, "complaints", mail_id, m.subject) as box:
         mail = server.call(s, me, "ts.read_mail", mail_id=mail_id)
         trips = server.call(s, me, "ts.list_trips", family_id=m.family_id) if m.family_id else []

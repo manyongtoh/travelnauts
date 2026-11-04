@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from ..config import ROOT
 from ..db import Employee, KnowledgeItem, Setting
 from .store import clear_semantic_cache
+from ..clock import utcnow
 
 ALL_STAFF = ["specialist", "back_office", "team_lead", "content"]
 MAX_WORDS = 300
@@ -133,7 +134,7 @@ def reindex(s: Session, root: Path | None = None) -> dict:
             item.status = "retired"
             retired += 1
     clear_semantic_cache(s)
-    s.merge(Setting(key="last_reindex", value=datetime.utcnow().isoformat(timespec="minutes")))
+    s.merge(Setting(key="last_reindex", value=utcnow().isoformat(timespec="minutes")))
     s.commit()
     return {"added": added, "changed": changed, "archived": archived, "retired": retired, "chunks": len(seen)}
 
@@ -144,6 +145,6 @@ def review_reminders(s: Session) -> dict:
     by_owner: dict[str, list[str]] = {}
     for k in due:
         by_owner.setdefault(k.owner_id, []).append(k.id)
-    s.merge(Setting(key="report:review_reminders", value={"at": datetime.utcnow().isoformat(timespec="minutes"), "owners": by_owner}))
+    s.merge(Setting(key="report:review_reminders", value={"at": utcnow().isoformat(timespec="minutes"), "owners": by_owner}))
     s.commit()
     return {"owners": len(by_owner), "items": len(due)}

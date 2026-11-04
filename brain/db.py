@@ -8,10 +8,13 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, select
+import os
+
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, event, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 
 from .config import get_settings
+from .clock import utcnow
 
 
 class Base(DeclarativeBase):
@@ -19,7 +22,8 @@ class Base(DeclarativeBase):
 
 
 def now() -> datetime:
-    return datetime.utcnow().replace(microsecond=0)
+    from .clock import utcnow as _u
+    return _u().replace(microsecond=0)
 
 
 class Team(Base):
@@ -92,11 +96,11 @@ class Mail(Base):
     sender: Mapped[str] = mapped_column(String)
     subject: Mapped[str] = mapped_column(String)
     body: Mapped[str] = mapped_column(Text)
-    family_id: Mapped[str | None] = mapped_column(ForeignKey("families.id"), nullable=True)
+    family_id: Mapped[str | None] = mapped_column(ForeignKey("families.id"), nullable=True, index=True)
     partner_id: Mapped[str | None] = mapped_column(ForeignKey("partners.id"), nullable=True)
     # Ground truth, only used by the test bench, never shown to agents.
     truth: Mapped[dict] = mapped_column(JSON, default=dict)
-    status: Mapped[str] = mapped_column(String, default="new")  # new | triaged | done | flagged
+    status: Mapped[str] = mapped_column(String, default="new", index=True)  # new | triaged | done | flagged
     triage: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     attachments: Mapped[list] = mapped_column(JSON, default=list)  # [{"name", "path", "mime"}]
     synthetic: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -105,16 +109,16 @@ class Mail(Base):
 class TripRequest(Base):
     __tablename__ = "requests"
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    family_id: Mapped[str] = mapped_column(ForeignKey("families.id"))
+    family_id: Mapped[str] = mapped_column(ForeignKey("families.id"), index=True)
     mail_id: Mapped[str | None] = mapped_column(ForeignKey("mails.id"), nullable=True)
-    team_id: Mapped[str | None] = mapped_column(ForeignKey("teams.id"), nullable=True)
-    specialist_id: Mapped[str | None] = mapped_column(ForeignKey("employees.id"), nullable=True)
+    team_id: Mapped[str | None] = mapped_column(ForeignKey("teams.id"), nullable=True, index=True)
+    specialist_id: Mapped[str | None] = mapped_column(ForeignKey("employees.id"), nullable=True, index=True)
     destination: Mapped[str] = mapped_column(String)
     days: Mapped[int] = mapped_column(Integer)
     depart_month: Mapped[str] = mapped_column(String)
     budget_eur: Mapped[float | None] = mapped_column(Float, nullable=True)
     wishes: Mapped[list] = mapped_column(JSON, default=list)
-    status: Mapped[str] = mapped_column(String, default="new")  # new | proposal_draft | proposal_sent | booked | lost
+    status: Mapped[str] = mapped_column(String, default="new", index=True)  # new | proposal_draft | proposal_sent | booked | lost
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     proposal_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     depart_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -146,14 +150,14 @@ class Draft(Base):
     """Anything an agent writes. Nothing leaves the building until a person approves it."""
     __tablename__ = "drafts"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    kind: Mapped[str] = mapped_column(String)  # proposal | followup | partner_request | partner_chase | galileo | answer
-    request_id: Mapped[str | None] = mapped_column(ForeignKey("requests.id"), nullable=True)
+    kind: Mapped[str] = mapped_column(String, index=True)  # proposal | followup | partner_request | partner_chase | galileo | answer
+    request_id: Mapped[str | None] = mapped_column(ForeignKey("requests.id"), nullable=True, index=True)
     partner_request_id: Mapped[int | None] = mapped_column(ForeignKey("partner_requests.id"), nullable=True)
     title: Mapped[str] = mapped_column(String)
     body: Mapped[str] = mapped_column(Text)
     data: Mapped[dict] = mapped_column(JSON, default=dict)
     sources: Mapped[list] = mapped_column(JSON, default=list)
-    status: Mapped[str] = mapped_column(String, default="draft")  # draft | approved | rejected
+    status: Mapped[str] = mapped_column(String, default="draft", index=True)  # draft | approved | rejected
     final_body: Mapped[str | None] = mapped_column(Text, nullable=True)
     edit_share: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
@@ -164,8 +168,8 @@ class Draft(Base):
 class PartnerRequest(Base):
     __tablename__ = "partner_requests"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    request_id: Mapped[str] = mapped_column(ForeignKey("requests.id"))
-    partner_id: Mapped[str] = mapped_column(ForeignKey("partners.id"))
+    request_id: Mapped[str] = mapped_column(ForeignKey("requests.id"), index=True)
+    partner_id: Mapped[str] = mapped_column(ForeignKey("partners.id"), index=True)
     what: Mapped[str] = mapped_column(String)
     status: Mapped[str] = mapped_column(String, default="to_send")  # to_send | waiting | chased | answered | declined
     sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -224,7 +228,7 @@ class AgentRun(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     trace_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     cost_eur: Mapped[float] = mapped_column(Float, default=0.0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now, index=True)
 
 
 class Quote(Base):
@@ -268,7 +272,7 @@ class ToolCall(Base):
     ms: Mapped[int] = mapped_column(Integer, default=0)
     ok: Mapped[bool] = mapped_column(Boolean, default=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now, index=True)
 
 
 class ModelCall(Base):
@@ -287,7 +291,7 @@ class ModelCall(Base):
     ok: Mapped[bool] = mapped_column(Boolean, default=True)
     fallback_from: Mapped[str | None] = mapped_column(String, nullable=True)
     escalated: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now, index=True)
 
 
 class AuditEntry(Base):
@@ -301,7 +305,7 @@ class AuditEntry(Base):
     object_id: Mapped[str] = mapped_column(String)
     ref: Mapped[str | None] = mapped_column(String, nullable=True)
     input_hash: Mapped[str | None] = mapped_column(String, nullable=True)
-    prev_hash: Mapped[str] = mapped_column(String)
+    prev_hash: Mapped[str] = mapped_column(String, unique=True)  # one successor per entry: the chain cannot fork
     hash: Mapped[str] = mapped_column(String)
 
 
@@ -311,9 +315,11 @@ class Job(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     kind: Mapped[str] = mapped_column(String, index=True)
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
-    status: Mapped[str] = mapped_column(String, default="queued")  # queued | running | done | failed | skipped
+    status: Mapped[str] = mapped_column(String, default="queued", index=True)  # queued | running | done | failed
     attempts: Mapped[int] = mapped_column(Integer, default=0)
-    run_after: Mapped[datetime] = mapped_column(DateTime, default=now)
+    run_after: Mapped[datetime] = mapped_column(DateTime, default=now, index=True)
+    worker: Mapped[str | None] = mapped_column(String, nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
@@ -326,6 +332,28 @@ class Setting(Base):
     key: Mapped[str] = mapped_column(String, primary_key=True)
     value: Mapped[Any] = mapped_column(JSON)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class Counter(Base):
+    """Safe running numbers (request numbers), also with many workers at the same time."""
+    __tablename__ = "counters"
+    name: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[int] = mapped_column(Integer, default=0)
+
+
+def next_number(s: Session, name: str, start_from: int = 0) -> int:
+    from sqlalchemy import update
+    from sqlalchemy.exc import IntegrityError
+    for _ in range(5):
+        res = s.execute(update(Counter).where(Counter.name == name).values(value=Counter.value + 1).returning(Counter.value)).first()
+        if res:
+            return int(res[0])
+        try:
+            with s.begin_nested():
+                s.add(Counter(name=name, value=start_from))
+        except IntegrityError:
+            continue
+    raise RuntimeError(f"Could not get a number for {name}")
 
 
 class CacheEntry(Base):
@@ -348,7 +376,18 @@ def engine():
         if url.startswith("sqlite:///"):
             from pathlib import Path
             Path(url.removeprefix("sqlite:///")).parent.mkdir(parents=True, exist_ok=True)
-        _engine = create_engine(url, future=True)
+        if url.startswith("sqlite"):
+            _engine = create_engine(url, future=True, connect_args={"timeout": 30})
+
+            @event.listens_for(_engine, "connect")
+            def _sqlite_pragmas(conn, _):  # enforce foreign keys like Postgres does; allow concurrent readers
+                cur = conn.cursor()
+                cur.execute("PRAGMA foreign_keys=ON")
+                cur.execute("PRAGMA journal_mode=WAL")
+                cur.close()
+        else:
+            _engine = create_engine(url, future=True, pool_size=int(os.getenv("BRAIN_DB_POOL", "10")), max_overflow=20,
+                                    pool_pre_ping=True, pool_recycle=1800)
         _Session = sessionmaker(_engine, expire_on_commit=False)
     return _engine
 

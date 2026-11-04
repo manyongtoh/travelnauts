@@ -13,6 +13,7 @@ from ..identity import agent
 from ..toolserver import server
 from ..synth.world import DESTINATIONS
 from .common import audit, run_step
+from ..clock import utcnow
 
 ME = agent("follow_up")
 
@@ -30,7 +31,7 @@ INSTRUCTIONS = (
 
 
 def due_followups(s: Session, now: datetime | None = None) -> list[TripRequest]:
-    now = now or datetime.utcnow()
+    now = now or utcnow()
     cutoff = now - timedelta(days=get_settings().followup_after_days)
     rows = s.scalars(select(TripRequest).where(TripRequest.status == "proposal_sent", TripRequest.proposal_sent_at <= cutoff)).all()
     done = {d.request_id for d in s.scalars(select(Draft).where(Draft.kind == "followup")).all()}
@@ -44,7 +45,7 @@ def write_followup(s: Session, request_id: str) -> Draft:
     d = DESTINATIONS[tr.destination]
     with audit(s, "follow_up", request_id) as box:
         hits = server.call(s, ME, "knowledge.search", query=f"beste reistijd {d['nl']}", destination=tr.destination, k=1)
-        days_since = (datetime.utcnow() - tr.proposal_sent_at).days if tr.proposal_sent_at else None
+        days_since = (utcnow() - tr.proposal_sent_at).days if tr.proposal_sent_at else None
         ctx = {"family": {"name": fam.contact_name, "child_ages": fam.child_ages},
                "trip": {"destination": d["nl"], "days": tr.days, "month": tr.depart_month},
                "days_since_proposal": days_since, "specialist": spec.name if spec else "Travelnauts",

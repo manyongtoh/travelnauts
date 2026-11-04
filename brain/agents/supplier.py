@@ -10,6 +10,7 @@ from ..db import Setting
 from ..identity import agent
 from ..toolserver import server
 from .common import audit
+from ..clock import utcnow
 
 ME = agent("supplier_watcher")
 
@@ -40,7 +41,7 @@ def watch(s: Session) -> dict:
                 findings.append({"kind": "slow_partner", "partner": p["name"], "item": "", "destination": p["destination"],
                                  "detail": f"replies in {p['avg_reply_days']} days on average, {round(p['reliability'] * 100)}% reliable"})
         s.merge(Setting(key="snapshot:prices", value={p["id"]: p["cost_eur"] for p in prices}))
-        report = {"at": datetime.utcnow().isoformat(timespec="minutes"), "findings": findings}
+        report = {"at": utcnow().isoformat(timespec="minutes"), "findings": findings}
         s.merge(Setting(key="report:supplier_watch", value=report))
         s.commit()
         box["output"] = f"{len(findings)} findings"

@@ -23,6 +23,7 @@ from ..synth.world import DESTINATIONS
 from ..toolserver import server
 from .change import latest_version
 from .common import audit, run_step
+from ..clock import utcnow
 
 
 # Invoices ------------------------------------------------------------------------------------
@@ -37,6 +38,9 @@ class InvoiceFields(BaseModel):
 def invoices(s: Session, mail_id: str) -> InvoiceCheck:
     me = agent("invoice_matcher")
     m = s.get(Mail, mail_id)
+    existing = s.scalars(select(InvoiceCheck).where(InvoiceCheck.mail_id == mail_id)).first()
+    if existing:  # safe to repeat
+        return existing
     with audit(s, "invoice_matcher", mail_id, m.subject) as box:
         info = server.call(s, me, "partners.read_reply", mail_id=mail_id)
         f, _ = run_step(s, "invoice_extract", InvoiceFields, "Read the supplier invoice in CONTEXT.mail (and its attachments) and "
@@ -180,7 +184,7 @@ def booking_check(s: Session) -> dict:
             files.append({"request_id": t["id"], "destination": DESTINATIONS[t["destination"]]["name"], "team_id": t["team_id"],
                           "depart_date": t["depart_date"], "missing": missing, "complete": not missing})
         files.sort(key=lambda f: (f["complete"], f["depart_date"] or "9999"))
-        s.merge(Setting(key="report:booking_check", value={"at": datetime.utcnow().isoformat(timespec="minutes"), "files": files}))
+        s.merge(Setting(key="report:booking_check", value={"at": utcnow().isoformat(timespec="minutes"), "files": files}))
         s.commit()
         box["output"] = f"{sum(not f['complete'] for f in files)} of {len(files)} files incomplete"
     return {"files": len(files), "incomplete": sum(not f["complete"] for f in files)}

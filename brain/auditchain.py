@@ -30,13 +30,22 @@ def body_hash(text: str | None) -> str | None:
 
 def append(s: Session, actor: str, action: str, object_type: str, object_id, ref: str | None = None,
            content: str | None = None) -> AuditEntry:
-    last = s.scalars(select(AuditEntry).order_by(AuditEntry.id.desc()).limit(1)).first()
-    e = AuditEntry(at=now(), actor=actor, action=action, object_type=object_type, object_id=str(object_id), ref=ref,
-                   input_hash=body_hash(content), prev_hash=last.hash if last else GENESIS, hash="")
-    e.hash = _digest(e)
-    s.add(e)
-    s.flush()
-    return e
+    """Append one entry. With several writers at once, the unique prev_hash makes all but one fail; they retry
+    on the new head, so the chain stays one line."""
+    from sqlalchemy.exc import IntegrityError
+    for attempt in range(20):
+        last = s.scalars(select(AuditEntry).order_by(AuditEntry.id.desc()).limit(1)).first()
+        e = AuditEntry(at=now(), actor=actor, action=action, object_type=object_type, object_id=str(object_id), ref=ref,
+                       input_hash=body_hash(content), prev_hash=last.hash if last else GENESIS, hash="")
+        e.hash = _digest(e)
+        try:
+            with s.begin_nested():
+                s.add(e)
+            return e
+        except IntegrityError:
+            import time
+            time.sleep(0.01 * (attempt + 1))
+    raise RuntimeError("Audit chain is busy; try again")
 
 
 def verify(s: Session) -> dict:

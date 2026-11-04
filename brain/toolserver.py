@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from .db import CacheEntry, Family, Partner, PastProposal, ToolCall, TripRequest, as_dict
 from .identity import AGENTS, Principal
 from .trace import current_trace
+from .clock import utcnow
 
 
 @dataclass
@@ -67,12 +68,12 @@ class ToolServer:
                 raw = json.dumps(kwargs, sort_keys=True, default=str)
                 key = "exact:" + hashlib.sha256(f"{name}|{caller.id if t.customer_data else '*'}|{raw}".encode()).hexdigest()
                 hit = s.get(CacheEntry, key)
-                if hit and hit.expires_at > datetime.utcnow():
+                if hit and hit.expires_at > utcnow():
                     log.cached = True
                     return hit.value
             out = json.loads(json.dumps(t.fn(s, **kwargs), default=str))  # tools return plain JSON, like over MCP
             if key:
-                s.merge(CacheEntry(key=key, kind="exact", value=out, expires_at=datetime.utcnow() + timedelta(seconds=t.cache_seconds)))
+                s.merge(CacheEntry(key=key, kind="exact", value=out, expires_at=utcnow() + timedelta(seconds=t.cache_seconds)))
             return out
         except Exception as e:
             log.ok = False
@@ -202,7 +203,7 @@ def partners_read_reply(s: Session, mail_id: str) -> dict:
     import re as _re
     from .db import Mail, PartnerRequest
     m = s.get(Mail, mail_id)
-    ref = _re.search(r"TN-(R\d{3})", f"{m.subject} {m.body}", _re.I)
+    ref = _re.search(r"TN-(R\d{3,})", f"{m.subject} {m.body}", _re.I)
     pr = None
     if ref:
         q = select(PartnerRequest).where(PartnerRequest.request_id == ref.group(1).lower())
