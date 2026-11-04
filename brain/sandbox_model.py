@@ -265,7 +265,8 @@ def partner_reply(ctx: dict) -> dict:
     no = re.search(r"fully booked|unfortunately|not available|volgeboekt|helaas|available: no", t)
     yes = re.search(r"confirm|available: yes|available\b|bevestig|beschikbaar|our offer|please find", t)
     price = re.search(r"eur\s?([\d.,]+)|€\s?([\d.,]+)", t)
-    eur = float((price.group(1) or price.group(2)).replace(",", "").rstrip(".")) if price else None
+    from .money import parse_amount
+    eur = parse_amount(price.group(1) or price.group(2)) if price else None
     return {"available": False if no else (True if yes else None), "price_eur": eur,
             "note": ctx["mail"]["body"].split("\n\n")[1][:120] if "\n\n" in ctx["mail"]["body"] else "",
             "needs_person": bool(re.search(r"\?|can offer|instead|alternative", t))}
@@ -356,11 +357,12 @@ def call_notes(ctx: dict) -> dict:
 
 def invoice_extract(ctx: dict) -> dict:
     t = ctx["mail"]["subject"] + "\n" + ctx["mail"]["body"] + "\n" + "\n".join(a["text"] for a in ctx["mail"].get("attachments", []))
-    no = re.search(r"\bINV-[\w-]+", t) or re.search(r"factuur\s*(?:nr\.?|nummer)?\s*([\d][\w-]+)", t, re.I)
+    no = re.search(r"\bINV-[\w-]+", t) or re.search(r"(?:factuur|invoice)\s*(?:nr\.?|nummer|no\.?|number|#)?\s*([\d][\w-]+)", t, re.I)
     ref = re.search(r"TN-R\d{2,}", t, re.I)
     amt = re.search(r"(?:EUR|€)\s?([\d.,]+)", t)
     days = re.search(r"within (\d+) days|binnen (\d+) dagen", t, re.I)
-    amount = float(amt.group(1).replace(",", "").rstrip(".")) if amt else None
+    from .money import parse_amount
+    amount = parse_amount(amt.group(1)) if amt else None
     return {"invoice_no": (no.group(1) if no.re.groups else no.group(0)) if no else None, "reference": ref.group(0).upper() if ref else None, "amount_eur": amount,
             "due_days": int(days.group(1) or days.group(2)) if days else None}
 

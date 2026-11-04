@@ -61,9 +61,10 @@ CAVEAT_WORDS = ("onder voorbehoud", "beschikbaarheid", "subject to availability"
 
 def availability(s: Session, request_id: str) -> dict:
     """Where the partner checks for this request stand."""
-    prs = s.scalars(select(PartnerRequest).where(PartnerRequest.request_id == request_id)).all()
+    from .agents.partner_desk import current_requests
+    prs = current_requests(s, request_id)
     no = [pr for pr in prs if pr.status == "declined" or (pr.status == "answered" and (pr.offer or {}).get("available") is False)]
-    ok = [pr for pr in prs if pr.status == "answered" and (pr.offer or {}).get("available") is not False]
+    ok = [pr for pr in prs if pr.status == "answered" and (pr.offer or {}).get("available") is True]
     from .config import get_settings
     return {"asked": len(prs), "confirmed": len(ok), "not_available": len(no), "open": len(prs) - len(ok) - len(no),
             "rule": get_settings().availability_rule}
@@ -191,6 +192,8 @@ def backoffice_overview(s: Session) -> dict:
     prs = list(s.scalars(select(PartnerRequest)).all())
     partners = {p.id: p for p in s.scalars(select(Partner)).all()}
     chase_ids = {p.id for p in due_chases(s)}
+    from .agents.partner_desk import silent_after_chase
+    silent_ids = {p.id for p in silent_after_chase(s)}
     from .db import Family
     from .synth.world import DESTINATIONS
     reqs = {r.id: r for r in s.scalars(select(TripRequest)).all()}
@@ -201,7 +204,7 @@ def backoffice_overview(s: Session) -> dict:
         p = partners[pr.partner_id]
         tr = reqs.get(pr.request_id)
         fam = s.get(Family, tr.family_id) if tr else None
-        cards.append({"id": pr.id, "request_id": pr.request_id, "partner": p.name, "kind": p.kind, "what": pr.what,
+        cards.append({"id": pr.id, "request_id": pr.request_id, "partner": p.name, "partner_id": p.id, "kind": p.kind, "what": pr.what,
                       "destination": DESTINATIONS[tr.destination]["name"] if tr else None,
                       "team_id": tr.team_id if tr else None, "family": fam.surname if fam else None,
                       "draft_id": pending.get(pr.id),
@@ -209,11 +212,15 @@ def backoffice_overview(s: Session) -> dict:
                       if (pr.answered_at or pr.chased_at or pr.sent_at) else None,
                       "status": pr.status, "sent_at": pr.sent_at.isoformat() if pr.sent_at else None,
                       "waiting_days": (utcnow() - pr.sent_at).days if pr.sent_at and pr.status in ("waiting", "chased") else None,
-                      "chase_due": pr.id in chase_ids, "offer": pr.offer})
+                      "chase_due": pr.id in chase_ids, "silent_after_chase": pr.id in silent_ids, "offer": pr.offer})
     slow = sorted(({"partner": p.name, "kind": p.kind, "destination": DESTINATIONS.get(p.destination, {}).get("name", "All"),
                     "avg_reply_days": p.avg_reply_days, "reliability": p.reliability}
                    for p in partners.values() if p.kind != "airline"), key=lambda x: -x["avg_reply_days"])
+    to_match = [{"mail_id": m.id, "from": m.sender, "subject": m.subject, "received_at": m.received_at.isoformat(),
+                 "partner_id": m.partner_id, "reading": (m.triage or {}).get("partner_reading")}
+                for m in s.scalars(select(Mail).where(Mail.status == "needs_person").order_by(Mail.received_at)).all()]
     return {"cards": cards, "counts": dict(Counter(c["status"] for c in cards)), "chase_due": len(chase_ids),
+            "silent_after_chase": len(silent_ids), "partner_mail_to_match": to_match,
             "slowest_partners": slow,
             "drafts_to_check": s.query(Draft).filter(Draft.kind.in_(["partner_request", "partner_chase"]),
                                                      Draft.status == "draft").count()}

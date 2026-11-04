@@ -8,7 +8,8 @@ roadbooks and vouchers as PDF, and booking file checks),
 evals that gate CI, and five screens (specialist, team lead, back office, maintenance, user management).
 See [docs/architecture-coverage.md](docs/architecture-coverage.md) for what is built, what is a stand-in
 and what still needs Azure, [docs/operations.md](docs/operations.md) for how it scales and what keeps it robust, [docs/runbook.md](docs/runbook.md)
-for daily checks and incidents, and [docs/test-reports](docs/test-reports/README.md) for the latest operations and security results.
+for daily checks and incidents, [docs/test-reports](docs/test-reports/README.md) for the latest results,
+[docs/next-steps.md](docs/next-steps.md) for what is needed from Travelnauts, and [docs/lists](docs/lists) for the open questions and test lists.
 
 Nothing here is Travelnauts data. Families, partners, hotels, prices and staff are invented.
 Agents only ever write drafts; a person approves every mail before it goes out.
@@ -20,7 +21,7 @@ pip install -e ".[dev]"
 brain seed            # build the synthetic database and knowledge vault (data/)
 brain worker --once   # run the scheduler and the queue once (triage, follow-ups, insight, ...)
 brain serve           # open http://127.0.0.1:8000 and pick who you are
-pytest -q             # 95 tests (BRAIN_TEST_DATABASE_URL=postgresql+psycopg://... for Postgres)
+pytest -q             # 174 tests (BRAIN_TEST_DATABASE_URL=postgresql+psycopg://... for Postgres)
 brain bench --gate    # evals; fails when a gate from the architecture is not met
 brain mcp             # the tool server over MCP, as BRAIN_MCP_AGENT
 brain envcheck        # check the test, pilot or live configuration
@@ -28,9 +29,13 @@ brain n8n export.json # inventory of exported n8n workflows
 brain migrate         # database migrations (pilot and live)
 brain worker --drain  # scaled workers: work the queue until it is empty
 brain loadtest        # many mails, several workers at once (use Postgres)
+brain simulate        # two weeks of daily operation with incidents
+brain check           # open alerts;  brain verify: counts, audit chain, schema
+python scripts/journey.py             # one family, first mail to next trip
+python scripts/journey_backoffice.py  # the back office day for one trip
 ```
 
-With the full stack (Postgres and Ollama with Gemma):
+With Gemma 4 instead of the stand-in model, see [docs/gemma.md](docs/gemma.md). With the full stack (Postgres and Ollama):
 
 ```bash
 docker compose up -d

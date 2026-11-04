@@ -222,19 +222,34 @@ def prices_read(s: Session, destination: str | None = None) -> list[dict]:
     return [as_dict(p) | {"valid_until": p.valid_until.isoformat() if p.valid_until else None} for p in s.scalars(q).all()]
 
 
+def match_partner_request(s: Session, m) -> "PartnerRequest | None":
+    """Which of our requests does this partner mail answer? Only a sure match: a person picks otherwise.
+    1. a person already chose (back office matched it); 2. our reference and this partner; 3. our reference and the
+    only partner asked on that trip; 4. no reference, but this partner has exactly one open request with us."""
+    import re as _re
+    from .db import PartnerRequest
+    chosen = (m.triage or {}).get("partner_request_id")
+    if chosen:
+        return s.get(PartnerRequest, chosen)
+    ref = _re.search(r"TN-?\s?(R\d{3,})", f"{m.subject} {m.body}", _re.I)
+    if ref:
+        rows = s.scalars(select(PartnerRequest).where(PartnerRequest.request_id == ref.group(1).lower())).all()
+        mine = [pr for pr in rows if pr.partner_id == m.partner_id] if m.partner_id else rows
+        return mine[0] if len(mine) == 1 else None
+    if m.partner_id:
+        open_ = s.scalars(select(PartnerRequest).where(PartnerRequest.partner_id == m.partner_id,
+                                                       PartnerRequest.status.in_(["waiting", "chased"]))).all()
+        return open_[0] if len(open_) == 1 else None
+    return None
+
+
 @server.tool("partners.read_reply")
 def partners_read_reply(s: Session, mail_id: str) -> dict:
     """Read a partner's reply mail and the request it answers (matched on the TN reference)."""
     import re as _re
     from .db import Mail, PartnerRequest
     m = s.get(Mail, mail_id)
-    ref = _re.search(r"TN-(R\d{3,})", f"{m.subject} {m.body}", _re.I)
-    pr = None
-    if ref:
-        q = select(PartnerRequest).where(PartnerRequest.request_id == ref.group(1).lower())
-        if m.partner_id:
-            q = q.where(PartnerRequest.partner_id == m.partner_id)
-        pr = s.scalars(q).first()
+    pr = match_partner_request(s, m)
     from .files import pdf_text
     atts = [{"name": a["name"], "text": pdf_text(a["path"])[:4000]} for a in (m.attachments or []) if a.get("mime") == "application/pdf"]
     return {"mail": {"subject": m.subject, "body": m.body, "partner_id": m.partner_id, "attachments": atts},

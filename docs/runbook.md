@@ -97,6 +97,16 @@ Each incident lists what you see, what the system already does on its own, and w
   itself and the alert resolves. Only jobs older than 12 hours end up failed; retry those.
 - **Tested in:** tests/test_travelspirit_faults.py (flaky, slow, two hours down) and simulation day 4.
 
+### Back office: partner mail and invoices
+- **Partner mail to match** (top of the board): the agent could not tell which request a partner answers. Pick the
+  request; the mail is then read as usual.
+- **Answer needs reading**: a partner asked a question, offered something else or said they will come back. Read it
+  and click Available or Not available. Not available drafts alternatives for the specialist.
+- **Still silent after a reminder**: phone the partner or choose another one; the booking file shows it too.
+- **Invoices**: "Duplicate" (same invoice again), "Differs" (not the agreed amount), "Trip not booked" and an
+  amount the agent read differently from the mail all need a person. Marking them handled asks how it was
+  resolved; that is written to the audit log. Paying stays a person's decision.
+
 ### Mail from an address we do not know
 - **You see:** "Mail from an unknown address" at the top of Team lead > Insight, with suggested families.
 - **You do:** pick the family. Tick "remember this address" for a parent's own address; untick it for a one-off

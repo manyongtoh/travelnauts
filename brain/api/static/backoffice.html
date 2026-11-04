@@ -21,6 +21,7 @@ const COLS = [
   ["to_send", "To approve", "Agent drafted, needs your click"],
   ["waiting", "Sent, waiting", "Reminder after 3 days without a reply"],
   ["chased", "Chased", "Reminder sent"],
+  ["unclear", "Answer needs reading", "Question, alternative or 'we come back to you'"],
   ["answered", "Reply in, offer ready", "Compare and choose"],
   ["declined", "Declined", "Partner said no"],
 ];
@@ -50,6 +51,14 @@ async function viewBoard() {
       <div class="kpi"><span class="label">Offers ready</span><b>${n("answered")}</b><p class="sub">compare and choose</p></div>
       <div class="kpi"><span class="label">Avg partner reply</span><b>${avg.toFixed(1)} days</b><p class="sub">synthetic partners</p></div>
     </div>
+    ${(b.partner_mail_to_match || []).length ? `<div class="card" style="margin:0 0 16px;border-color:#E5B39C;background:var(--terra-tint)"><h2>Partner mail to match</h2>
+      <p class="sub" style="color:var(--terra-ink)">The agent could not tell which request these answer. Pick the request; the mail is then read as usual.</p>
+      <ul class="att">${b.partner_mail_to_match.map(m => `<li><div class="row-act" style="flex-wrap:wrap;gap:8px"><span class="t"><b>${esc(m.subject || "(no subject)")}</b>
+        <span class="mono" style="color:var(--muted)">${esc(m.from)}${m.reading && m.reading.note ? " · " + esc(m.reading.note) : ""}</span></span>
+        <select data-match="${esc(m.mail_id)}" style="height:30px;border:1px solid var(--sand);border-radius:6px;background:var(--white)"><option value="">Answers request…</option>
+        ${(() => { const open = cards.filter(c => ["waiting", "chased", "unclear"].includes(c.status));
+                   const theirs = open.filter(c => c.partner_id === m.partner_id); return theirs.length ? theirs : open; })().map(c =>
+          `<option value="${c.id}">${esc(c.request_id)} · ${esc(c.partner)} · ${esc(c.what)}</option>`).join("")}</select></div></li>`).join("")}</ul></div>` : ""}
     <div class="filters">${teamChips()}
       <div class="fchips" style="margin-left:auto">
         <button class="btn btn-outline btn-sm" id="chase" ${b.chase_due ? "" : "disabled"}>Draft reminders (${b.chase_due})</button>
@@ -65,19 +74,29 @@ async function viewBoard() {
   $$("[data-draft]").forEach(x => x.onclick = () => { openDraft = +x.dataset.draft; app.go("check"); });
   $$("[data-write]").forEach(x => x.onclick = async () => { const d = await post(`/api/partner-requests/${x.dataset.write}/draft`); toast("Request drafted, check it before sending"); openDraft = d.id; app.go("check"); });
   $$("[data-cmp]").forEach(x => x.onclick = () => { store.set("bo:trip", x.dataset.cmp); app.go("compare"); });
+  $$("[data-match]").forEach(x => x.onchange = async () => {
+    if (!x.value) return;
+    try { await post(`/api/partner-mails/${x.dataset.match}/match`, {partner_request_id: +x.value}); toast("Matched; the agent reads it now (logged)"); viewBoard(); } catch (e) { toast(e.message); }
+  });
+  $$("[data-decide]").forEach(x => x.onclick = async () => {
+    try { await post(`/api/partner-requests/${x.dataset.decide}/decide`, {available: x.dataset.v === "1"});
+          toast(x.dataset.v === "1" ? "Marked available (logged)" : "Marked not available: the specialist gets alternatives"); viewBoard(); } catch (e) { toast(e.message); }
+  });
 }
 function cardHtml(c) {
   let next;
   if (c.draft_id) next = `<button class="nx me" data-draft="${c.draft_id}">${c.status === "to_send" ? "Approve and send" : "Approve reminder"}</button>`;
   else if (c.status === "to_send") next = `<button class="nx me" data-write="${c.id}">Let the agent draft the request</button>`;
   else if (c.status === "waiting") next = c.chase_due ? `<div class="nx me">Overdue, draft a reminder</div>` : `<div class="nx wait">Agent chases after 3 days</div>`;
-  else if (c.status === "chased") next = `<div class="nx wait">Waiting; agent flags again</div>`;
+  else if (c.status === "chased") next = c.silent_after_chase ? `<div class="nx me">Still silent after a reminder: phone them or choose another</div>` : `<div class="nx wait">Reminder sent; flagged if still silent</div>`;
+  else if (c.status === "unclear") next = `<div class="nx me" style="display:flex;gap:6px;flex-wrap:wrap">Read the reply:
+      <button class="btn btn-sm" data-decide="${c.id}" data-v="1">Available</button><button class="btn btn-outline btn-sm" data-decide="${c.id}" data-v="0">Not available</button></div>`;
   else if (c.status === "answered") next = c.offer && c.offer.available ? `<button class="nx go" data-cmp="${c.request_id}">Compare and choose</button>` : `<div class="nx me">Not available, find another</div>`;
   else next = `<div class="nx wait">Closed</div>`;
   return `<div class="bcard"><div class="top"><span class="label">${esc(c.destination || "")}</span><span class="label ${c.chase_due ? "hot" : ""}">${ago(c.age_hours)}</span></div>
     <div class="fam">Family ${esc(c.family || "")}</div><div class="who">${esc(c.partner)}</div>
     <div class="what">${esc(c.what)} · ${esc(c.request_id)}</div>
-    ${c.offer ? `<div>${c.offer.available ? eur(c.offer.price_eur) : "Not available"}<br><span style="color:var(--muted)">${esc(c.offer.note)}</span></div>` : ""}
+    ${c.offer ? `<div>${c.offer.available === true ? eur(c.offer.price_eur) : c.offer.available === false ? "Not available" : "Not clear yet"}<br><span style="color:var(--muted)">${esc(c.offer.note)}</span></div>` : ""}
     <span class="ch">Email · English</span>${next}</div>`;
 }
 
@@ -133,7 +152,8 @@ async function viewCompare() {
 async function viewInvoices() {
   const rows = await api("/api/invoices");
   badge("invoices", rows.filter(r => !r.resolved && r.status !== "match").length);
-  const S = {match: ["Matches", "sea"], differs: ["Differs", "terra"], unknown: ["Cannot place", "gold"]};
+  const S = {match: ["Matches", "sea"], differs: ["Differs", "terra"], unknown: ["Cannot place", "gold"],
+             duplicate: ["Duplicate", "terra"], check: ["Trip not booked", "terra"]};
   const cols = "grid-template-columns:130px minmax(0,1.3fr) 150px 110px 110px minmax(0,1.6fr) 110px";
   $("#view").innerHTML = `<div class="vhead"><span class="label">${rows.length} invoices</span><h1>Invoices</h1>
     <p>The invoice matcher compares each supplier invoice with the offer we accepted. Paying stays your decision.</p></div>
@@ -143,7 +163,12 @@ async function viewInvoices() {
       <span class="mono">${c.amount_eur != null ? eur(c.amount_eur) : ""}</span><span class="mono">${c.expected_eur != null ? eur(c.expected_eur) : ""}</span>
       <span>${esc(c.note)}</span><span>${c.resolved ? "done" : `<button class="btn btn-outline btn-sm" data-resolve="${c.id}">Handled</button>`}</span></li>`).join("")
       || `<li class="empty"><b>No invoices yet</b>Invoices arrive by mail and are picked up after triage.</li>`}</ul>`;
-  $$("[data-resolve]").forEach(b => b.onclick = async () => { await post(`/api/invoices/${b.dataset.resolve}/resolve`); toast("Marked as handled (logged)"); viewInvoices(); });
+  $$("[data-resolve]").forEach(b => b.onclick = async () => {
+    const row = rows.find(r => String(r.id) === b.dataset.resolve);
+    let note = "";
+    if (["duplicate", "differs", "check"].includes(row.status)) { note = (window.prompt("How was this resolved? (for example: credit note asked, not paid twice)") || "").trim(); if (!note) return; }
+    try { await post(`/api/invoices/${b.dataset.resolve}/resolve`, {note}); toast("Marked as handled (logged)"); viewInvoices(); } catch (e) { toast(e.message); }
+  });
 }
 
 async function viewFiles() {

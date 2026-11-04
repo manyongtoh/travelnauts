@@ -1,30 +1,34 @@
 # From sandbox to pilot
 
-The proposal's route is synthetic, then anonymised, then live. This sandbox is the synthetic stage.
+The route is synthetic, then anonymised, then live. This sandbox is the synthetic stage, and it is tested as far
+as synthetic data allows (see [test-reports](test-reports/README.md)). What remains needs Travelnauts.
 
-## Needed from Travelnauts for the anonymised stage
+The working lists are in [lists](lists): **open questions** (33, with who answers and by when) and **tests and
+next steps** (with status and results). They are the source of truth; this page is the short version.
+
+## Needed from Travelnauts
 
 | What | Replaces | Where it plugs in |
 |---|---|---|
-| TravelSpirit API documentation and a test account (read API now, two-way API from January 2027) | `FakeTravelSpirit` | `brain/travelspirit/client.py`, `RealTravelSpirit` |
-| 30 to 50 anonymised proposals that were booked, plus 20 partner mails | the 80 synthetic past proposals | `brain/synth` loader for anonymised data |
-| The Excel calculation template | margins in `pricing.py` (sandbox assumptions) | `brain/pricing.py` |
-| The Galileo commands the team actually uses | the placeholder formats | `brain/agents/galileo.py`, `ALLOWED` |
-| Current booking terms, payment terms and house style notes | `k-policy-*`, `k-voice` | knowledge items, approved by the owner |
-| Team setup: which destinations per team, who owns which knowledge | `brain/synth/world.py` | teams, employees |
+| TravelSpirit API documentation and a test account (read API now, two-way from January 2027) | the fake TravelSpirit | `brain/travelspirit/client.py` |
+| Where mail is read (TravelSpirit Mail or Exchange), with attachments | mail from the fake | the mail connector |
+| 30 to 50 anonymised booked proposals and about 20 partner mails | synthetic examples | `brain/synth` loader |
+| The Excel calculation template and margin rules | sandbox margins | `brain/pricing.py` |
+| The Galileo commands the team uses | placeholder formats | `brain/agents/galileo.py` |
+| Booking terms, payment terms, house style | placeholder policy notes | knowledge items |
+| Team setup and knowledge owners | synthetic teams | teams, employees |
+| Answers to the flow questions (Q1 to Q11) | sandbox defaults | settings; Q1 and Q4 are built both ways |
+| Azure subscription and Entra registrations | local runs | `infra/`, deploy workflow |
 
-## To build next
+## Next, in order
 
-1. **Gemma run.** Run the bench with `BRAIN_MODEL=ollama:gemma4`, compare with the stand-in, tune the
-   instructions. If Gemma on Ollama struggles with tool based structured output, switch the agents to
-   native JSON output (one setting in Pydantic AI).
-2. **Postgres and vector search.** The tables are written for Postgres too (docker compose), but not yet
-   tested against a Postgres server. Then replace the
-   TF-IDF search in `knowledge/store.py` with embeddings in pgvector behind the same `search()`.
-3. **Anonymiser: built.** `brain ingest` loads a TravelSpirit export through it. Before the first real
-   export, test it on a sample of 200 real mails with a person checking the output, and extend the
-   patterns for anything it misses.
-4. **Measurement.** Baseline the minutes per request with the pilot group before go-live, then compare.
-   The edit share per draft and the gap list are already recorded.
-5. **Azure.** Container on Azure, Entra ID login for the screens, secrets in Key Vault, logs to the
-   existing Azure tenant. Pentest and DPIA before customer channels.
+1. **Agree:** contract, success measure, inventory questionnaire, interviews with specialists and back office.
+2. **Gemma 4 on the bench** (can start now): see [gemma.md](gemma.md).
+3. **Real TravelSpirit adapter** with contract tests on the test account.
+4. **Anonymised data:** run the anonymiser on 200 real mails with a person checking; sender matching, sign-off
+   names, partner replies and invoices on real mail.
+5. **Azure test environment:** deploy, sign-in, alerts to real people, backup drill on point-in-time restore,
+   Prompt Shields on the held-out injection set.
+6. **Before the pilot:** processing agreement and DPIA, baseline measurement, pilot group onboarding.
+7. **Pilot** on anonymised data, read only, weekly review of edit share, gaps and alerts.
+8. **Before live:** outside penetration test, go or no-go against agreed criteria.

@@ -60,6 +60,23 @@ def plan_partner_requests(s: Session, request_id: str) -> list[PartnerRequest]:
     return created
 
 
+def current_requests(s: Session, request_id: str) -> list[PartnerRequest]:
+    """The partner requests that still matter: the local agent, and hotels that are on the latest version of the
+    route. A hotel that said no and was replaced by another no longer counts against the trip."""
+    from .change import latest_version
+    prs = list(s.scalars(select(PartnerRequest).where(PartnerRequest.request_id == request_id)).all())
+    v = latest_version(s, request_id)
+    if v is None:
+        return prs
+    hotels = {r["hotel"] for r in v.data.get("route", [])}
+    out = []
+    for pr in prs:
+        p = s.get(Partner, pr.partner_id)
+        if p is None or p.kind != "hotel" or p.name in hotels:
+            out.append(pr)
+    return out
+
+
 def draft_request_mail(s: Session, partner_request_id: int) -> Draft:
     pr = s.get(PartnerRequest, partner_request_id)
     tr = s.get(TripRequest, pr.request_id)
@@ -170,16 +187,49 @@ def read_reply(s: Session, mail_id: str) -> dict:
         info = server.call(s, me, "partners.read_reply", mail_id=mail_id)
         out, _ = run_step(s, "partner_reply", PartnerReply, READ_INSTRUCTIONS, {"mail": info["mail"]})
         m = s.get(Mail, mail_id)
-        m.status = "done"
         if not info["partner_request_id"]:
-            box["output"] = "reply not matched to a request"
+            m.status = "needs_person"  # never dropped: the back office matches it on the board
+            m.triage = (m.triage or {}) | {"partner_reading": {"available": out.available, "price_eur": out.price_eur, "note": out.note}}
+            box["output"] = "reply not matched to a request: back office matches it"
             s.commit()
             return {"matched": False}
+        m.status = "done"
         pr = s.get(PartnerRequest, info["partner_request_id"])
-        pr.status = "declined" if out.available is False else "answered"
+        # only a clear yes counts as confirmed; a question, a 'we will come back to you' or an alternative needs a person
+        pr.status = "declined" if out.available is False else "answered" if out.available is True and not out.needs_person else "unclear"
         pr.answered_at = utcnow()
         pr.offer = {"available": out.available, "price_eur": out.price_eur, "note": out.note, "needs_person": out.needs_person,
                     "mail_id": mail_id}
         s.commit()
+        if pr.status == "declined":
+            from ..jobs import enqueue, pending
+            if not pending(s, "alternatives", pr.request_id) and not s.scalars(select(Draft).where(
+                    Draft.request_id == pr.request_id, Draft.kind == "alternatives", Draft.status == "draft")).first():
+                enqueue(s, "alternatives", {"request_id": pr.request_id})  # the specialist gets options, not just a 'no'
+                s.commit()
         box["output"] = f"{pr.status} {out.price_eur or ''}"
     return {"matched": True, "partner_request_id": pr.id, "status": pr.status}
+
+
+def decide(s: Session, partner_request_id: int, available: bool, price_eur: float | None, by: str, note: str = "") -> PartnerRequest:
+    """A person read an unclear answer and decides what it means."""
+    from .. import auditchain
+    pr = s.get(PartnerRequest, partner_request_id)
+    pr.status = "answered" if available else "declined"
+    pr.offer = (pr.offer or {}) | {"available": available, "price_eur": price_eur if price_eur is not None else (pr.offer or {}).get("price_eur"),
+                                   "needs_person": False, "decided_by": by, "note": note or (pr.offer or {}).get("note", "")}
+    pr.answered_at = pr.answered_at or utcnow()
+    auditchain.append(s, by, "partner_answer_decided", "partner_request", pr.id, ref="available" if available else "not available")
+    s.commit()
+    if not available:
+        from ..jobs import enqueue
+        enqueue(s, "alternatives", {"request_id": pr.request_id})
+        s.commit()
+    return pr
+
+
+def silent_after_chase(s: Session, now=None) -> list[PartnerRequest]:
+    """Chased and still silent: time to phone them or choose another partner."""
+    now = now or utcnow()
+    cutoff = now - timedelta(days=get_settings().chase_partner_after_days)
+    return list(s.scalars(select(PartnerRequest).where(PartnerRequest.status == "chased", PartnerRequest.chased_at <= cutoff)).all())

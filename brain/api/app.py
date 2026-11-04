@@ -448,12 +448,17 @@ def invoice_checks(user: Principal = Depends(need("backoffice.board"))):
 
 
 @app.post("/api/invoices/{cid}/resolve")
-def resolve_invoice(cid: int, user: Principal = Depends(need("backoffice.board"))):
+def resolve_invoice(cid: int, body: dict | None = None, user: Principal = Depends(need("backoffice.board"))):
     from ..db import InvoiceCheck
     with db.session() as s:
         c = s.get(InvoiceCheck, cid) or _404("invoice")
+        why = str((body or {}).get("note", ""))[:300]
+        if c.status in ("duplicate", "differs", "check") and not why:
+            raise HTTPException(400, "Say how this was resolved (for example: credit note asked, not paid twice)")
         c.resolved = True
-        auditchain.append(s, user.id, "invoice_resolved", "invoice", cid, ref=c.status)
+        if why:
+            c.note = (c.note + " | Opgelost: " + why).strip(" |")
+        auditchain.append(s, user.id, "invoice_resolved", "invoice", cid, ref=c.status, content=why or None)
         s.commit()
         return as_dict(c)
 
@@ -500,6 +505,44 @@ def draft_partner_request(prid: int, user: Principal = Depends(need("backoffice.
 def job_followups(user: Principal = Depends(need("team.metrics"))):
     with db.session() as s:
         return [as_dict(d) for d in followup.run_followups(s)]
+
+
+class MatchMail(BaseModel):
+    partner_request_id: int
+
+
+@app.post("/api/partner-mails/{mail_id}/match")
+def match_partner_mail(mail_id: str, body: MatchMail, user: Principal = Depends(need("backoffice.board"))):
+    """The back office says which request a partner mail answers; it is then read like any other reply."""
+    from ..db import PartnerRequest
+    with db.session() as s:
+        m = s.get(Mail, mail_id) or _404("mail")
+        pr = s.get(PartnerRequest, body.partner_request_id) or _404("partner request")
+        if m.status != "needs_person":
+            raise HTTPException(400, "This mail is already matched")
+        m.triage = (m.triage or {}) | {"partner_request_id": pr.id}
+        m.partner_id = m.partner_id or pr.partner_id
+        m.status = "triaged"
+        auditchain.append(s, user.id, "partner_mail_matched", "mail", mail_id, ref=str(pr.id))
+        s.commit()
+        jobs.enqueue(s, "partner_reply", {"mail_id": mail_id})
+        s.commit()
+        return {"mail_id": mail_id, "partner_request_id": pr.id}
+
+
+class Decide(BaseModel):
+    available: bool
+    price_eur: float | None = None
+    note: str = ""
+
+
+@app.post("/api/partner-requests/{prid}/decide")
+def decide_partner_answer(prid: int, body: Decide, user: Principal = Depends(need("backoffice.board"))):
+    """An unclear partner answer, read by a person: available or not."""
+    with db.session() as s:
+        from ..db import PartnerRequest
+        s.get(PartnerRequest, prid) or _404("partner request")
+        return as_dict(partner_desk.decide(s, prid, body.available, body.price_eur, user.id, body.note))
 
 
 @app.post("/api/jobs/chases")

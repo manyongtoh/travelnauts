@@ -44,6 +44,7 @@ SCHEDULE: dict[str, tuple[str, int | None]] = {
     "next_trips": ("next_trip", 7 * 24 * 60),
     "retention": ("maintenance", 24 * 60),
     "extras": ("extras", None),
+    "alternatives": ("alternatives", None),
     "roadbook": ("roadbook", None),
     "alerts": ("maintenance", 15),
 }
@@ -116,6 +117,7 @@ def _handlers() -> dict[str, Callable[[Session, dict], dict]]:
         "next_trips": next_trips,
         "retention": lambda s, p: retention(s),
         "extras": lambda s, p: {"draft_id": sales.extras(s, p["request_id"]).id},
+        "alternatives": lambda s, p: {"draft_id": sales.alternatives(s, p["request_id"]).id},
         "roadbook": lambda s, p: {"draft_id": backoffice.roadbook(s, p["request_id"]).id},
         "alerts": lambda s, p: __import__("brain.alerts", fromlist=["notify"]).notify(s),
     }

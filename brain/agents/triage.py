@@ -108,7 +108,16 @@ def triage_mail(s: Session, mail_id: str) -> dict:
             escalated = True
         team = team_for(s, res.destination)
         out = res.model_dump() | {"team_id": team.id if team else None, "escalated": escalated}
-        if not m.family_id:  # real mail carries an address, not a family: match it, or open a new relation
+        if not m.family_id and not m.partner_id:  # a partner writing from their own address or domain
+            partner = resolve_partner(s, m.sender, m.body)
+            if partner is not None:
+                m.partner_id = partner.id
+                out["partner_id"] = partner.id
+        if m.partner_id and res.category in ("question", "new_request", "change", "complaint"):
+            # a partner's mail is never a family request: whatever it looks like, it is their answer to us
+            out["category"] = "partner_reply"
+            res.category = "partner_reply"
+        if not m.family_id and not m.partner_id:  # real mail carries an address, not a family: match it, or open a new relation
             fam, notes = resolve_family(s, m.sender, res, m.body, m.subject)  # stored address; the model sees the domain
             out.update(notes)
             if fam is not None:
@@ -332,6 +341,25 @@ def suggest_families(s: Session, surname: str, subject: str, body: str) -> list[
         for f in s.scalars(select(Family).where(func.lower(Family.surname) == surname.lower()).limit(5)).all():
             out.setdefault(f.id, {"family_id": f.id, "why": []})["why"].append(f"same surname ({surname})")
     return sorted(out.values(), key=lambda x: -len(x["why"]))[:5]
+
+
+def resolve_partner(s: Session, sender: str | None, body: str | None = None):
+    """A partner by exact address, or by their own domain when only one partner uses it (staff write from
+    reservations@, accounts@, a person's address). Free mail domains never count: anyone can have one."""
+    from ..anonymise import FREEMAIL
+    from ..db import Partner
+    addr = original_sender(sender, body)
+    if not addr:
+        return None
+    partners = s.scalars(select(Partner)).all()
+    exact = [p for p in partners if normalise_address(p.email) == addr]
+    if len(exact) == 1:
+        return exact[0]
+    domain = addr.rsplit("@", 1)[1]
+    if domain in FREEMAIL or domain in OWN_DOMAINS:
+        return None
+    same = [p for p in partners if normalise_address(p.email).rsplit("@", 1)[-1] == domain]
+    return same[0] if len(same) == 1 else None
 
 
 def resolve_family(s: Session, sender: str | None, res, body: str | None = None, subject: str = "") -> tuple:

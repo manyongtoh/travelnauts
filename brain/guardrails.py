@@ -170,12 +170,9 @@ DASHES = re.compile("[\u2013\u2014]")
 
 
 def _amounts(text: str) -> list[int]:
-    out = []
-    for m in EURO.finditer(text):
-        raw = (m.group(1) or m.group(2)).replace(".", "").replace(",", "")
-        if raw.isdigit():
-            out.append(int(raw))
-    return out
+    """Euro amounts in a text, rounded to the euro (see brain/money.py for how 1.240,50 and 1,240.50 are read)."""
+    from .money import amounts
+    return [int(round(a)) for a in amounts(text) if a >= 1]
 
 
 def check_output(text: str, allowed_prices: list[float] | None = None, known_hotels: set[str] | None = None,

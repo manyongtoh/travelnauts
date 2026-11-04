@@ -48,13 +48,34 @@ def invoices(s: Session, mail_id: str) -> InvoiceCheck:
                         "return the invoice number, our booking reference, the total amount in euro and the payment term in days.",
                         {"mail": info["mail"]})
         pr = None
+        rows = []
         if f.reference:
-            q = select(PartnerRequest).where(PartnerRequest.request_id == f.reference.upper().replace("TN-", "").lower())
-            if m.partner_id:
-                q = q.where(PartnerRequest.partner_id == m.partner_id)
-            pr = s.scalars(q).first()
-        expected = (pr.offer or {}).get("price_eur") if pr else None
-        if pr is None or expected is None or f.amount_eur is None:
+            rows = s.scalars(select(PartnerRequest).where(
+                PartnerRequest.request_id == f.reference.upper().replace("TN-", "").lower())).all()
+            mine = [r for r in rows if r.partner_id == m.partner_id] if m.partner_id else rows
+            pr = mine[0] if len(mine) == 1 else None  # several partners on the trip and no sender match: a person picks
+        expected = (pr.offer or {}).get("price_eur") if pr and pr.status == "answered" else None
+        from ..money import amounts as _amounts_in
+        in_text = _amounts_in(info["mail"]["subject"] + "\n" + info["mail"]["body"] + "\n" +
+                              "\n".join(a["text"] for a in info["mail"].get("attachments", [])))
+        misread = f.amount_eur is not None and in_text and all(abs(f.amount_eur - a) > 1 for a in in_text)
+        if f.invoice_no:
+            dup = s.scalars(select(InvoiceCheck).where(InvoiceCheck.invoice_no == f.invoice_no,
+                                                       InvoiceCheck.partner_id == m.partner_id)).first()
+        else:  # no number read: same partner, same trip and same amount counts as a likely duplicate
+            dup = s.scalars(select(InvoiceCheck).where(InvoiceCheck.partner_id == m.partner_id, InvoiceCheck.partner_id.is_not(None),
+                                                       InvoiceCheck.request_id == (pr.request_id if pr else None),
+                                                       InvoiceCheck.amount_eur == f.amount_eur)).first() if pr else None
+        trip = s.get(TripRequest, pr.request_id) if pr else None
+        if misread:
+            status, note = "check", f"Bedrag gelezen als {f.amount_eur} euro, maar de factuur noemt {', '.join(f'{a:g}' for a in in_text)}: controleer"
+        elif dup is not None:
+            status, note = "duplicate", f"Zelfde factuurnummer {f.invoice_no} al ontvangen op {dup.created_at:%d-%m}: niet nog eens betalen"
+        elif trip is not None and trip.status != "booked":
+            status, note = "check", f"Reis {trip.id.upper()} is niet geboekt (status {trip.status.replace('_', ' ')}): eerst navragen"
+        elif pr is None and rows and not m.partner_id:
+            status, note = "unknown", "Afzender onbekend en meerdere partners op deze reis: kies de partner"
+        elif pr is None or expected is None or f.amount_eur is None:
             status, note = "unknown", "Geen geaccepteerde offerte gevonden bij deze referentie"
         elif abs(f.amount_eur - expected) <= 1:
             status, note = "match", "Bedrag klopt met de geaccepteerde offerte"
@@ -165,11 +186,16 @@ def booking_check(s: Session) -> dict:
             dd = date.fromisoformat(t["depart_date"]) if t["depart_date"] else None
             if dd and dd + timedelta(days=t.get("days") or 0) < clock_today():
                 continue  # already travelled and home again: nothing left to prepare
-            prs = s.scalars(select(PartnerRequest).where(PartnerRequest.request_id == t["id"])).all()
+            from .partner_desk import current_requests
+            prs = current_requests(s, t["id"])
             missing = []
             open_prs = [pr for pr in prs if pr.status not in ("answered",)]
             if open_prs:
                 missing.append(f"{len(open_prs)} partner(s) not confirmed")
+            if any(pr.status == "unclear" for pr in prs):
+                missing.append("a partner answer needs reading: decide on the board")
+            if any(pr.status == "chased" for pr in prs):
+                missing.append("a partner is silent after a reminder: phone them or choose another")
             if any(pr.status == "answered" and (pr.offer or {}).get("available") is False for pr in prs):
                 missing.append("a partner is not available: find another")
             if not s.scalars(select(Draft).where(Draft.request_id == t["id"], Draft.kind.in_(["proposal", "change"]),

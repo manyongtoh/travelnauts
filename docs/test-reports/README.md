@@ -7,21 +7,22 @@ each change, so this report can be reproduced with the commands at the bottom.
 
 | Area | Result |
 |---|---|
-| Test suite on SQLite | 162 passed |
-| Test suite on Postgres 16 | 161 passed, 1 skipped (a SQLite-only schema test) |
+| Test suite on SQLite | 174 passed |
+| Test suite on Postgres 16 | 173 passed, 1 skipped (a SQLite-only schema test) |
 | Quality bench (`brain bench --gate`) | all 11 limits met |
 | Security tests | 17 passed (16 API tests, 1 browser test on 7 screens) |
 | Dependency scan (pip-audit) | no known vulnerabilities |
 | Code scan (bandit, medium and high) | no findings |
 | Two weeks of simulated operation on Postgres, with 6 incidents | 0 failed jobs, 0 lost or doubled mails, audit chain ok every day |
 | One family's whole journey, first mail to next trip | every hand-off happens without anyone remembering a step |
+| The back office day for one trip, with partner mail written like real mail | replies read and matched, chasing only the silent, invoices checked |
 | Alerts during the two weeks | the right alert on each incident that needs a person, none on incidents that heal themselves, none on quiet days |
 | Backup and restore drill | passed: counts and audit chain identical, newest migration runs on the restored data |
 | Load test, 8 workers | 1,613 mails, none handled twice, none left |
 
 ## What the tests found, and what was fixed
 
-Thirty problems surfaced. All are fixed and each now has a test, so they cannot come back unnoticed.
+Forty-one problems surfaced. All are fixed and each now has a test, so they cannot come back unnoticed.
 
 | # | Found by | Problem | Fix |
 |---|---|---|---|
@@ -54,6 +55,17 @@ Thirty problems surfaced. All are fixed and each now has a test, so they cannot 
 | 28 | TravelSpirit faults | Every job failed for good after about 6 minutes of TravelSpirit being down. | Jobs wait up to 12 hours without using retries; it is not hammered; alert after an hour. |
 | 29 | TravelSpirit faults | Failed and refused tool calls disappeared from the log when the work was undone. | They are written back after the rollback. |
 | 30 | Availability | A proposal could go out while every partner was still checking, without saying so. | One setting: add "onder voorbehoud", or wait for all; a partner that said no always stops it. |
+| 31 | Back office journey | Real partner mail carries an address, not a partner: no partner reply was ever read. | Partners matched by address, or by their own domain when only one partner uses it. |
+| 32 | Back office journey | A partner reply without our reference was taken for a family question. | Mail from a known partner is always a partner reply. |
+| 33 | Back office journey | A reply that could not be matched to a request was marked done and never seen again. | It waits on the board under "Partner mail to match". |
+| 34 | Back office journey | "We will come back to you" counted as available, and the board showed it as "not available". | It is "Answer needs reading"; one click decides. |
+| 35 | Back office journey | Partners that had answered were chased anyway. | Fixed by 31: only silent partners are chased. |
+| 36 | Back office journey | A partner's "no" left the specialist with nothing. | Alternatives are drafted for the specialist straight away. |
+| 37 | Back office journey | A partner silent after a reminder was never flagged. | Flagged on the board and in the booking file: phone them or choose another. |
+| 38 | Back office journey | "EUR 1.240" was read as 1.24 euro, and the price check turned "1.240,50" into 124,050. | One euro reader for the whole brain; invoice amounts are cross-checked against the mail itself. |
+| 39 | Back office journey | The same invoice sent twice was not caught. | Same number, or same partner, trip and amount: "Duplicate", resolving it needs a reason. |
+| 40 | Back office journey | With several partners on a trip, an invoice could be checked against another partner's offer; an invoice for a trip that is not booked was not flagged. | Only a sure match; "Trip not booked" when it is not. |
+| 41 | Back office journey | A hotel that said no kept the booking file incomplete, even after another hotel was chosen. | Only partners on the latest route count. |
 | 10 | Backup drill | `brain migrate` failed on a database that was built without migrations. | It now adopts such a database only if it matches the code exactly, and otherwise stops without changing anything. |
 
 Two code scan warnings (a fixed temporary folder in the simulation, a table name in a query) were low risk in
@@ -133,6 +145,19 @@ Next layer: Azure AI Content Safety Prompt Shields, in the Azure test environmen
 | 3 weeks out | brain | drafts the roadbook and vouchers once partners confirmed; watches the flight |
 | after the trip | family, team lead | complaint from the same address reaches the team lead, linked to the trip |
 | 4 months later | brain | next-trip idea |
+
+## The back office day
+
+`scripts/journey_backoffice.py` (and `tests/test_journey_backoffice.py`) follows one trip through the back office,
+with partner mail written the way partners write: from reservations@ or info@, with or without our reference.
+
+| When | What happens |
+|---|---|
+| Monday | specialist asks partners; back office approves the five request mails |
+| Tuesday | a confirmation with "EUR 1.240" (read as 1,240 euro), a "fully booked" without reference (matched to the only open request of that hotel, alternatives drafted for the specialist), a "we will come back to you" (needs reading) |
+| a week later | reminders only to the two silent partners |
+| two weeks later | still silent after the reminder: flagged on the board and in the booking file |
+| invoices | the confirmed partner's invoice matches; the same invoice again is a duplicate; the silent partner's invoice cannot be placed |
 
 ## Backup and restore
 
