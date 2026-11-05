@@ -14,7 +14,6 @@ from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 
 from .config import get_settings
-from .clock import utcnow
 
 
 class Base(DeclarativeBase):

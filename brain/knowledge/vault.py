@@ -16,7 +16,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 
 from sqlalchemy import select

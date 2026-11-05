@@ -18,7 +18,6 @@ from sqlalchemy.orm import Session
 
 from .clock import utcnow
 from .db import Job, Mail, Setting
-from .clock import utcnow
 
 MAX_ATTEMPTS = 3
 UPSTREAM = ("TravelSpiritUnavailable", "TimeoutError", "ConnectionError", "ConnectTimeout", "ReadTimeout")

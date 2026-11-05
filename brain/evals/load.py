@@ -70,7 +70,7 @@ def _approver(url: str, ids: list[int], who: str) -> int:
 
 def run(mails: int = 600, workers: int = 4, seed: int = 42, timeout: int = 900) -> dict:
     from .. import auditchain, db, jobs
-    from ..db import AgentRun, Draft, Job, Mail, TripRequest
+    from ..db import AgentRun, Job, Mail, TripRequest
     from ..synth.generate import build
     url = os.environ.get("BRAIN_DATABASE_URL", "")
     build(seed, hard=False)
@@ -82,7 +82,7 @@ def run(mails: int = 600, workers: int = 4, seed: int = 42, timeout: int = 900) 
     ctx = mp.get_context("spawn")
     t0 = time.time()
     with ctx.Pool(workers) as pool:
-        counts = pool.starmap(_worker, [(url, f"w{i}", t0 + timeout) for i in range(workers)])
+        pool.starmap(_worker, [(url, f"w{i}", t0 + timeout) for i in range(workers)])
     secs = time.time() - t0
     with db.session() as s:
         triage_runs = Counter(r.subject for r in s.scalars(select(AgentRun).where(AgentRun.agent == "triage")).all())

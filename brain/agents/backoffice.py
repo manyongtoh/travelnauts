@@ -9,14 +9,13 @@
 """
 from __future__ import annotations
 
-import re
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..db import Draft, InvoiceCheck, Mail, Partner, PartnerRequest, Setting, TripRequest
+from ..db import Draft, InvoiceCheck, Mail, PartnerRequest, Setting, TripRequest
 from ..files import files_dir
 from ..identity import agent
 from ..synth.world import DESTINATIONS

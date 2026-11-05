@@ -2,7 +2,7 @@
 unreliable partners. Findings go to the back office; nothing is changed automatically."""
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 

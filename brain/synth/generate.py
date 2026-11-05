@@ -3,12 +3,12 @@ knowledge, an inbox and some trips already in progress. Deterministic for a give
 from __future__ import annotations
 
 import random
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from sqlalchemy import select
 
 from .. import db
-from ..db import (AgentRun, Draft, Employee, Family, KnowledgeGap, KnowledgeItem, Mail, Partner, PartnerRequest,
+from ..db import (Draft, Employee, Family, KnowledgeItem, Mail, Partner, PartnerRequest,
                   PastProposal, PriceItem, Team, TripRequest)
 from .world import BACK_OFFICE, CITIES, DESTINATIONS, FIRST_NAMES, STAFF, SURNAMES, TEAMS, WISHES
 from ..clock import utcnow

@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from ..db import Draft
 from ..knowledge.store import MIN_SCORE, KnowledgeBase
-from ..synth.world import DESTINATIONS
 from ..identity import agent
 from ..toolserver import server
 from .common import audit, run_step

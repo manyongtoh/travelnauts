@@ -14,7 +14,7 @@ import hashlib
 import json
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any, Callable
 
 from sqlalchemy import select
@@ -223,7 +223,7 @@ def prices_read(s: Session, destination: str | None = None) -> list[dict]:
     return [as_dict(p) | {"valid_until": p.valid_until.isoformat() if p.valid_until else None} for p in s.scalars(q).all()]
 
 
-def match_partner_request(s: Session, m) -> "PartnerRequest | None":
+def match_partner_request(s: Session, m) -> "PartnerRequest | None":  # noqa: F821  imported inside, avoids a cycle
     """Which of our requests does this partner mail answer? Only a sure match: a person picks otherwise.
     1. a person already chose (back office matched it); 2. our reference and this partner; 3. our reference and the
     only partner asked on that trip; 4. no reference, but this partner has exactly one open request with us."""
@@ -247,8 +247,7 @@ def match_partner_request(s: Session, m) -> "PartnerRequest | None":
 @server.tool("partners.read_reply")
 def partners_read_reply(s: Session, mail_id: str) -> dict:
     """Read a partner's reply mail and the request it answers (matched on the TN reference)."""
-    import re as _re
-    from .db import Mail, PartnerRequest
+    from .db import Mail
     m = s.get(Mail, mail_id)
     pr = match_partner_request(s, m)
     from .files import pdf_text

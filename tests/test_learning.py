@@ -1,8 +1,7 @@
 """The brain learns from daily work: edits, outcomes, answers, ages, expertise, partners and search.
 Nothing it learns is used before a person approves it."""
-from datetime import datetime, timedelta
+from datetime import timedelta
 
-from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from brain import clock, jobs, learning

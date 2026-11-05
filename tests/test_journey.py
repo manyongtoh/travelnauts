@@ -78,7 +78,6 @@ def test_a_follow_up_cannot_be_sent_after_the_family_booked(world):
 def test_go_live_does_not_flood_old_bookings_with_drafts(world):
     """On the first run the booking check sees every booked trip in TravelSpirit. Only trips still to come get work."""
     from datetime import timedelta
-    from brain import jobs
     from brain.agents import backoffice
     from brain.clock import today
     from brain.db import Job, TripRequest

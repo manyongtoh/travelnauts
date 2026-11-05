@@ -14,13 +14,12 @@ Everything is a draft for the specialist.
 from __future__ import annotations
 
 import random
-from datetime import date
 
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..db import Draft, Employee, Mail, PriceItem, TripRequest
+from ..db import Draft, Employee, Mail, TripRequest
 from ..guardrails import check_output
 from ..identity import agent
 from ..synth.world import DESTINATIONS

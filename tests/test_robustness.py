@@ -1,14 +1,13 @@
 """The core under stress: failing models, parallel workers, failed agents, privacy at the model boundary."""
 import multiprocessing as mp
 import os
-from datetime import datetime
 
 import pytest
 from sqlalchemy import select, text
 
 from brain import auditchain, jobs
 from brain.agents import knowledge_desk, proposal, triage
-from brain.db import AgentRun, AuditEntry, Draft, Job, Mail, ModelCall, Quote, TripRequest
+from brain.db import AgentRun, AuditEntry, Job, Mail, ModelCall, Quote, TripRequest
 from brain.guardrails import PrivacyError, Pseudonymiser
 
 

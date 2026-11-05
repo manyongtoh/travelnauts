@@ -27,7 +27,7 @@ INJECTION_PATTERNS = [
     (r"\b(korting|discount)\b.{0,40}\b(toepassen|apply|geven|without asking|zonder overleg)", "price_manipulation"),
     (r"\b(send|forward|stuur|mail|e-?mail)\b.{0,60}\b(all|alle|every|the full|het hele)\b.{0,40}(customers?|klant\w*|dossiers?|data|\w*gegevens|list|lijst)", "exfiltration"),
     (r"\b(password|wachtwoord|api[\s_-]?key|token|credentials|inloggegevens)\b", "secrets"),
-    (r"<\s*(script|iframe)|<!--|​|‌|‍|⁠", "hidden_text"),
+    (r"<\s*(script|iframe)|<!--|\u200b|\u200c|\u200d|\u2060", "hidden_text"),
     (r"\b(BEGIN|END)\s+(INSTRUCTIONS|PROMPT|SYSTEM)\b", "instruction_block"),
     (r"[A-Za-z0-9+/]{120,}={0,2}", "encoded_blob"),
     (r"\b(book|boek|confirm|bevestig)\b.{0,40}\b(without|zonder)\b.{0,30}\b(approval|goedkeuring|specialist|check)", "bypass_human"),

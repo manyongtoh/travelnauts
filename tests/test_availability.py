@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from brain.agents import partner_desk, proposal
-from brain.db import Draft, PartnerRequest, TripRequest
+from brain.db import TripRequest
 from brain.workflow import CAVEAT, BlockedByCheck, approve_draft
 
 

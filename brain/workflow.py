@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
+from datetime import timedelta
 from difflib import SequenceMatcher
 
 from sqlalchemy import select

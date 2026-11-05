@@ -11,7 +11,6 @@ In Azure the same table lives in LiteLLM; here it is plain code so it runs offli
 from __future__ import annotations
 
 import os
-from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session

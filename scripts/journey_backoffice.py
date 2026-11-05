@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import select  # noqa: E402
 
 from brain import clock, db, jobs  # noqa: E402
-from brain.db import Draft, Employee, InvoiceCheck, Job, Mail, Partner, PartnerRequest, TripRequest  # noqa: E402
+from brain.db import Draft, Employee, Job, Mail, Partner, PartnerRequest, TripRequest  # noqa: E402
 
 T0 = datetime(2026, 11, 9, 8, 0)
 log: list[dict] = []

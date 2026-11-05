@@ -24,7 +24,7 @@ import subprocess
 from collections import Counter
 from datetime import datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 
 def _pg_restart(url: str) -> str:

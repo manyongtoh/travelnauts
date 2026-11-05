@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..db import Draft, Family, Mail, TripRequest, as_dict
+from ..db import Family, Mail, TripRequest, as_dict
 
 
 class TravelSpirit(Protocol):
