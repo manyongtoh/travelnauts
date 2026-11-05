@@ -66,7 +66,7 @@ def triage(ctx: dict) -> dict:
                  "destination": dest if cat not in ("other", "partner_reply", "invoice") else None,
                  "urgent": cat == "complaint" or "snel reageren" in low, "child_ages": [], "wishes": []}
     if cat == "new_request":
-        ages = re.search(r"kinderen (?:\(|van |zijn )([\d en]+?)(?: jaar|\)|\.)", low)
+        ages = re.search(r"kinderen (?:\(|van |zijn )([\d en]+?)(?: jaar|\)|\.| en [a-z])", low)
         out["child_ages"] = [int(a) for a in re.findall(r"\d+", ages.group(1))] if ages else []
         if (a := re.search(r"met (\d) volwassenen", low)):
             out["adults"] = int(a.group(1))
@@ -133,14 +133,13 @@ def proposal(ctx: dict) -> dict:
     if trip.get("wishes"):
         lines.append(f"Ik heb rekening gehouden met jullie wensen: {', '.join(trip['wishes'])}.")
     eur = f"{int(price['sell_eur']):,}".replace(",", ".")
-    lines.append(f"De reis kost ongeveer {eur} euro voor het hele gezin, inclusief vluchten, "
-                 f"hotels, transfers en de genoemde activiteiten. Dit is een indicatie.")
-    if price.get("warnings"):
-        lines.append("Een paar dingen checken we nog bij onze partners: " + "; ".join(price["warnings"]) + ".")
+    lines.append(f"De indicatie voor deze reis is € {eur} voor het hele gezin, inclusief vluchten, "
+                 f"hotels, transfers en de genoemde activiteiten."
+                 + (" Een paar prijzen zijn nog niet bevestigd." if price.get("warnings") else ""))
     if trip.get("budget_eur") and price["sell_eur"] > trip["budget_eur"] * 1.05:
         lines.append("Het komt iets boven jullie budget uit. Ik denk graag mee over een paar nachten minder of eenvoudigere hotels.")
-    lines += ["", "Laat gerust weten wat jullie ervan vinden, dan passen we het samen aan.", "", "Hartelijke groet,",
-              ctx["specialist"], "Travelnauts"]
+    lines += ["", "Laat ons weten wat jullie ervan vinden. We passen de route graag samen aan.", "", "Hartelijke groet,",
+              ctx["specialist"]]
     return {"subject": f"Jullie reis naar {trip['destination']}: een eerste voorstel", "body": "\n".join(lines),
             "used_sources": used}
 

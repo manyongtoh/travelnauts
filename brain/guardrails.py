@@ -175,6 +175,9 @@ def _amounts(text: str) -> list[int]:
     return [int(round(a)) for a in amounts(text) if a >= 1]
 
 
+INTERNAL = re.compile(r"\b(is|zijn) verlopen\b|\bprijs (is )?verlopen|vraag een nieuwe prijs op|price (has )?expired", re.I)
+
+
 def check_output(text: str, allowed_prices: list[float] | None = None, known_hotels: set[str] | None = None,
                  route_hotels: set[str] | None = None) -> list[str]:
     problems = []
@@ -189,6 +192,8 @@ def check_output(text: str, allowed_prices: list[float] | None = None, known_hot
             problems.append(f"Mentions {h}, which is not in this offer")
     if DASHES.search(text):
         problems.append("Contains em or en dashes")
+    if INTERNAL.search(text):  # the price check's notes are for the specialist, never for the family
+        problems.append("Tells the family a price has expired: say 'nog niet bevestigd' instead")
     seen = set()
     for line in (x.strip() for x in text.splitlines()):
         if len(line) > 30 and line in seen:  # a model repeating a stop (Gemma 31B wrote Halong Bay twice)

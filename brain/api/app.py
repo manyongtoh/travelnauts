@@ -31,6 +31,8 @@ CUSTOMER_DRAFTS = {"proposal", "change", "followup", "answer", "trip_alert", "ga
                    "complaint_reply", "next_trip", "call_notes", "roadbook"}
 MONEY_WORDS = ("terugbetal", "refund", "compensatie", "vergoed", "korting", "geld terug", "compensation", "discount")
 PARTNER_DRAFTS = {"partner_request", "partner_chase"}
+# drafts that put a trip on the specialist's "Waiting for you" list (proposals and changes do it through the status)
+WAITS_FOR_SPECIALIST = ["trip_alert", "complaint_reply", "answer", "followup", "alternatives", "extras", "roadbook"]
 
 import os as _os
 
@@ -304,7 +306,7 @@ def requests(team: str | None = None, specialist: str | None = None, limit: int 
             q = q.where(TripRequest.specialist_id == specialist)
         out = []
         pending: dict[str, list[str]] = {}
-        for d in s.scalars(select(Draft).where(Draft.status == "draft", Draft.kind.in_(["trip_alert", "followup"]))).all():
+        for d in s.scalars(select(Draft).where(Draft.status == "draft", Draft.kind.in_(WAITS_FOR_SPECIALIST))).all():
             pending.setdefault(d.request_id, []).append(d.kind)
         for r in s.scalars(q).all():
             f = s.get(Family, r.family_id)

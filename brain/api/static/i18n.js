@@ -29,7 +29,7 @@ const NL = {
   "Proposal sent": "Voorstel verstuurd", "Booked": "Geboekt", "Lost": "Verloren", "New": "Nieuw",
   "Incoming email": "Binnengekomen mail", "From": "Van", "Subject": "Onderwerp", "Received": "Ontvangen", "Triage tags": "Kenmerken",
   "Normal priority": "Normale prioriteit", "High priority": "Hoge prioriteit", "Low priority": "Lage prioriteit",
-  "# days": "# dagen", "# night": "# nacht", "# nights": "# nachten", "# adult": "# volwassene", "# adults": "# volwassenen", "# child": "# kind", "# children": "# kinderen",
+  "# days": "# dagen", "no budget given": "geen budget opgegeven", "budget € #": "budget € #", "# night": "# nacht", "# nights": "# nachten", "# adult": "# volwassene", "# adults": "# volwassenen", "# child": "# kind", "# children": "# kinderen",
   "Calculation · # persons": "Calculatie · # personen", "Total for the family": "Totaal voor het gezin", "Total": "Totaal", "Margin": "Marge",
   "· margin € # · show lines": "· marge € # · toon regels", "Draft travel proposal": "Concept reisvoorstel", "Draft itinerary · # stops": "Conceptroute · # stops",
   "Edit freely. Your changes are measured to improve the brain.": "Pas gerust aan. Je wijzigingen worden gemeten om het brein te verbeteren.",
@@ -51,7 +51,7 @@ const NL = {
   "Discarded. That is feedback for the brain too.": "Weggegooid. Ook dat is feedback voor het brein.", "Call note saved, wishes updated": "Belnotitie opgeslagen, wensen bijgewerkt",
   "Change request": "Wijzigingsverzoek", "Changed proposal ready to check": "Gewijzigd voorstel klaar om te controleren", "Current proposal": "Huidig voorstel",
   "Let the agent apply the change": "Laat de agent de wijziging verwerken", "Write travel proposal": "Reisvoorstel schrijven", "Draft follow-ups": "Opvolgmails opstellen",
-  "Process new mail to fill your list.": "Verwerk nieuwe mail om je lijst te vullen.", "Nothing needs you": "Niets wacht op jou", "All done": "Alles klaar",
+  "Process new mail to fill your list.": "Verwerk nieuwe mail om je lijst te vullen.", "Nothing needs you": "Niets wacht op jou", "Nothing waiting": "Niets te doen", "New requests appear here after triage.": "Nieuwe aanvragen verschijnen hier na het sorteren.", "All done": "Alles klaar",
   "Versions": "Versies", "Suggested extras": "Voorgestelde extra's", "Nothing that fits yet": "Nog niets dat past", "Severity": "Ernst", "About": "Over",
   "travelling now": "nu op reis", "not travelling": "niet op reis", "Internal actions": "Interne acties", "Documents": "Documenten", "Roadbook (PDF)": "Reisboek (pdf)",
   "Voucher": "Voucher", "Suggestions": "Suggesties", "Next-trip idea": "Idee voor een volgende reis", "Next-trip ideas": "Ideeën voor een volgende reis",
@@ -98,7 +98,8 @@ const NL = {
   "Work": "Werk", "Drafted": "Opgesteld", "Sent": "Verstuurd", "Unchanged": "Ongewijzigd", "Minutes each": "Minuten per stuk",
   "Proposals": "Voorstellen", "Changes": "Wijzigingen", "Follow-ups": "Opvolgmails", "Partner chases": "Herinneringen aan partners", "Extras offers": "Aanbod extra's",
   "Roadbooks": "Reisboeken", "Answers": "Antwoorden", "Complaint replies": "Antwoorden op klachten", "Alternatives": "Alternatieven", "Next trip ideas": "Ideeën volgende reis",
-  "Trip alerts": "Reiswaarschuwingen", "Hours to first proposal today": "Uren tot eerste voorstel nu", "Baseline measured": "Nulmeting gemeten", "Save baseline": "Nulmeting opslaan",
+  "Trip alerts": "Reiswaarschuwingen", "Trip alert, travelling soon": "Reiswaarschuwing, vertrekt binnenkort", "Message from the family, reply ready": "Bericht van het gezin, antwoord klaar",
+  "Question answered, check it": "Vraag beantwoord, controleer het", "Follow-up ready": "Opvolgmail klaar", "Alternatives ready": "Alternatieven klaar", "Extras ready": "Extra's klaar", "Roadbook to check": "Reisboek controleren", "Hours to first proposal today": "Uren tot eerste voorstel nu", "Baseline measured": "Nulmeting gemeten", "Save baseline": "Nulmeting opslaan",
   "Download CSV": "Download CSV", "Baseline saved": "Nulmeting opgeslagen", "Nothing drafted in this period.": "Niets opgesteld in deze periode.",
   "Also: # invoices checked, # follow-ups withdrawn because the family wrote first, # knowledge gaps answered, # learned notes waiting for review, # suspicious mails held.":
     "Verder: # facturen gecontroleerd, # opvolgmails ingetrokken omdat het gezin eerst schreef, # kennishiaten beantwoord, # geleerde notities wachten op beoordeling, # verdachte mails tegengehouden.",
@@ -211,6 +212,10 @@ const NL_RULES = [
   [/^Portal · (\d+) of (\d+) confirmed(.*)$/, (m, a, b, r) => `Portaal · ${a} van ${b} bevestigd${r.replace(" · valid until ", " · geldig tot ")}`],
   [/^Partner request (\d+) · (.+)$/, (m, a, b) => `Partneraanvraag ${a} · ${b}`],
   [/^Link valid until (.+)$/, (m, x) => "Link geldig tot " + x.replace(" · partner last opened ", " · partner laatst geopend ").replace(" · not opened yet", " · nog niet geopend")],
+  [/^(\d+) days, (\d+) adults?(?: and (\d+) (?:child|children) \(([^)]*)\))?, (.+)$/, (m, d, a, n, ages, mo) =>
+    `${d} dagen, ${a} ${a === "1" ? "volwassene" : "volwassenen"}${n ? ` en ${n} ${n === "1" ? "kind" : "kinderen"} (${ages})` : ""}, ${mo}`],
+  [/^(\d+) adults?(?: and (\d+) (?:child|children) \(([^)]*)\))?$/, (m, a, n, ages) =>
+    `${a} ${a === "1" ? "volwassene" : "volwassenen"}${n ? ` en ${n} ${n === "1" ? "kind" : "kinderen"} (${ages})` : ""}`],
   [/^Model: (.+)$/, (m, x) => "Model: " + x],
   [/^Minutes per (.+) today$/, (m, x) => `Minuten per ${(NL[x] || x).toLowerCase()} nu`],
 ];
@@ -228,6 +233,10 @@ function T(text) {
     if (nums) { const t = NL[core.replace(NUM, "#")]; if (t !== undefined) { let i = 0; out = t.replace(/#/g, () => nums[i++] ?? "#"); } }
   }
   if (out === undefined) for (const [re, f] of NL_RULES) { const m = core.match(re); if (m) { out = f(...m); break; } }
+  if (out === undefined && core.includes(" · ")) {  // "2 adults · 21 days · no budget given": each part on its own
+    const parts = core.split(" · "), done = parts.map(x => T(x));
+    if (done.some((x, i) => x !== parts[i])) out = done.join(" · ");
+  }
   return out === undefined ? text : lead + out + trail;
 }
 const SKIP = new Set(["SCRIPT", "STYLE", "TEXTAREA", "PRE", "CODE"]);

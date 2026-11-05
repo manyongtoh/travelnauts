@@ -22,24 +22,28 @@ function init() {
   app.start();
 }
 const kids = n => `${n} ${n === 1 ? "child" : "children"}`;
+const party = (adults, ages) => `${adults} ${adults === 1 ? "adult" : "adults"}` + (ages && ages.length ? ` and ${kids(ages.length)} (${ages.join(", ")})` : "");
 const myName = () => ME.name;
 
 async function loadReqs() {
   reqs = await api(`/api/requests`);
   const waiting = reqs.filter(r => ["new", "proposal_draft", "change_requested"].includes(r.status) || r.pending.length);
-  waiting.sort((a, b) => (b.pending.includes("trip_alert") - a.pending.includes("trip_alert")));
+  const rank = r => ["trip_alert", "complaint_reply"].some(k => r.pending.includes(k)) ? 0 : r.pending.includes("answer") ? 1 : 2;
+  waiting.sort((a, b) => rank(a) - rank(b));
   badge("today", waiting.length);
   return waiting;
 }
 
 function itemHtml(r) {
   let [lbl, cls] = REQ_STATUS[r.status] || [r.status, ""];
-  if ((r.pending || []).includes("trip_alert")) [lbl, cls] = ["Trip alert, travelling soon", "hot"];
-  else if ((r.pending || []).includes("followup")) [lbl, cls] = ["Follow-up ready", "hot"];
+  const P = r.pending || [];
+  const first = [["trip_alert", "Trip alert, travelling soon"], ["complaint_reply", "Message from the family, reply ready"], ["answer", "Question answered, check it"],
+                 ["followup", "Follow-up ready"], ["alternatives", "Alternatives ready"], ["extras", "Extras ready"], ["roadbook", "Roadbook to check"]].find(([k]) => P.includes(k));
+  if (first) [lbl, cls] = [first[1], "hot"];
   return `<li><button class="ditem" data-id="${r.id}" aria-current="${r.id === current}">
     <span class="label ${cls}">${esc(lbl)}</span>
     <span class="fam">Family ${esc(r.family.split(" ").slice(-1)[0])} · ${esc(r.destination_name)}</span>
-    <span class="why">${r.days} days, ${r.adults} ${r.adults === 1 ? "adult" : "adults"} and ${kids(r.child_ages.length)} (${r.child_ages.join(", ")}), ${esc(r.depart_month)}</span>
+    <span class="why">${r.days} days, ${party(r.adults, r.child_ages)}, ${esc(r.depart_month)}</span>
   </button></li>`;
 }
 
@@ -89,7 +93,7 @@ function bindList() { $$(".ditem").forEach(b => b.onclick = () => openReq(b.data
 function tags(q, f, triage) {
   const t = [];
   if (triage && triage.urgent) t.push(["Urgent", "terra"]); else t.push(["Normal priority", "sea"]);
-  t.push([q.destination_name, "sea"], [`${q.days} days`, ""], [`${f.adults} ${f.adults === 1 ? "adult" : "adults"}, ${kids(f.child_ages.length)} (${f.child_ages.join(", ")})`, ""]);
+  t.push([q.destination_name, "sea"], [`${q.days} days`, ""], [party(f.adults, f.child_ages), ""]);
   if (q.budget_eur) t.push([`Budget ${eur(q.budget_eur)}`, ""]);
   t.push([q.depart_month, ""]);
   (q.wishes || []).forEach(w => t.push([w, ""]));
@@ -140,14 +144,14 @@ async function openReq(id) {
   const q = r.request, f = r.family;
   const latest = r.drafts.filter(d => d.kind === "proposal" || d.kind === "change").slice(-1)[0];
   const pending = (r.changes || []).filter(m => m.status === "triaged");
-  const urgent = r.drafts.filter(d => ["trip_alert", "followup", "complaint_reply"].includes(d.kind) && d.status === "draft");
+  const urgent = r.drafts.filter(d => ["trip_alert", "followup", "complaint_reply", "answer"].includes(d.kind) && d.status === "draft");
   const follow = r.drafts.filter(d => ["alternatives", "extras", "roadbook"].includes(d.kind) && d.status === "draft");
   const others = r.drafts.filter(d => d !== latest && !urgent.includes(d) && !follow.includes(d)).reverse();
   const [lbl] = REQ_STATUS[q.status] || [q.status];
   $("#detail").innerHTML = `<div class="detail">
     <span class="label">${esc(lbl)} · Team ${esc(TEAMS[q.team_id] || "")}</span>
     <h2 class="d-title">Family ${esc(f.surname)} · ${esc(q.destination_name)}</h2>
-    <p class="d-sum">${f.adults} ${f.adults === 1 ? "adult" : "adults"}, ${kids(f.child_ages.length)} (${f.child_ages.join(" and ")}) · ${q.days} days · ${q.budget_eur ? "budget " + eur(q.budget_eur) : "no budget given"} · ${esc(q.depart_month)}</p>
+    <p class="d-sum">${party(f.adults, f.child_ages)} · ${q.days} days · ${q.budget_eur ? "budget " + eur(q.budget_eur) : "no budget given"} · ${esc(q.depart_month)}</p>
     ${r.mail ? `<p class="label sect">Incoming email</p><div class="concept"><dl class="mailhead"><dt>From</dt><dd>${esc(f.contact_name)}</dd><dt>Subject</dt><dd>${esc(r.mail.subject)}</dd>
       <dt>Received</dt><dd>${esc(new Date(r.mail.received_at).toLocaleString("en-GB", {dateStyle: "medium", timeStyle: "short"}))}</dd></dl><pre class="c-text">${esc(r.mail.body)}</pre></div>
       <p class="label sect">Triage tags</p>${tags(q, f, r.mail.triage)}` : ""}
