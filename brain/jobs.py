@@ -21,7 +21,7 @@ from .db import Job, Mail, Setting
 from .clock import utcnow
 
 MAX_ATTEMPTS = 3
-UPSTREAM = ("TravelSpiritUnavailable", "TimeoutError", "ConnectionError", "ConnectTimeout", "ReadTimeout")
+UPSTREAM = ("SystemUnavailable", "TravelSpiritUnavailable", "TimeoutError", "ConnectionError", "ConnectTimeout", "ReadTimeout")
 UPSTREAM_PATIENCE = timedelta(hours=12)  # how long a job waits for TravelSpirit before it counts as failed
 
 # kind -> (agent name for pausing, interval in minutes or None for event jobs)

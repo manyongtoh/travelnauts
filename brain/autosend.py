@@ -20,10 +20,11 @@ from datetime import datetime, timedelta
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from . import autonomy
 from .clock import utcnow
 from .db import Draft, Employee, Setting, TripRequest
 
-ELIGIBLE = ("followup", "extras", "partner_request", "partner_chase")
+ELIGIBLE = tuple(k for k, lvl in autonomy.KIND_CEILING.items() if lvl >= autonomy.ACT_AND_SAMPLE)
 DESK_KINDS = ("partner_request", "partner_chase")
 ASK_AFTER = 10
 ASK_AGAIN_AFTER = 30  # after a "no", wait this many more unchanged approvals before asking once more
@@ -58,7 +59,7 @@ def _save(s: Session, owner: str, kind: str, value: dict) -> None:
 def record(s: Session, d: Draft, actor_id: str, approved: bool) -> dict | None:
     """Called after a person approves or rejects a draft. Returns the question to ask, if it is time."""
     from . import auditchain
-    if d.kind not in ELIGIBLE or actor_id.startswith("auto:"):
+    if d.kind not in ELIGIBLE or actor_id.startswith("auto:") or not autonomy.may_act_alone(d.kind):
         return None
     owner = owner_of(s, d)
     if not owner or (owner != DESK and owner != actor_id):
@@ -130,7 +131,7 @@ def answer(s: Session, user_id: str, roles: set[str], kind: str, choice: str) ->
 
 def send_at(s: Session, d: Draft, cache: dict | None = None) -> datetime | None:
     """When this draft goes out by itself, or None when it waits for a person."""
-    if d.status != "draft" or d.kind not in ELIGIBLE:
+    if d.status != "draft" or d.kind not in ELIGIBLE or not autonomy.may_act_alone(d.kind):
         return None
     x = d.data or {}
     if x.get("auto_stopped") or x.get("auto_blocked"):
@@ -169,6 +170,7 @@ def send(s: Session, d: Draft) -> bool:
     s.execute(update(Draft).where(Draft.id == d.id).values(status="draft"))
     s.expire(d)
     try:
+        s.execute(update(Draft).where(Draft.id == d.id).values(autonomy_level=autonomy.ACT_AND_SAMPLE))
         approve_draft(s, d.id, f"auto: {emp.name if emp else who}", actor_id=f"auto:{who}")
         return True
     except (BlockedByCheck, ValueError) as e:

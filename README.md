@@ -18,6 +18,20 @@ for daily checks and incidents (a template; each client repo keeps its filled-in
 Nothing here is client data. Families, partners, hotels, prices and staff are invented.
 Agents only ever write drafts; a person approves every mail before it goes out.
 
+## Tenants
+
+A tenant pack is a client's own repo: `tenant.toml` (validated at start-up: domains, booking reference prefix,
+Galileo remark, autonomy ceiling, margins), `house.md` (the first prompt layer) and optional agent prompt
+overrides. It registers itself under the `brain.tenants` entry point; `BRAIN_TENANT` picks one when several are
+installed. The core's own sample is `brain/sample_tenant/` (Wolkenwaai Reizen, invented).
+
+- Every table has a `tenant_id`; every query is scoped to the current tenant, and on Postgres row-level
+  security enforces the same (connect as a role that is not a superuser). See `tests/test_tenancy.py`.
+- The core talks to a client's systems only through two contracts in `brain/connectors.py`: `SystemOfRecord`
+  and `Channel`. TravelSpirit is the first adapter (`brain/travelspirit/`).
+- Every draft and job has an autonomy level, default 1 (a person approves). See `brain/autonomy.py`.
+- `python scripts/check_client_names.py` fails when the core names a client (hashed list in `.client-denylist`).
+
 ## Run it
 
 ```bash

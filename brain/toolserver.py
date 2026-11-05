@@ -117,24 +117,29 @@ def forget_failed_calls() -> None:
     _failed_calls.set([])
 
 
-# TravelSpirit (through the connector) ----------------------------------------------------------
+# The system of record and the channel (through the connectors) ---------------------------------
 
-def _ts(s):
-    from .travelspirit.client import get_travelspirit
-    return get_travelspirit(s)
+def _record(s):
+    from .connectors import get_system_of_record
+    return get_system_of_record(s)
+
+
+def _channel(s):
+    from .connectors import get_channel
+    return get_channel(s)
 
 
 @server.tool("ts.read_mail", cache_seconds=300)
 def read_mail(s: Session, mail_id: str) -> dict:
     """Read one mail from TravelSpirit Mail."""
-    return _ts(s).mail(mail_id)
+    return _channel(s).message(mail_id)
 
 
 @server.tool("ts.read_relation", cache_seconds=300)
 def read_relation(s: Session, family_id: str) -> dict:
     """Read a relation (family) from TravelSpirit, with what the brain remembers about them."""
     from .family import history
-    return _ts(s).relation(family_id) | {"history": history(s, family_id)}
+    return _record(s).customer(family_id) | {"history": history(s, family_id)}
 
 
 @server.tool("ts.read_trip", cache_seconds=60)
@@ -160,7 +165,7 @@ def list_trips(s: Session, status: str | None = None, family_id: str | None = No
 @server.tool("ts.draft_reisplan", access="draft")
 def draft_reisplan(s: Session, request_id: str, plan: dict) -> dict:
     """Create a draft reisplan in the Visual Tour Builder (drafts only, never final)."""
-    return _ts(s).draft_reisplan(request_id, plan)
+    return _record(s).draft_itinerary(request_id, plan)
 
 
 # Knowledge and examples ------------------------------------------------------------------------
