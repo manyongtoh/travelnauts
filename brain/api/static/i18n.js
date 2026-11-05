@@ -73,7 +73,7 @@ const NL = {
   "Share edited": "Aandeel aangepast", "of approved proposals, lower is better": "van goedgekeurde voorstellen, lager is beter", "Mail to first draft": "Van mail tot eerste concept",
   "# min": "# min", "agent time, not the specialist's": "tijd van de agent, niet van de specialist", "Agent runs, # h": "Agentruns, # u", "all logged with sources": "alles gelogd met bronnen",
   "Requests by status": "Aanvragen per status", "All teams, synthetic data": "Alle teams, synthetische data", "Inbox": "Inbox",
-  "Mail in the (fake) TravelSpirit inbox, all teams": "Mail in de (nep) TravelSpirit-inbox, alle teams", "Triaged": "Gesorteerd", "Needs attention": "Vraagt aandacht",
+  "Mail in the (fake) TravelSpirit inbox, all teams": "Mail in de (nep) TravelSpirit-inbox, alle teams", "Triaged": "Gesorteerd", "Waiting for triage": "Wacht op sorteren", "Handled": "Afgehandeld", "Held as suspicious": "Tegengehouden als verdacht", "Needs a person": "Moet door een mens bekeken", "Needs attention": "Vraagt aandacht",
   "What the agents flagged for a person": "Wat de agents voor een mens markeerden", "asked #×": "# keer gevraagd", "#×": "# keer",
   "Knowledge waiting for approval": "Kennis die wacht op goedkeuring", "Approve": "Goedkeuren", "Reject": "Afwijzen", "Past review date": "Herzieningsdatum verstreken",
   "review was due #-#-#, answers using it are flagged": "herziening was nodig op #-#-#, antwoorden die het gebruiken worden gemarkeerd",
@@ -184,7 +184,7 @@ const NL = {
   "No lines: this partner answers by mail.": "Geen regels: deze partner antwoordt per mail.", "Write to the partner (English)": "Schrijf aan de partner (Engels)", "Close": "Sluiten",
   "Not started": "Nog niet begonnen", "Asking the supplier": "Vraagt de leverancier", "Alternative offered": "Alternatief aangeboden", "No portal link yet": "Nog geen portaallink", "Thread": "Gesprek", "Round #": "Ronde #", "Answered in the portal": "Beantwoord in het portaal",
   // duplicates
-  "Duplicate records": "Dubbele records", "Duplicates": "Dubbelen", "Duplicate families": "Dubbele families", "# pairs": "# paren",
+  "Duplicate records": "Dubbele records", "Duplicates": "Dubbelen", "Duplicate families": "Dubbele families", "# pairs": "# paren", "# pair": "# paar",
   "The same family twice: entered twice in TravelSpirit, or a first mail from the other parent's address. Nothing merges by itself: a wrong merge sends one family's mail to another. Merging here moves trips, mail and addresses; the TravelSpirit administrator merges there from the plan.":
     "Dezelfde familie twee keer: dubbel ingevoerd in TravelSpirit, of een eerste mail van het adres van de andere ouder. Niets wordt vanzelf samengevoegd: een verkeerde samenvoeging stuurt de mail van het ene gezin naar het andere. Samenvoegen hier verplaatst reizen, mail en adressen; de TravelSpirit-beheerder voegt daar samen volgens het plan.",
   "Download merge plan for TravelSpirit": "Download samenvoegplan voor TravelSpirit", "in TravelSpirit": "in TravelSpirit", "new in the brain": "nieuw in het brein",
@@ -206,8 +206,8 @@ const NL_RULES = [
     (m, n, k, s) => `Je hebt de laatste ${n} ${NL[k] || k} verstuurd zonder een woord te veranderen. Voortaan automatisch versturen? Elk bericht staat eerst ${s} seconden op je scherm met een Stop-knop, en alle controles blijven gelden.`],
   [/^Not sent: (.+)$/, (m, x) => "Niet verstuurd: " + x],
   [/^Merged \(logged\): (\d+) trips, (\d+) mails moved$/, (m, a, b) => `Samengevoegd (gelogd): ${a} reizen, ${b} mails verplaatst`],
-  [/^Keep · (.+)$/, (m, x) => "Houden · " + x.replace("in TravelSpirit", "in TravelSpirit").replace("new in the brain", "nieuw in het brein").replace(/(\d+) trips/, "$1 reizen")],
-  [/^Merge into it · (.+)$/, (m, x) => "Samenvoegen hierin · " + x.replace("new in the brain", "nieuw in het brein").replace(/(\d+) trips/, "$1 reizen")],
+  [/^Keep · (.+)$/, (m, x) => "Houden · " + x.replace("in TravelSpirit", "in TravelSpirit").replace("new in the brain", "nieuw in het brein").replace(/(\d+) trips?/, "$1 reizen")],
+  [/^Merge into it · (.+)$/, (m, x) => "Samenvoegen hierin · " + x.replace("new in the brain", "nieuw in het brein").replace(/(\d+) trips?/, "$1 reizen")],
   [/^Portal · (\d+) of (\d+) confirmed(.*)$/, (m, a, b, r) => `Portaal · ${a} van ${b} bevestigd${r.replace(" · valid until ", " · geldig tot ")}`],
   [/^Partner request (\d+) · (.+)$/, (m, a, b) => `Partneraanvraag ${a} · ${b}`],
   [/^Link valid until (.+)$/, (m, x) => "Link geldig tot " + x.replace(" · partner last opened ", " · partner laatst geopend ").replace(" · not opened yet", " · nog niet geopend")],

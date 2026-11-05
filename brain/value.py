@@ -52,7 +52,7 @@ def _pct(a, b):
 
 def _median(xs):
     xs = sorted(xs)
-    return round(xs[len(xs) // 2], 1) if xs else None
+    return round(xs[len(xs) // 2], 2) if xs else None
 
 
 def report(s: Session, days: int = 30, team: str | None = None) -> dict:

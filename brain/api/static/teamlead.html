@@ -67,7 +67,7 @@ async function viewOverview() {
         <div class="card"><h2>Requests by status</h2><p class="sub">${team === "all" ? "All teams" : "Team " + TEAMS[team]}, synthetic data</p>
           <div class="bars">${S.map(([k, n, c]) => `<div class="bar"><span>${n}</span><span class="track"><span class="fill ${c}" style="width:${100 * (p.status[k] || 0) / maxS}%"></span></span><span class="v">${p.status[k] || 0}</span></div>`).join("")}</div></div>
         <div class="card"><h2>Inbox</h2><p class="sub">Mail in the (fake) TravelSpirit inbox, all teams</p>
-          <div class="bars">${Object.entries(data.inbox).map(([k, v]) => `<div class="bar"><span>${k === "new" ? "Waiting for triage" : "Triaged"}</span><span class="track"><span class="fill ${k === "new" ? "terra" : "sea"}" style="width:${100 * v / inboxMax}%"></span></span><span class="v">${v}</span></div>`).join("")}</div></div>
+          <div class="bars">${Object.entries(data.inbox).map(([k, v]) => `<div class="bar"><span>${({new: "Waiting for triage", triaged: "Triaged", done: "Handled", flagged: "Held as suspicious", needs_person: "Needs a person"})[k] || k}</span><span class="track"><span class="fill ${["new", "flagged", "needs_person"].includes(k) ? "terra" : "sea"}" style="width:${100 * v / inboxMax}%"></span></span><span class="v">${v}</span></div>`).join("")}</div></div>
       </div>
       <div class="card"><h2>Needs attention</h2><p class="sub">What the agents flagged for a person</p>
         <ul class="att">
@@ -194,6 +194,7 @@ const KIND_LABEL = {proposal: "Proposals", change: "Changes", followup: "Follow-
   extras: "Extras offers", roadbook: "Roadbooks", answer: "Answers", complaint_reply: "Complaint replies", alternatives: "Alternatives",
   next_trip: "Next trip ideas", trip_alert: "Trip alerts"};
 const n = v => v == null ? "–" : v;
+const hrs = h => h == null ? "–" : h < 1 ? `${Math.max(1, Math.round(h * 60))} min` : `${Math.round(h * 10) / 10} h`;
 async function viewValue() {
   const q = `days=${vdays}&team=${encodeURIComponent(team)}`;
   const r = await api(`/api/value?${q}`), b = r.baseline;
@@ -206,7 +207,7 @@ async function viewValue() {
     ${b.measured ? "" : `<div class="guard">${icon("shield")} The baseline is an assumption until Travelnauts measures it with the pilot group. Change it below; every figure updates.</div>`}
     <div class="kpis">
       <div class="kpi"><span class="label">Hours saved (est.)</span><b>${r.hours_saved_estimate}</b></div>
-      <div class="kpi"><span class="label">First proposal ready</span><b>${r.speed.median_hours_to_first_proposal_draft == null ? "–" : r.speed.median_hours_to_first_proposal_draft + " h"}</b><small>was ${b.hours_to_first_proposal} h</small></div>
+      <div class="kpi"><span class="label">First proposal ready</span><b>${hrs(r.speed.median_hours_to_first_proposal_draft)}</b><small>was ${b.hours_to_first_proposal} h</small></div>
       <div class="kpi"><span class="label">Sent unchanged</span><b>${n(r.quality.sent_unchanged_pct)}%</b><small>rewritten ${n(r.quality.avg_rewrite_pct)}%</small></div>
       <div class="kpi"><span class="label">Done unprompted</span><b>${r.unprompted.drafts}</b><small>drafts nobody asked for</small></div>
       <div class="kpi"><span class="label">Partner answered</span><b>${n(r.back_office.answered_pct)}%</b><small>median ${n(r.back_office.median_reply_days)} days</small></div>
@@ -234,12 +235,12 @@ async function viewValue() {
 async function viewDuplicates() { renderDuplicates(await api("/api/duplicates")); }
 function renderDuplicates(rows) {
   badge("duplicates", rows.filter(r => r.level === "likely").length);
-  $("#view").innerHTML = `<div class="vhead"><span class="label">${rows.length} pairs</span><h1>Duplicate families</h1>
+  $("#view").innerHTML = `<div class="vhead"><span class="label">${rows.length} ${rows.length === 1 ? "pair" : "pairs"}</span><h1>Duplicate families</h1>
       <p>The same family twice: entered twice in TravelSpirit, or a first mail from the other parent's address. Nothing merges by itself: a wrong merge sends one family's mail to another. Merging here moves trips, mail and addresses; the TravelSpirit administrator merges there from the plan.</p></div>
     <div class="actions" style="margin-bottom:16px"><a class="btn btn-outline" href="/api/duplicates.csv" download="travelspirit-merge-plan.csv">Download merge plan for TravelSpirit</a></div>
     <ul class="list">${rows.map((r, i) => `<li class="row" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;align-items:start;gap:14px">
-      <div><span class="label">Keep · ${r.keep_in_travelspirit ? "in TravelSpirit" : "new in the brain"} · ${r.keep_trips} trips</span><b style="display:block">${esc(r.keep_name)}</b><span class="mono">${esc(r.keep)}</span></div>
-      <div><span class="label">Merge into it · ${r.drop_in_travelspirit ? "in TravelSpirit" : "new in the brain"} · ${r.drop_trips} trips</span><b style="display:block">${esc(r.drop_name)}</b><span class="mono">${esc(r.drop)}</span>
+      <div><span class="label">Keep · ${r.keep_in_travelspirit ? "in TravelSpirit" : "new in the brain"} · ${r.keep_trips} ${r.keep_trips === 1 ? "trip" : "trips"}</span><b style="display:block">${esc(r.keep_name)}</b><span class="mono">${esc(r.keep)}</span></div>
+      <div><span class="label">Merge into it · ${r.drop_in_travelspirit ? "in TravelSpirit" : "new in the brain"} · ${r.drop_trips} ${r.drop_trips === 1 ? "trip" : "trips"}</span><b style="display:block">${esc(r.drop_name)}</b><span class="mono">${esc(r.drop)}</span>
         <p class="sub" style="margin-top:6px"><span class="pill ${r.level === "likely" ? "pill-concept" : "pill-local"}">${esc(r.level)}</span> ${r.evidence.map(esc).join(" · ")}</p></div>
       <div style="display:flex;flex-direction:column;gap:6px"><button class="btn btn-primary btn-sm" data-merge="${i}">Merge</button><button class="btn btn-outline btn-sm" data-swap="${i}">Swap</button><button class="btn-link" data-apart="${i}">Keep apart</button></div></li>`).join("")
       || `<li class="row empty"><b>No likely duplicates</b></li>`}</ul>`;
