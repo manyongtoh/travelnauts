@@ -125,16 +125,22 @@ def run(mails: int = 30, proposals: int = 4, complaints: int = 3, replies: int =
     return rep
 
 
+def where() -> str:
+    import os
+    base = os.getenv("BRAIN_MODEL_BASE_URL", "")
+    return "local Ollama, CPU only" if "localhost" in base or "127.0.0.1" in base else f"hosted at {base.split('/')[2] if '//' in base else base}"
+
+
 def to_markdown(r: dict) -> str:
     t = lambda k: r.get(k, {})  # noqa: E731
     lines = [f"# Model check: {r['model_small']} (small) / {r['model_large']} (large)", "",
-             "A sample of the bench on CPU only. Synthetic data. Compare with the stand-in in docs/test-reports.", "",
+             f"A sample of the bench ({where()}). Synthetic data. Compare with the stand-in in docs/test-reports.", "",
              "| Check | Result |", "|---|---|"]
     for k in ("clean", "hard", "english"):
         x = t(f"triage_{k}")
         lines.append(f"| Triage, {k} mail ({x.get('mails', 0)}) | category {x.get('category_accuracy_pct')}%, destination "
                      f"{x.get('destination_accuracy_pct')}% |")
-    lines += [f"| Triage failures | {r['triage_failed']} |", f"| Seconds per mail (CPU) | {r['triage_seconds_avg']} |",
+    lines += [f"| Triage failures | {r['triage_failed']} |", f"| Seconds per mail | {r['triage_seconds_avg']} |",
               f"| Proposals written | {t('proposals').get('written')} of {t('proposals').get('of')}, "
               f"{t('proposals').get('with_problems')} flagged by the checks, {t('proposals').get('seconds_avg')} s each |",
               f"| Complaint replies | {t('complaints').get('written')} of {t('complaints').get('of')}, "

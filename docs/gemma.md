@@ -16,6 +16,20 @@ The workflow `gemma` runs Gemma 4 through Ollama on a GitHub runner (4 CPUs, 16 
 
 CPU only, so the speed it reports is far below what a GPU in Azure gives. Quality is what to look at.
 
+## Fast, on a hosted Gemma 4 (GitHub plus an API key)
+
+GitHub's free runners have no GPU, so the quick way to real speed is a hosted Gemma 4 behind an OpenAI compatible
+API. The default is Google AI Studio, which serves Gemma 4 (for example `gemma-4-31b-it`, the large one) with a
+free tier. Any other provider with an OpenAI compatible endpoint works by changing the address.
+
+1. Make a key in Google AI Studio (aistudio.google.com, "Get API key").
+2. On GitHub: **Settings > Secrets and variables > Actions > New repository secret**, name `GEMMA_API_KEY`.
+3. **Actions > gemma > Run workflow**, where `hosted`, model `gemma-4-31b-it`, 60 mails, 10 proposals.
+
+Synthetic data only: a free tier may keep what is sent to it. The pilot runs Gemma in Travelnauts' own Azure
+environment instead. The hosted run measures quality and the speed of a larger model on a GPU; it is not the
+pilot's cost or speed.
+
 ## On your own machine
 
 ### 1. Install Ollama
