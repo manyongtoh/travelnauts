@@ -31,7 +31,11 @@ const api = async (path, opts = {}) => {
   const type = r.headers.get("content-type") || "";
   return type.includes("json") ? r.json() : r.text();
 };
-const post = (path, body) => api(path, {method: "POST", body: body || {}});
+const post = async (path, body) => {
+  const r = await api(path, {method: "POST", body: body || {}});
+  if (r && r.ask_autosend) askAutoSend(r.ask_autosend);
+  return r;
+};
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
 const eur = n => n == null ? "" : "€ " + Math.round(n).toLocaleString("nl-NL");
 const $ = s => document.querySelector(s);
@@ -103,6 +107,7 @@ function shell({role, nav, links, who, onNav, needs}) {
       $("#view").innerHTML = `<div class="detail empty"><b>Not for your role</b>${esc(me.name)} (${esc(me.roles.map(r => T(ROLE_LABEL[r] || r)).join(", "))}) cannot open this screen. <a href="index.html">Sign in as someone else</a>.</div>`;
       throw new Error("forbidden");
     }
+    autoSendWatch();
     return me;
   });
   return {go, ready, start() { ready.then(() => go(store.get(role + ":view") && nav.some(n => n[0] === store.get(role + ":view")) ? store.get(role + ":view") : nav[0][0])).catch(() => {}); }};
@@ -148,4 +153,49 @@ function extraBlocks(d) {
     ${x.vouchers.map(v => `<button class="pchip" onclick="openFile('${fileUrl(v.path)}')">Voucher ${esc(v.partner)}</button>`).join("")}</div>`;
   if (d.kind === "next_trip") return `<p class="label sect">Suggestions</p><div class="chips">${x.suggestions.map(o => `<span class="pchip sea">${esc(o.name)}</span>`).join("")}</div>`;
   return "";
+}
+
+// Automatic send: the question after ten unchanged approvals, and the countdown with a Stop button.
+let AUTO = {switches: [], counting: [], hold_seconds: 10}, autoTimer = null, autoAsked = new Set();
+function askAutoSend(q) {
+  if (autoAsked.has(q.kind)) return; autoAsked.add(q.kind);
+  const box = document.createElement("div");
+  box.className = "autoask"; box.setAttribute("role", "dialog"); box.setAttribute("aria-label", "Automatic send");
+  box.innerHTML = `<b>Send automatically from now on?</b><p>${esc(q.text)}</p>
+    <div class="row-btns"><button class="btn btn-primary btn-sm" data-a="yes">Yes, send automatically</button><button class="btn btn-outline btn-sm" data-a="no">No, keep asking</button></div>`;
+  document.body.append(box);
+  box.querySelectorAll("[data-a]").forEach(b => b.onclick = async () => {
+    await post(`/api/autosend/${q.kind}`, {choice: b.dataset.a}); box.remove();
+    toast(b.dataset.a === "yes" ? `Automatic send on for ${q.label}` : "Fine, you keep approving them");
+    autoSendWatch();
+  });
+}
+async function autoSendWatch() {
+  clearTimeout(autoTimer);
+  try { AUTO = await api("/api/autosend"); } catch { return; }
+  AUTO.fetched = Date.now();
+  AUTO.switches.filter(x => x.ask).forEach(x => askAutoSend(x.ask));
+  renderAuto();
+  if (AUTO.switches.some(x => x.status === "on")) autoTimer = setTimeout(autoSendWatch, document.hidden ? 15000 : 3000);
+}
+const autoFired = new Set();
+function renderAuto() {
+  let box = $(".autosend");
+  const on = AUTO.switches.filter(x => x.status === "on");
+  if (!on.length && !AUTO.counting.length) { box && box.remove(); return; }
+  if (!box) { box = document.createElement("div"); box.className = "autosend"; box.setAttribute("aria-live", "polite"); document.body.append(box); }
+  const left = c => Math.max(0, Math.ceil(c.seconds_left - (Date.now() - AUTO.fetched) / 1000));
+  box.innerHTML = AUTO.counting.map(c => `<div class="acount"><span class="secs">${left(c)}</span>
+      <div><small>Sends in ${left(c)} s</small><b>${esc(c.title)}</b></div><button class="btn btn-dark btn-sm" data-stop="${c.id}">Stop</button></div>`).join("")
+    + `<div class="aon">Automatic send: ${on.map(x => `${esc(T(x.label))} <button class="btn-link" data-off="${x.kind}">Switch off</button>`).join(" · ")}</div>`;
+  box.querySelectorAll("[data-stop]").forEach(b => b.onclick = async () => {
+    await post(`/api/drafts/${b.dataset.stop}/stop`); toast("Stopped. It waits for you."); autoSendWatch(); });
+  box.querySelectorAll("[data-off]").forEach(b => b.onclick = async () => {
+    await post(`/api/autosend/${b.dataset.off}`, {choice: "off"}); toast("Automatic send switched off"); autoSendWatch(); });
+  AUTO.counting.filter(c => left(c) === 0 && !autoFired.has(c.id)).forEach(async c => {
+    autoFired.add(c.id);
+    try { const r = await post(`/api/drafts/${c.id}/send-due`); toast(r.sent ? "Sent automatically" : "Not sent: " + (r.blocked || "it waits for you")); } catch {}
+    autoSendWatch();
+  });
+  if (AUTO.counting.length) requestAnimationFrame(() => setTimeout(renderAuto, 250));
 }

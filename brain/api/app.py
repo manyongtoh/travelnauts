@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException
@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from .. import auditchain, db, jobs
+from .. import auditchain, autosend, db, jobs
 from ..agents import followup, galileo, knowledge_desk, partner_desk, proposal, triage
 from ..config import get_settings
 from ..db import (AgentRun, AuditEntry, Draft, Employee, Family, Job, KnowledgeItem, Mail, ModelCall, Setting, ToolCall,
@@ -619,7 +619,8 @@ def drafts(kind: str | None = None, status: str | None = "draft", limit: int = 3
             mine = {t.id for t in s.scalars(select(TripRequest).where(TripRequest.specialist_id == user.id)).all()}
             rows = [d for d in rows if (d.request_id in mine and not (d.data or {}).get("specialist_id"))
                     or (d.data or {}).get("specialist_id") == user.id]
-        return [as_dict(d) for d in rows]
+        cache = {}
+        return [as_dict(d) | {"auto_send_at": autosend.send_at(s, d, cache)} for d in rows]
 
 
 @app.post("/api/drafts/{did}/approve")
@@ -628,11 +629,76 @@ def approve(did: int, d: Decision, user: Principal = Depends(current_user)):
         draft = s.get(Draft, did) or _404("draft")
         _may_decide(s, user, draft, d.final_body)
         try:
-            return as_dict(approve_draft(s, did, user.name, d.final_body, actor_id=user.id, team_lead="team_lead" in user.roles))
+            out = as_dict(approve_draft(s, did, user.name, d.final_body, actor_id=user.id, team_lead="team_lead" in user.roles))
         except BlockedByCheck as e:
             raise HTTPException(422, f"Check failed: {e}")
         except ValueError as e:
             raise HTTPException(409, str(e))
+        return out | {"ask_autosend": autosend.record(s, s.get(Draft, did), user.id, True)}
+
+
+# Automatic send ------------------------------------------------------------------------------------------
+
+@app.get("/api/autosend")
+def autosend_mine(user: Principal = Depends(current_user)):
+    """The person's automatic-send switches, any open question, and drafts counting down right now."""
+    with db.session() as s:
+        switches = autosend.mine(s, user.id, set(user.roles))
+        counting = []
+        if any(x["status"] == "on" for x in switches):
+            cache, now = {}, utcnow()
+            for d in s.scalars(select(Draft).where(Draft.status == "draft", Draft.kind.in_(autosend.ELIGIBLE),
+                                                   Draft.created_at >= now - timedelta(hours=1))).all():
+                at = autosend.send_at(s, d, cache)
+                if not at:
+                    continue
+                try:
+                    _may_decide(s, user, d)
+                except HTTPException:
+                    continue
+                counting.append({"id": d.id, "kind": d.kind, "title": d.title, "send_at": at,
+                                 "seconds_left": max(0, round((at - now).total_seconds(), 1))})
+        return {"switches": switches, "counting": counting, "hold_seconds": autosend.hold_seconds()}
+
+
+class AutoSendAnswer(BaseModel):
+    choice: str
+
+
+@app.post("/api/autosend/{kind}")
+def autosend_answer(kind: str, body: AutoSendAnswer, user: Principal = Depends(current_user)):
+    with db.session() as s:
+        try:
+            return autosend.answer(s, user.id, set(user.roles), kind, body.choice)
+        except PermissionError as e:
+            raise HTTPException(403, str(e))
+        except ValueError as e:
+            raise HTTPException(409, str(e))
+
+
+@app.post("/api/drafts/{did}/stop")
+def autosend_stop(did: int, user: Principal = Depends(current_user)):
+    with db.session() as s:
+        d = s.get(Draft, did) or _404("draft")
+        _may_decide(s, user, d)
+        try:
+            return as_dict(autosend.stop(s, d, user.id))
+        except ValueError as e:
+            raise HTTPException(409, str(e))
+
+
+@app.post("/api/drafts/{did}/send-due")
+def autosend_due(did: int, user: Principal = Depends(current_user)):
+    """The screen calls this when its countdown reaches zero, so the send does not wait for the next worker tick.
+    It sends only what was due anyway; it can never send a draft early."""
+    with db.session() as s:
+        d = s.get(Draft, did) or _404("draft")
+        _may_decide(s, user, d)
+        at = autosend.send_at(s, d)
+        if not at or at > utcnow():
+            raise HTTPException(409, "Not due")
+        sent = autosend.send(s, d)
+        return {"sent": sent, "status": s.get(Draft, did).status, "blocked": (s.get(Draft, did).data or {}).get("auto_blocked")}
 
 
 @app.post("/api/drafts/{did}/reject")
@@ -640,7 +706,9 @@ def reject(did: int, d: Decision, user: Principal = Depends(current_user)):
     with db.session() as s:
         draft = s.get(Draft, did) or _404("draft")
         _may_decide(s, user, draft)
-        return as_dict(reject_draft(s, did, user.name, d.reason, actor_id=user.id))
+        out = as_dict(reject_draft(s, did, user.name, d.reason, actor_id=user.id))
+        autosend.record(s, s.get(Draft, did), user.id, False)
+        return out
 
 
 # Knowledge ---------------------------------------------------------------------------------------

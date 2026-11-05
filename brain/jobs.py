@@ -287,6 +287,13 @@ def loop(interval: int = 15) -> None:  # pragma: no cover - long running
         with db.session() as s:
             schedule_tick(s)
             work(s)
+            try:
+                from . import autosend
+                autosend.run_due(s)
+            except Exception:  # never let a send problem stop the worker; drafts simply keep waiting
+                s.rollback()
+                import logging
+                logging.getLogger("brain.autosend").exception("automatic send failed")
         time.sleep(interval)
 
 

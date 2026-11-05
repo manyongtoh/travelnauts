@@ -63,7 +63,7 @@ const NL = {
   "Send automatically from now on?": "Voortaan automatisch versturen?",
   "Sends in # s": "Verstuurt over # s", "Stop": "Stop", "Stopped. It waits for you.": "Gestopt. Het wacht op jou.", "Sent automatically": "Automatisch verstuurd",
   "Yes, send automatically": "Ja, automatisch versturen", "No, keep asking": "Nee, blijf vragen", "Automatic send": "Automatisch versturen",
-  "Switch off": "Uitzetten", "on": "aan", "off": "uit",
+  "Switch off": "Uitzetten", "Automatic send switched off": "Automatisch versturen uitgezet", "Fine, you keep approving them": "Prima, je blijft ze zelf goedkeuren", "Not sent:": "Niet verstuurd:", "follow-ups": "opvolgmails", "extras offers": "aanbod extra's", "partner reminders": "herinneringen aan partners", "on": "aan", "off": "uit",
   // team lead
   "Team lead": "Teamleider", "Overview": "Overzicht", "Complaints": "Klachten", "Value": "Waarde", "Insight": "Inzicht", "Knowledge": "Kennis", "Knowledge gaps": "Kennishiaten",
   "open requests": "open aanvragen", "proposals drafted": "voorstellen opgesteld", "approved": "goedgekeurd", "follow-ups": "opvolgmails", "knowledge gaps": "kennishiaten",
@@ -192,6 +192,11 @@ const NL_RULES = [
   [/^Good (morning|afternoon|evening), (.+)$/, (m, p, n) => ({morning: "Goedemorgen", afternoon: "Goedemiddag", evening: "Goedenavond"})[p] + ", " + n],
   [/^Family (.+?)( · .+)?$/, (m, n, rest) => "Familie " + n + (rest || "")],
   [/^Owner (.+) · review by (.+)$/, (m, o, d) => `Eigenaar ${o} · herzien voor ${d}`],
+  [/^Automatic send on for (.+)$/, (m, x) => "Automatisch versturen aan voor " + (NL[x] || x)],
+  [/^Automatic send: (.*)$/, (m, x) => "Automatisch versturen: " + x],
+  [/^You sent the last (\d+) (.+?) without changing a word\. Send them automatically from now on\? Each one waits (\d+) seconds on screen with a Stop button first, and every check still applies\.$/,
+    (m, n, k, s) => `Je hebt de laatste ${n} ${NL[k] || k} verstuurd zonder een woord te veranderen. Voortaan automatisch versturen? Elk bericht staat eerst ${s} seconden op je scherm met een Stop-knop, en alle controles blijven gelden.`],
+  [/^Not sent: (.+)$/, (m, x) => "Niet verstuurd: " + x],
   [/^Model: (.+)$/, (m, x) => "Model: " + x],
   [/^Minutes per (.+) today$/, (m, x) => `Minuten per ${(NL[x] || x).toLowerCase()} nu`],
 ];
