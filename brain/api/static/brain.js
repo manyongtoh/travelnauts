@@ -71,8 +71,11 @@ function greeting() { const h = new Date().getHours(); return h < 12 ? "Good mor
 function today() { return new Date().toLocaleDateString(LANG === "nl" ? "nl-NL" : "en-GB", {weekday: "long", day: "numeric", month: "long", year: "numeric"}).replace(",", ""); }
 
 // shell({role, nav: [[id, label]], links: [[href, label]], who: html}) builds the page frame; views live in <main id="view">.
+const ROLE_KEY = {"Specialist dashboard": "specialist", "Back office": "back_office", "Team lead": "team_lead", "Maintenance": "maintenance", "User management": "maintenance"};
 function shell({role, nav, links, who, onNav, needs}) {
   links = links || [];
+  document.body.dataset.role = ROLE_KEY[role] || "other";
+  document.title = `${T(role)} · ${T("Company brain")}`;
   document.body.innerHTML = `<div class="app">
     <aside class="sidebar">
       <div class="brand"><span class="brand-name">Company brain</span><span class="label">${esc(role)}</span></div>
@@ -114,6 +117,8 @@ function shell({role, nav, links, who, onNav, needs}) {
 }
 function badge(id, n) { const b = $("#badge-" + id); if (!b) return; b.hidden = !n; b.textContent = n; }
 
+const PR_STATUS = {to_send: "To send", waiting: "Waiting for reply", chased: "Reminder sent", answered: "Answered", declined: "Not available", unclear: "Needs reading"};
+const prStatus = s => PR_STATUS[s] || String(s || "").replace("_", " ");
 const REQ_STATUS = {new: ["New request", "hot"], proposal_draft: ["Draft ready", "hot"], change_requested: ["Change requested", "hot"], proposal_sent: ["Proposal sent", ""],
                     booked: ["Booked", "ok"], lost: ["Lost", ""]};
 function sourcesList(sources) {

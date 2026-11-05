@@ -22,6 +22,7 @@ function init() {
   app.start();
 }
 const kids = n => `${n} ${n === 1 ? "child" : "children"}`;
+const famName = s => s && s.trim() ? `Family ${s.trim()}` : "New relation, name unknown";
 const party = (adults, ages) => `${adults} ${adults === 1 ? "adult" : "adults"}` + (ages && ages.length ? ` and ${kids(ages.length)} (${ages.join(", ")})` : "");
 const myName = () => ME.name;
 
@@ -42,7 +43,7 @@ function itemHtml(r) {
   if (first) [lbl, cls] = [first[1], "hot"];
   return `<li><button class="ditem" data-id="${r.id}" aria-current="${r.id === current}">
     <span class="label ${cls}">${esc(lbl)}</span>
-    <span class="fam">Family ${esc(r.family.split(" ").slice(-1)[0])} · ${esc(r.destination_name)}</span>
+    <span class="fam">${esc(famName(r.family.split(" ").slice(-1)[0]))} · ${esc(r.destination_name)}</span>
     <span class="why">${r.days} days, ${party(r.adults, r.child_ages)}, ${esc(r.depart_month)}</span>
   </button></li>`;
 }
@@ -150,7 +151,7 @@ async function openReq(id) {
   const [lbl] = REQ_STATUS[q.status] || [q.status];
   $("#detail").innerHTML = `<div class="detail">
     <span class="label">${esc(lbl)} · Team ${esc(TEAMS[q.team_id] || "")}</span>
-    <h2 class="d-title">Family ${esc(f.surname)} · ${esc(q.destination_name)}</h2>
+    <h2 class="d-title">${esc(famName(f.surname || f.contact_name))} · ${esc(q.destination_name)}</h2>
     <p class="d-sum">${party(f.adults, f.child_ages)} · ${q.days} days · ${q.budget_eur ? "budget " + eur(q.budget_eur) : "no budget given"} · ${esc(q.depart_month)}</p>
     ${r.mail ? `<p class="label sect">Incoming email</p><div class="concept"><dl class="mailhead"><dt>From</dt><dd>${esc(f.contact_name)}</dd><dt>Subject</dt><dd>${esc(r.mail.subject)}</dd>
       <dt>Received</dt><dd>${esc(new Date(r.mail.received_at).toLocaleString("en-GB", {dateStyle: "medium", timeStyle: "short"}))}</dd></dl><pre class="c-text">${esc(r.mail.body)}</pre></div>
@@ -161,12 +162,13 @@ async function openReq(id) {
     ${latest ? draftHtml(latest) : `<div class="actions"><button class="btn btn-primary btn-lg" onclick="act('proposal')">${icon("bolt")} Write travel proposal</button></div>`}
     ${follow.map(draftHtml).join("")}
     <div class="actions">
-      ${latest ? `<button class="btn btn-outline" onclick="act('proposal')">New version</button>
-      <button class="btn btn-outline" onclick="act('alternatives')">Quieter and cheaper versions</button>
-      <button class="btn btn-outline" onclick="act('extras')">Suggest extras</button>` : ""}
-      <button class="btn btn-outline" onclick="act('galileo')">Galileo commands</button>
       ${latest ? `<button class="btn btn-outline" onclick="act('partners')">Ask partners for availability</button>` : ""}
       ${latest && q.status === "booked" ? `<button class="btn btn-outline" onclick="act('roadbook')">Make roadbook and vouchers</button>` : ""}
+      <details class="moreacts"><summary class="btn btn-outline">More actions</summary><div class="menu">
+        ${latest ? `<button onclick="act('proposal')">New version</button>
+        <button onclick="act('alternatives')">Quieter and cheaper versions</button>
+        <button onclick="act('extras')">Suggest extras</button>` : ""}
+        <button onclick="act('galileo')">Galileo commands</button></div></details>
     </div>
     <details style="margin-top:14px"><summary class="label" style="cursor:pointer">Call notes</summary>
       <textarea id="callnotes" class="c-text" style="min-height:110px;border:1px solid var(--sand);border-radius:8px;margin-top:8px" placeholder="Rough notes of the call: wishes, changes, questions, next steps"></textarea>
@@ -175,7 +177,7 @@ async function openReq(id) {
     <div class="more">
       ${r.partners.length ? `<details open><summary>Partner requests <span class="hint">${r.partners.length}, handled by the back office</span></summary><div class="inner">
         <table class="itin">${r.partners.map(p => `<tr><td><b>${esc(p.partner)}</b><br><span style="color:var(--muted)">${esc(p.what)}</span></td>
-        <td><span class="status ${p.status === "answered" ? "go" : p.status === "to_send" ? "me" : "wait"}">${esc(p.status.replace("_", " "))}</span></td>
+        <td><span class="status ${p.status === "answered" ? "go" : p.status === "to_send" ? "me" : "wait"}">${esc(prStatus(p.status))}</span></td>
         <td>${p.available === false ? "Not available" : esc(p.note || "")}</td><td class="num">${p.price_eur ? eur(p.price_eur) : ""}</td></tr>`).join("")}</table></div></details>` : ""}
       ${others.map(d => `<details><summary>${esc({galileo: "Galileo commands", followup: "Follow-up", proposal: "Earlier version", change: "Earlier change", answer: "Answer",
         alternatives: "Alternatives", extras: "Extras", roadbook: "Roadbook", call_notes: "Call note", complaint_reply: "Complaint", trip_alert: "Trip alert"}[d.kind] || d.kind)}

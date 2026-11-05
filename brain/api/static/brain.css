@@ -228,3 +228,31 @@ details.calc[open] summary{border-bottom:1px solid var(--sand-soft)}
 .portalpanel .msgs li{border:1px solid var(--sand);border-radius:10px;padding:6px 9px;font-size:13.5px;max-width:88%}
 .portalpanel .msgs li.them{background:#eef6f4;align-self:flex-start}.portalpanel .msgs li:not(.them){align-self:flex-end}
 .portalpanel .msgs small{display:block;color:var(--muted);font-size:11.5px}.portalpanel textarea{width:100%;box-sizing:border-box;min-height:70px;font:inherit;padding:8px;border:1px solid var(--sand);border-radius:8px}
+
+/* Readability and role colours (5 Nov). Each screen has its own accent on the frame only; the status colours
+   (terra = needs you, sea = done, gold = waiting) mean the same on every screen. */
+:root{--muted:#5B574E;--role:var(--ink);--role-ink:var(--ink);--role-deep:var(--ink);--role-tint:var(--sand-soft)}
+body[data-role="specialist"]{--role:#1D9E75;--role-ink:#0F6E56;--role-deep:#085041;--role-tint:#DDF1EA}
+body[data-role="back_office"]{--role:#378ADD;--role-ink:#185FA5;--role-deep:#0C447C;--role-tint:#E1EDF9}
+body[data-role="team_lead"]{--role:#BA7517;--role-ink:#854F0B;--role-deep:#633806;--role-tint:#F7EBD3}
+body[data-role="maintenance"]{--role:#5F5E5A;--role-ink:#444441;--role-deep:#2C2C2A;--role-tint:#E9E5DC}
+.app{border-top:4px solid var(--role)}
+.brand .label{color:var(--role-ink);font-weight:700}
+.nav-btn[aria-current="page"]{background:var(--role-tint);color:var(--role-deep);box-shadow:inset 3px 0 0 var(--role)}
+.nav-btn[aria-current="page"] .badge{background:var(--terra);color:#fff}
+.btn-primary{background:var(--role-ink)}
+.btn-primary:hover{background:var(--role-deep)}
+.avatar{background:var(--role-ink)}
+.label{font-family:var(--sans);font-size:12.5px;letter-spacing:.01em;text-transform:none;font-weight:600;color:var(--muted)}
+.row-head.label,.row-head .label{font-size:12.5px}
+.pill{font-family:var(--sans);font-size:12px;letter-spacing:0}
+.c-text{max-width:74ch}
+.today > div:first-child{position:sticky;top:calc(var(--tb) + 16px);max-height:calc(100vh - var(--tb) - 32px);overflow:auto;padding-right:4px}
+.board{grid-template-columns:repeat(5,minmax(220px,1fr))}
+details.moreacts{position:relative}
+details.moreacts summary{list-style:none}
+details.moreacts summary::-webkit-details-marker{display:none}
+details.moreacts .menu{position:absolute;z-index:20;left:0;top:calc(100% + 6px);background:var(--white);border:1px solid var(--sand);border-radius:var(--r);padding:6px;display:flex;flex-direction:column;min-width:240px;box-shadow:0 8px 24px rgba(31,47,69,.12)}
+details.moreacts .menu button{background:none;border:0;text-align:left;padding:9px 12px;border-radius:var(--r-sm);font-weight:600;font-size:14px}
+details.moreacts .menu button:hover{background:var(--hover)}
+@media (max-width:1100px){.today > div:first-child{position:static;max-height:none}}
