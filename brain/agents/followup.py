@@ -7,13 +7,14 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..clock import utcnow
 from ..config import get_settings
 from ..db import Draft, Employee, Family, TripRequest
 from ..identity import agent
-from ..toolserver import server
 from ..synth.world import DESTINATIONS
+from ..tenant import tenant
+from ..toolserver import server
 from .common import audit, run_step
-from ..clock import utcnow
 
 ME = agent("follow_up")
 
@@ -48,7 +49,7 @@ def write_followup(s: Session, request_id: str) -> Draft:
         days_since = (utcnow() - tr.proposal_sent_at).days if tr.proposal_sent_at else None
         ctx = {"family": {"name": fam.contact_name, "child_ages": fam.child_ages},
                "trip": {"destination": d["nl"], "days": tr.days, "month": tr.depart_month},
-               "days_since_proposal": days_since, "specialist": spec.name if spec else "Travelnauts",
+               "days_since_proposal": days_since, "specialist": spec.name if spec else tenant().short_name,
                "knowledge": [{"id": h["id"], "text": h["body"]} for h in hits]}
         out, _ = run_step(s, "followup", FollowUpText, INSTRUCTIONS, ctx)
         draft = Draft(kind="followup", request_id=tr.id, title=out.subject, body=out.body,

@@ -204,7 +204,7 @@ async function viewValue() {
       <p>Counted from what happened in the last ${vdays} days. Hours saved is an estimate: drafts sent, times the minutes a person used to spend, minus what was rewritten.</p></div>
     <div class="filters">${teamChips()}<div class="fchips"><span class="label" style="margin-right:6px">Period</span>${[7, 30, 90, 365].map(d =>
       `<button class="fchip" data-days="${d}" aria-pressed="${vdays === d}">${d} days</button>`).join("")}</div></div>
-    ${b.measured ? "" : `<div class="guard">${icon("shield")} The baseline is an assumption until Travelnauts measures it with the pilot group. Change it below; every figure updates.</div>`}
+    ${b.measured ? "" : `<div class="guard">${icon("shield")} The baseline is an assumption until the team measures it with the pilot group. Change it below; every figure updates.</div>`}
     <div class="kpis">
       <div class="kpi"><span class="label">Hours saved (est.)</span><b>${r.hours_saved_estimate}</b></div>
       <div class="kpi"><span class="label">First proposal ready</span><b>${hrs(r.speed.median_hours_to_first_proposal_draft)}</b><small>was ${b.hours_to_first_proposal} h</small></div>

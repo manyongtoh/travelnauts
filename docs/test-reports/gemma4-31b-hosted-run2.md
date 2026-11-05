@@ -20,7 +20,7 @@ synthetic data. It ran at the same time as a 26B run on the same key.
 - "Dit checken we nog" now sits where the knowledge is past its review date (typhoons in September, a street food
   tour). That is partly right. On real notes, with real review dates, it should appear far less; check again then.
 - The free tier stays unreliable and slow when shared. It says nothing about the pilot, where Gemma runs in
-  Travelnauts' own Azure.
+  the client's own Azure.
 
 ---
 
@@ -138,7 +138,7 @@ We gaan dit uitzoeken met onze partner ter plaatse. We komen hier zo snel mogeli
 
 Hartelijke groet,
 
-Travelnauts
+(company name)
 ```
 
 ## Complaint reply to m0087
@@ -152,6 +152,6 @@ We komen hier zo snel mogelijk op terug.
 
 Hartelijke groet,
 
-Travelnauts
+(company name)
 ```
 

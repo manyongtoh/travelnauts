@@ -4,9 +4,24 @@ import pytest
 from sqlalchemy import select
 
 from brain import db
-from brain.agents import followup, galileo, knowledge_desk, partner_desk, proposal, triage
+from brain.agents import (
+    followup,
+    galileo,
+    knowledge_desk,
+    partner_desk,
+    proposal,
+    triage,
+)
 from brain.config import Settings
-from brain.db import Draft, Family, KnowledgeItem, Mail, PartnerRequest, PriceItem, TripRequest
+from brain.db import (
+    Draft,
+    Family,
+    KnowledgeItem,
+    Mail,
+    PartnerRequest,
+    PriceItem,
+    TripRequest,
+)
 from brain.knowledge.store import KnowledgeBase
 from brain.workflow import approve_draft, edit_share
 

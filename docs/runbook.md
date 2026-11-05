@@ -1,6 +1,6 @@
 # Runbook: daily operation and incidents
 
-For the administrator at Myt (myt-beheer) and, later, Travelnauts' own administrator. Every procedure below was
+For the administrator at Myt (myt-beheer) and, later, the client's own administrator. Every procedure below was
 tested in the sandbox, either in the two-week simulation (`brain simulate`), the backup drill
 (`scripts/backup_drill.sh`) or the test suite. The column "Tested in" says where.
 
@@ -49,7 +49,7 @@ The same checks from a terminal: `brain verify` (row counts, audit chain, schema
 
 - Run the backup drill against a fresh copy of the live backup: `scripts/backup_drill.sh <database url>`.
   It must end with `drill passed`. File the output in the security folder.
-- Review the user list with Travelnauts: anyone who left must be inactive.
+- Review the user list with the client: anyone who left must be inactive.
 - Run `pip-audit` (CI does this on every change, but new vulnerabilities appear in old versions too).
 
 ## Incidents
@@ -133,7 +133,7 @@ Each incident lists what you see, what the system already does on its own, and w
 - **You do:** pause that agent (**Maintenance > Pause**; every pause is logged). Other agents keep working. Add the bad
   case to the test set, fix the prompt or the knowledge, run `brain bench --gate`, then resume it.
 
-### Someone leaves Travelnauts
+### Someone leaves the client
 - **You do:** set the user to inactive in **Users**. Their access stops at once. The screen shows how many
   of their open requests need a new owner; reassign them in **Team lead > Insight**.
 - **Tested in:** simulation day 11 (access removed, 11 requests listed to reassign); security tests (inactive
@@ -147,7 +147,7 @@ Each incident lists what you see, what the system already does on its own, and w
 ### The audit chain is broken
 - **You see:** a critical alert, or Maintenance or `brain verify` says "audit chain broken at entry N".
 - **This means:** someone changed or deleted a log row directly in the database. The application cannot do this.
-- **You do:** do not repair it. Export the database (pg_dump), note the time, and tell the Travelnauts privacy
+- **You do:** do not repair it. Export the database (pg_dump), note the time, and tell the client's privacy
   contact and Myt the same day. Compare with the last backup to see what was changed. Treat it as a possible
   data incident.
 - **Tested in:** backup drill (a changed row in a restored copy is found at the exact entry); test
@@ -155,8 +155,8 @@ Each incident lists what you see, what the system already does on its own, and w
 
 ### Suspected data leak
 - **You do, within the hour:** pause all agents; switch off the mail connector; save the audit log and the
-  agent log. Tell the Travelnauts privacy contact. Under the processing agreement Myt informs Travelnauts without
-  undue delay, and Travelnauts decides on reporting to the Autoriteit Persoonsgegevens within 72 hours.
+  agent log. Tell the client's privacy contact. Under the processing agreement Myt informs the client without
+  undue delay, and the client decides on reporting to the Autoriteit Persoonsgegevens within 72 hours.
 - The audit log shows who opened which customer data and when (including every break-glass use with its reason).
 
 ### Restore from backup
@@ -173,11 +173,11 @@ Each incident lists what you see, what the system already does on its own, and w
 
 ## Who to call
 
-Fill in with Travelnauts before the pilot starts.
+Fill in with the client before the pilot starts; the client repo keeps the filled-in copy.
 
 | Role | Name | How |
 |---|---|---|
 | Administrator at Myt | | |
-| Travelnauts privacy contact | | |
+| Client privacy contact | | |
 | TravelSpirit administrator | | |
 | Azure subscription owner | | |

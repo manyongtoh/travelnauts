@@ -92,8 +92,8 @@ def verify_recent(s: Session) -> dict:
 
 def verify_full_and_remember(s: Session) -> dict:
     """Nightly: the whole log, and the result kept for the maintenance screen."""
-    from .db import Setting
     from .clock import utcnow
+    from .db import Setting
     r = verify(s)
     s.merge(Setting(key="audit_full_check", value=r | {"at": utcnow().isoformat(timespec="minutes")}))
     s.commit()

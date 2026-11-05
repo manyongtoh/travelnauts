@@ -1,7 +1,8 @@
 [project]
-name = "travelnauts-brain-sandbox"
+name = "brain-core"
 version = "0.1.0"
-description = "Sandbox for the Travelnauts company brain. Synthetic data only."
+description = "brain-core: the company brain platform of Myt B.V. Synthetic data only."
+license = {file = "LICENSE"}
 requires-python = ">=3.11"
 dependencies = [
   "pydantic>=2.7",
@@ -25,6 +26,9 @@ dev = ["pytest>=8"]
 [project.scripts]
 brain = "brain.cli:main"
 
+[project.entry-points."brain.tenants"]
+wolkenwaai = "brain.sample_tenant:pack"
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
@@ -34,10 +38,22 @@ include = ["brain*"]
 
 [tool.setuptools.package-data]
 "brain.api" = ["static/*"]
-"brain.prompts" = ["*.md", "agents/*.md"]
+"brain.prompts" = ["agents/*.md"]
+"brain.sample_tenant" = ["tenant.toml", "house.md"]
 "brain.knowledge" = ["vault/**/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]  # tests share helpers (from tests.test_api import ...)
 filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint]
+extend-ignore = [
+  "B008",    # FastAPI's Depends()/Header() in default arguments is the framework's own pattern
+  "ISC004",  # long prompts, regexes and letters are written as adjacent strings on purpose
+  "SIM905",  # word lists written as one block of text and split, easier to read and edit than a list literal
+  "DTZ001", "DTZ011",  # the app keeps naive UTC times everywhere (brain.clock); mixing aware times would break comparisons
+]

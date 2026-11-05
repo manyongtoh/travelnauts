@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex"><meta name="referrer" content="no-referrer">
-<title>Travelnauts · Partner request</title>
+<title>Partner request</title>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/brain.css">
 <style>
@@ -28,7 +28,7 @@
   @media (max-width:600px){.grid{grid-template-columns:1fr 1fr}.grid label:last-child{grid-column:1/-1}}
 </style></head>
 <body>
-<header><div class="banner">TRAVELNAUTS · PARTNER REQUEST</div></header>
+<header><div class="banner" id="banner">PARTNER REQUEST</div></header>
 <main class="wrap" id="app"><p>Loading…</p></main>
 <script>
 const token = location.pathname.split("/").pop();
@@ -44,6 +44,7 @@ async function call(path, opts = {}) {
 let V = null;
 async function load() {
   try { V = await call(""); } catch (e) { $("#app").innerHTML = `<div class="line"><h2>Link not valid</h2><p>${esc(e.message)}</p></div>`; return; }
+  $("#banner").textContent = `${V.company} · PARTNER REQUEST`.toUpperCase(); document.title = `${V.company} · Partner request`;
   const t = V.trip, p = V.party;
   const kids = p.children_ages.length ? `, children ${p.children_ages.join(", ")}` : "";
   const done = V.lines.filter(l => l.status === "confirmed").length;
@@ -54,7 +55,7 @@ async function load() {
     <p class="sub">Answer each line when you know it: confirmed with a price, still asking your supplier, or an alternative. Save per line; we see it straight away. Questions go in the thread below.</p>
     ${V.lines.map(lineHtml).join("")}
     <div class="line"><h2>Thread</h2><ul class="msgs">${V.messages.filter(m => !m.line_id).map(msgHtml).join("") || `<li>No messages yet.</li>`}</ul>
-      <textarea id="msg" placeholder="A question or a note for Travelnauts" maxlength="2000"></textarea>
+      <textarea id="msg" placeholder="A question or a note for the team" maxlength="2000"></textarea>
       <div class="row-end"><label class="btn btn-outline btn-sm" style="cursor:pointer">Upload a PDF offer<input type="file" id="pdf" accept="application/pdf" hidden></label>
         <button class="btn btn-primary btn-sm" id="send">Send message</button></div></div>
     <p class="label" style="margin-top:18px">This link is personal to ${esc(V.partner)} and works until ${esc(V.link_valid_until)}. We never share the family's name or contact details here.</p>`;
@@ -64,7 +65,7 @@ async function load() {
   $("#pdf").onchange = async e => { const f = e.target.files[0]; if (!f) return;
     try { await call("/files", {method: "POST", raw: await f.arrayBuffer()}); load(); } catch (err) { $("#msg").placeholder = err.message; } };
 }
-const msgHtml = m => `<li class="${m.author === "partner" ? "them" : ""}"><small>${esc(m.author === "partner" ? m.name : "Travelnauts · " + m.name)} · round ${m.round} · ${esc(m.at.slice(0, 16).replace("T", " "))}</small>${esc(m.text)}</li>`;
+const msgHtml = m => `<li class="${m.author === "partner" ? "them" : ""}"><small>${esc(m.author === "partner" ? m.name : V.company + " · " + m.name)} · round ${m.round} · ${esc(m.at.slice(0, 16).replace("T", " "))}</small>${esc(m.text)}</li>`;
 function lineHtml(l) {
   const alt = l.alternative || {};
   const thread = V.messages.filter(m => m.line_id === l.id);

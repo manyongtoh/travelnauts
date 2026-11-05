@@ -74,6 +74,7 @@ def test_a_job_is_claimed_by_one_worker_only(world):
 
 def test_dead_workers_jobs_come_back(world):
     from datetime import timedelta
+
     from brain.clock import utcnow
     j = jobs.enqueue(world, "poll_inbox")
     world.commit()
@@ -92,6 +93,7 @@ def test_two_schedulers_queue_each_job_once(world):
 
 def test_scheduler_runs_again_after_the_interval(world):
     from datetime import timedelta
+
     from brain.clock import utcnow
     jobs.schedule_tick(world, utcnow())
     later = jobs.schedule_tick(world, utcnow() + timedelta(hours=2))  # the compare and set path, not the first insert
@@ -104,7 +106,8 @@ def test_audit_chain_cannot_fork(world):
     world.commit()
     fork = AuditEntry(at=a.at, actor="b", action="approve", object_type="draft", object_id="2", prev_hash=a.prev_hash, hash="x")
     world.add(fork)
-    with pytest.raises(Exception):
+    from sqlalchemy.exc import DBAPIError
+    with pytest.raises(DBAPIError):
         world.commit()
     world.rollback()
     assert auditchain.verify(world)["ok"]
@@ -118,7 +121,8 @@ def test_request_numbers_stay_unique(world):
 
 def _parallel_worker(url, name):
     os.environ["BRAIN_DATABASE_URL"] = url
-    from brain import db, jobs as j
+    from brain import db
+    from brain import jobs as j
     db.reset_engine(url)
     n = 0
     with db.session() as s:
@@ -172,6 +176,7 @@ def test_an_edited_note_keeps_its_approved_text_until_the_change_is_approved(wor
 
 def test_verify_reports_counts_and_catches_a_changed_audit_entry(world):
     from sqlalchemy import update
+
     from brain.db import AuditEntry
     from brain.ops_verify import verify_database
     for i in range(3):
@@ -189,6 +194,7 @@ def test_verify_reports_counts_and_catches_a_changed_audit_entry(world):
 def test_migrate_adopts_a_matching_database_and_refuses_a_different_one(world, tmp_path):
     import pytest as _pt
     from alembic.config import Config
+
     from brain.config import ROOT
     from brain.ops_verify import adopt_unmanaged
     cfg = Config(str(ROOT / "alembic.ini"))

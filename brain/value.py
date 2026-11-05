@@ -1,9 +1,9 @@
-"""What the brain is worth: the numbers behind the success fee, against a baseline Travelnauts measures.
+"""What the brain is worth: the numbers behind the success fee, against a baseline the client measures.
 
 Everything is counted from what actually happened (requests, drafts, approvals, partner answers). Minutes saved
 are an estimate: drafts the brain made, times the minutes a person used to spend on that task (the baseline,
 measured with the pilot group before go-live), minus the share the specialist rewrote. The baseline values are
-editable and shown as assumptions until Travelnauts has measured them.
+editable and shown as assumptions until the client has measured them.
 """
 from __future__ import annotations
 
@@ -14,7 +14,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .clock import utcnow
-from .db import Draft, InvoiceCheck, KnowledgeGap, KnowledgeItem, Mail, PartnerRequest, Setting, TripRequest
+from .db import (
+    Draft,
+    InvoiceCheck,
+    KnowledgeGap,
+    KnowledgeItem,
+    Mail,
+    PartnerRequest,
+    Setting,
+    TripRequest,
+)
 
 # Minutes a person spends per task today. PLACEHOLDERS until the baseline measurement (open question Q30).
 DEFAULT_BASELINE = {
@@ -89,7 +98,7 @@ def report(s: Session, days: int = 30, team: str | None = None) -> dict:
                        "auto_sent": sum((d.decided_by or "").startswith("auto:") for d in ap)}
 
     saved = 0.0
-    for k, row in per_kind.items():
+    for k in per_kind:
         per = b["minutes"].get(k, 0)
         for d in [d for d in drafts if d.kind == k and d.status == "approved"]:
             saved += per * (1 - min(d.edit_share or 0, 1))

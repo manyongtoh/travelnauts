@@ -47,6 +47,7 @@ def test_a_family_goes_from_first_mail_to_next_trip_without_anyone_remembering_a
 
 def test_family_is_found_by_address_and_named_from_the_sign_off(world):
     from types import SimpleNamespace
+
     from brain.agents.triage import name_from_sign_off, resolve_family
     from brain.db import Family
     known = world.query(Family).filter(Family.email.is_not(None)).first()
@@ -61,6 +62,7 @@ def test_family_is_found_by_address_and_named_from_the_sign_off(world):
 
 def test_a_follow_up_cannot_be_sent_after_the_family_booked(world):
     import pytest
+
     from brain.agents import proposal
     from brain.db import Draft, TripRequest
     from brain.workflow import BlockedByCheck, approve_draft
@@ -78,6 +80,7 @@ def test_a_follow_up_cannot_be_sent_after_the_family_booked(world):
 def test_go_live_does_not_flood_old_bookings_with_drafts(world):
     """On the first run the booking check sees every booked trip in TravelSpirit. Only trips still to come get work."""
     from datetime import timedelta
+
     from brain.agents import backoffice
     from brain.clock import today
     from brain.db import Job, TripRequest
@@ -100,6 +103,7 @@ def test_names_from_sign_offs_are_never_wrong():
     import sys
     sys.path.insert(0, str(Path(__file__).parent / "fixtures"))
     from signoffs import cases, held_out
+
     from brain.agents.triage import name_from_sign_off
     for label, data, need in (("main", cases(), 0.95), ("held out", held_out(), 0.9)):
         got = [(name_from_sign_off(b), (n, s)) for b, n, s in data]

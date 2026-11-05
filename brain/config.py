@@ -39,7 +39,7 @@ class Settings:
         if self.data_stage == "live":
             raise RuntimeError(
                 "Live data is not allowed in the sandbox. Live use needs the go-live approval "
-                "from Inge and Jonas, the pentest, the DPIA and the updated privacy texts."
+                "from the client's management, the pentest, the DPIA and the updated privacy texts."
             )
         if self.travelspirit_write not in ("off", "drafts"):
             raise ValueError("BRAIN_TRAVELSPIRIT_WRITE must be 'off' or 'drafts'; agents never write final records")

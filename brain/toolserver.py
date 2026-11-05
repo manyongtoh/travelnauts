@@ -13,17 +13,27 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Any, Callable
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .db import CacheEntry, Family, Partner, PastProposal, ToolCall, TripRequest, as_dict, cache_put
+from .clock import utcnow
+from .db import (
+    CacheEntry,
+    Family,
+    Partner,
+    PastProposal,
+    ToolCall,
+    TripRequest,
+    as_dict,
+    cache_put,
+)
 from .identity import AGENTS, Principal
 from .trace import current_trace
-from .clock import utcnow
 
 
 @dataclass
@@ -100,7 +110,8 @@ server = ToolServer()
 
 # Failed or refused tool calls must stay in the log even when the work around them is undone (rolled back):
 # otherwise an outage or an attempt to use a forbidden tool leaves no trace.
-import contextvars as _cv  # noqa: E402
+import contextvars as _cv
+
 _failed_calls: _cv.ContextVar[list | None] = _cv.ContextVar("failed_tool_calls", default=None)
 
 
@@ -117,24 +128,29 @@ def forget_failed_calls() -> None:
     _failed_calls.set([])
 
 
-# TravelSpirit (through the connector) ----------------------------------------------------------
+# The system of record and the channel (through the connectors) ---------------------------------
 
-def _ts(s):
-    from .travelspirit.client import get_travelspirit
-    return get_travelspirit(s)
+def _record(s):
+    from .connectors import get_system_of_record
+    return get_system_of_record(s)
+
+
+def _channel(s):
+    from .connectors import get_channel
+    return get_channel(s)
 
 
 @server.tool("ts.read_mail", cache_seconds=300)
 def read_mail(s: Session, mail_id: str) -> dict:
     """Read one mail from TravelSpirit Mail."""
-    return _ts(s).mail(mail_id)
+    return _channel(s).message(mail_id)
 
 
 @server.tool("ts.read_relation", cache_seconds=300)
 def read_relation(s: Session, family_id: str) -> dict:
     """Read a relation (family) from TravelSpirit, with what the brain remembers about them."""
     from .family import history
-    return _ts(s).relation(family_id) | {"history": history(s, family_id)}
+    return _record(s).customer(family_id) | {"history": history(s, family_id)}
 
 
 @server.tool("ts.read_trip", cache_seconds=60)
@@ -160,7 +176,7 @@ def list_trips(s: Session, status: str | None = None, family_id: str | None = No
 @server.tool("ts.draft_reisplan", access="draft")
 def draft_reisplan(s: Session, request_id: str, plan: dict) -> dict:
     """Create a draft reisplan in the Visual Tour Builder (drafts only, never final)."""
-    return _ts(s).draft_reisplan(request_id, plan)
+    return _record(s).draft_itinerary(request_id, plan)
 
 
 # Knowledge and examples ------------------------------------------------------------------------
@@ -204,8 +220,8 @@ def partners_list(s: Session, destination: str | None = None) -> list[dict]:
 @server.tool("galileo.write_commands", access="text", customer_data=False)
 def galileo_check(s: Session, commands: list[str]) -> dict:
     """Check Galileo commands against the allowed formats. Text only: nothing is executed."""
-    from .agents.galileo import ALLOWED
-    bad = [c for c in commands if not any(p.match(c) for p in ALLOWED)]
+    from .agents.galileo import allowed
+    bad = [c for c in commands if not any(p.match(c) for p in allowed())]
     return {"ok": not bad, "unknown_format": bad}
 
 
@@ -223,16 +239,18 @@ def prices_read(s: Session, destination: str | None = None) -> list[dict]:
     return [as_dict(p) | {"valid_until": p.valid_until.isoformat() if p.valid_until else None} for p in s.scalars(q).all()]
 
 
-def match_partner_request(s: Session, m) -> "PartnerRequest | None":  # noqa: F821  imported inside, avoids a cycle
+def match_partner_request(s: Session, m) -> PartnerRequest | None:  # noqa: F821  imported inside, avoids a cycle
     """Which of our requests does this partner mail answer? Only a sure match: a person picks otherwise.
     1. a person already chose (back office matched it); 2. our reference and this partner; 3. our reference and the
     only partner asked on that trip; 4. no reference, but this partner has exactly one open request with us."""
     import re as _re
+
     from .db import PartnerRequest
     chosen = (m.triage or {}).get("partner_request_id")
     if chosen:
         return s.get(PartnerRequest, chosen)
-    ref = _re.search(r"TN-?\s?(R\d{3,})", f"{m.subject} {m.body}", _re.I)
+    from .tenant import tenant
+    ref = _re.search(rf"{tenant().ref_re}-?\s?(R\d{{3,}})", f"{m.subject} {m.body}", _re.IGNORECASE)
     if ref:
         rows = s.scalars(select(PartnerRequest).where(PartnerRequest.request_id == ref.group(1).lower())).all()
         mine = [pr for pr in rows if pr.partner_id == m.partner_id] if m.partner_id else rows
@@ -246,7 +264,7 @@ def match_partner_request(s: Session, m) -> "PartnerRequest | None":  # noqa: F8
 
 @server.tool("partners.read_reply")
 def partners_read_reply(s: Session, mail_id: str) -> dict:
-    """Read a partner's reply mail and the request it answers (matched on the TN reference)."""
+    """Read a partner's reply mail and the request it answers (matched on our booking reference)."""
     from .db import Mail
     m = s.get(Mail, mail_id)
     pr = match_partner_request(s, m)

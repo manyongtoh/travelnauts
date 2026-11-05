@@ -52,7 +52,7 @@ INJECTION_PATTERNS = [
 
 
 def detect_injection(text: str) -> dict:
-    reasons = sorted({label for rx, label in INJECTION_PATTERNS if re.search(rx, text, re.I | re.S)})
+    reasons = sorted({label for rx, label in INJECTION_PATTERNS if re.search(rx, text, re.IGNORECASE | re.DOTALL)})
     result = {"flagged": bool(reasons), "reasons": reasons, "source": "rules"}
     if os.getenv("AZURE_CONTENT_SAFETY_ENDPOINT") and os.getenv("AZURE_CONTENT_SAFETY_KEY"):
         try:
@@ -107,7 +107,7 @@ class Pseudonymiser:
         elif isinstance(obj, str):
             if key in NAME_KEYS:
                 for part in re.findall(r"[A-Za-zÀ-ÿ'-]+", obj):
-                    if len(part) > 1 and part.lower() not in PARTICLES | {"travelnauts", "gezin"}:
+                    if len(part) > 1 and part.lower() not in PARTICLES | {"gezin"} | _company_words():
                         self._tag("NAAM", part)
             free_text = "\n" in obj or len(obj) > 80  # names are only searched in mail-like text, not in field values
             if free_text:
@@ -148,6 +148,7 @@ class Pseudonymiser:
     def check(self, masked: dict) -> None:
         """Fail closed: refuse if any name we know of, or a likely first name, is still in the text."""
         import json as _json
+
         from .names import FIRST_NAMES
         text = _json.dumps(masked, ensure_ascii=False)
         left = [v for v, tag in self.forward.items() if tag.startswith("[NAAM") and re.search(rf"(?<![\w\[]){re.escape(v)}(?![\w\]])", text)]
@@ -163,25 +164,25 @@ class Pseudonymiser:
 
 # --- Out: checks on every draft before it is saved -----------------------------------------------
 
-HEALTH = re.compile(r"\b(malaria\w*|vaccin\w*|inent\w*|medicij\w*|prik\w*|antibiotica|tabletten|pillen|dosis|vaccination\w*|medication)\b", re.I)
-REFERRAL = re.compile(r"\b(GGD|huisarts|reisvaccinatie|doctor|arts)\b", re.I)
-EURO = re.compile(r"(?:€\s?|EUR\s?)(\d{1,3}(?:[.,]\d{3})+|\d+)|(\d{1,3}(?:[.,]\d{3})+|\d{3,})\s?(?:euro|EUR)", re.I)
+HEALTH = re.compile(r"\b(malaria\w*|vaccin\w*|inent\w*|medicij\w*|prik\w*|antibiotica|tabletten|pillen|dosis|vaccination\w*|medication)\b", re.IGNORECASE)
+REFERRAL = re.compile(r"\b(GGD|huisarts|reisvaccinatie|doctor|arts)\b", re.IGNORECASE)
+EURO = re.compile(r"(?:€\s?|EUR\s?)(\d{1,3}(?:[.,]\d{3})+|\d+)|(\d{1,3}(?:[.,]\d{3})+|\d{3,})\s?(?:euro|EUR)", re.IGNORECASE)
 DASHES = re.compile("[\u2013\u2014]")
 
 
 def _amounts(text: str) -> list[int]:
     """Euro amounts in a text, rounded to the euro (see brain/money.py for how 1.240,50 and 1,240.50 are read)."""
     from .money import amounts
-    return [int(round(a)) for a in amounts(text) if a >= 1]
+    return [round(a) for a in amounts(text) if a >= 1]
 
 
-INTERNAL = re.compile(r"\b(is|zijn) verlopen\b|\bprijs (is )?verlopen|vraag een nieuwe prijs op|price (has )?expired", re.I)
+INTERNAL = re.compile(r"\b(is|zijn) verlopen\b|\bprijs (is )?verlopen|vraag een nieuwe prijs op|price (has )?expired", re.IGNORECASE)
 
 
 def check_output(text: str, allowed_prices: list[float] | None = None, known_hotels: set[str] | None = None,
                  route_hotels: set[str] | None = None) -> list[str]:
     problems = []
-    allowed = {int(round(p)) for p in (allowed_prices or [])}
+    allowed = {round(p) for p in (allowed_prices or [])}
     for a in _amounts(text):
         if allowed and all(abs(a - p) > 1 for p in allowed):
             problems.append(f"Price {a} euro is not from the calculation")
@@ -216,3 +217,9 @@ def _walk(obj, key=None):
             yield from _walk(v, key)
     else:
         yield key, obj
+
+
+def _company_words() -> set[str]:
+    """The company's own name is never a family name to mask."""
+    from .tenant import tenant
+    return set(tenant().name_words)

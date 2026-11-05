@@ -5,6 +5,7 @@ from datetime import timedelta
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from brain.tenant import tenant
 from tests.test_api import RUBEN, SANNE
 
 
@@ -37,7 +38,7 @@ def test_partner_answers_line_by_line_and_we_accept_an_alternative(world):
     fam = world.get(Family, tr.family_id)
 
     v = c.get(f"/api/portal/{token}").json()  # no sign-in: the link is the key
-    assert v["reference"] == f"TN-{tr.id.upper()}" and len(v["lines"]) >= 3 and v["party"]["adults"] == fam.adults
+    assert v["reference"] == tenant().reference(tr.id) and len(v["lines"]) >= 3 and v["party"]["adults"] == fam.adults
     shown = str(v).lower()
     assert fam.contact_name.lower() not in shown and (fam.email or "@@").lower() not in shown and fam.surname.lower() not in shown
     assert c.get("/api/portal/not-a-real-token").status_code == 404
@@ -81,7 +82,7 @@ def test_partner_answers_line_by_line_and_we_accept_an_alternative(world):
     assert r["flagged"] is True
     view = c.get(f"/api/portal/{token}").json()
     rounds = [(m["author"], m["round"]) for m in view["messages"] if not m["line_id"]]
-    assert rounds[0] == ("travelnauts", rounds[0][1]) and rounds[-1][0] == "partner"
+    assert rounds[0] == ("team", rounds[0][1]) and rounds[-1][0] == "partner"
     world.expire_all()
     assert world.get(PartnerRequest, pr.id).status == "unclear" and world.get(PartnerRequest, pr.id).offer["flagged"]
 

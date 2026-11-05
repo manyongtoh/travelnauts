@@ -10,7 +10,7 @@ const NL = {
   "Back office view →": "Backofficescherm →", "Maintenance →": "Beheer →", "User management →": "Gebruikersbeheer →",
   "specialist": "specialist", "back office": "backoffice", "team lead": "teamleider", "product and content": "product en content", "admin": "beheer",
   "Not for your role": "Niet voor jouw rol", "cannot open this screen.": "kan dit scherm niet openen.", "Sign in as someone else": "Log in als iemand anders",
-  "Travelnauts pilot · synthetic stage": "Travelnauts pilot · synthetische fase", "Pilot · synthetic stage": "Pilot · synthetische fase",
+  "Pilot · synthetic stage": "Pilot · synthetische fase",
   "Pick who you are. In the pilot this is your Microsoft sign-in with a second factor (Entra ID); what you can see and do follows your role.":
     "Kies wie je bent. In de pilot is dit je Microsoft-login met een tweede factor (Entra ID); wat je ziet en mag hangt af van je rol.",
   "Sales specialists": "Reisspecialisten", "Own requests and drafts, knowledge, approve and send own drafts": "Eigen aanvragen en concepten, kennis, eigen concepten goedkeuren en versturen",
@@ -90,8 +90,8 @@ const NL = {
   "What the brain is worth": "Wat het brein oplevert", "Period": "Periode",
   "Counted from what happened in the last # days. Hours saved is an estimate: drafts sent, times the minutes a person used to spend, minus what was rewritten.":
     "Geteld uit wat er de afgelopen # dagen gebeurde. Bespaarde uren zijn een schatting: verstuurde concepten, maal de minuten die iemand er vroeger aan kwijt was, min wat werd herschreven.",
-  "The baseline is an assumption until Travelnauts measures it with the pilot group. Change it below; every figure updates.":
-    "De nulmeting is een aanname tot Travelnauts die meet met de pilotgroep. Pas haar hieronder aan; alle cijfers rekenen mee.",
+  "The baseline is an assumption until the team measures it with the pilot group. Change it below; every figure updates.":
+    "De nulmeting is een aanname tot het team haar meet met de pilotgroep. Pas haar hieronder aan; alle cijfers rekenen mee.",
   "Hours saved (est.)": "Bespaarde uren (schatting)", "First proposal ready": "Eerste voorstel klaar", "# h": "# u", "was # h": "was # u", "Sent unchanged": "Ongewijzigd verstuurd",
   "rewritten #%": "herschreven #%", "rewritten –%": "herschreven –%", "Done unprompted": "Uit zichzelf gedaan", "drafts nobody asked for": "concepten waar niemand om vroeg",
   "Partner answered": "Partner antwoordde", "median # days": "mediaan # dagen", "median – days": "mediaan – dagen", "of # proposals sent": "van # verstuurde voorstellen",

@@ -18,10 +18,10 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..clock import today as clock_today
+from ..clock import utcnow
 from ..db import CacheEntry, Employee, KnowledgeGap, KnowledgeItem, cache_put
 from .embed import embedder
-from ..clock import utcnow
-from ..clock import today as clock_today
 
 MIN_SCORE = 0.18  # keyword score below which a hit is not good enough to answer from
 STOPWORDS_NL = ["de", "het", "een", "en", "van", "in", "is", "op", "te", "dat", "die", "voor", "met", "zijn", "we", "wij",

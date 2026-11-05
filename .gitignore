@@ -11,3 +11,5 @@ data/vault/
 data/ops/
 data/files/
 data/*.dump
+data/*.db-wal
+data/*.db-shm

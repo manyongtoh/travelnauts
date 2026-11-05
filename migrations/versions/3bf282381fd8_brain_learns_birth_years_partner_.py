@@ -4,9 +4,8 @@ Revision ID: 3bf282381fd8
 Revises: c292ca44890c
 Create Date: 2026-11-04 22:53:25.216893
 """
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = '3bf282381fd8'
 down_revision = 'c292ca44890c'

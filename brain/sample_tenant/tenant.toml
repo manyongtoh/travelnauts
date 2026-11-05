@@ -1,0 +1,18 @@
+# Wolkenwaai Reizen: invented. Every value here is made up for the synthetic world.
+tenant_id = "wolkenwaai"
+name = "Wolkenwaai Reizen"
+own_domains = ["wolkenwaai.example"]
+emergency_line = "+31 20 000 0000 (sandbox)"
+galileo_agency_remark = "P.AMSB*WOLKENWAAI"
+reference_prefix = "WW"
+autonomy_max = 2
+
+[pricing]
+default_margin = 0.20
+
+[pricing.margins]
+flight = 0.06
+hotel = 0.22
+excursion = 0.25
+transfer = 0.20
+car = 0.18

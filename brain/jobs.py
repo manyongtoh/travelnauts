@@ -10,8 +10,8 @@ queued until the agent is resumed). The scheduler adds the periodic jobs from SC
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import Callable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -20,7 +20,7 @@ from .clock import utcnow
 from .db import Job, Mail, Setting
 
 MAX_ATTEMPTS = 3
-UPSTREAM = ("TravelSpiritUnavailable", "TimeoutError", "ConnectionError", "ConnectTimeout", "ReadTimeout")
+UPSTREAM = ("SystemUnavailable", "TravelSpiritUnavailable", "TimeoutError", "ConnectionError", "ConnectTimeout", "ReadTimeout")
 UPSTREAM_PATIENCE = timedelta(hours=12)  # how long a job waits for TravelSpirit before it counts as failed
 
 # kind -> (agent name for pausing, interval in minutes or None for event jobs)
@@ -85,7 +85,18 @@ def _answer_question(s: Session, mail_id: str) -> dict:
 
 
 def _handlers() -> dict[str, Callable[[Session, dict], dict]]:
-    from .agents import backoffice, change, followup, insight, partner_desk, proposal, sales, supplier, trip_monitor, triage
+    from .agents import (
+        backoffice,
+        change,
+        followup,
+        insight,
+        partner_desk,
+        proposal,
+        sales,
+        supplier,
+        triage,
+        trip_monitor,
+    )
     from .knowledge import vault
 
     def poll(s, p):
@@ -166,6 +177,7 @@ def _claim_setting(s: Session, key: str, old, new) -> bool:
         except IntegrityError:
             return False
     import json
+
     from sqlalchemy import String, cast
     # Compare as text: works for JSON on Postgres and SQLite alike.
     res = s.execute(update(Setting).where(Setting.key == key, cast(Setting.value, String) == json.dumps(old)).values(value=new))
@@ -182,10 +194,10 @@ def schedule_tick(s: Session, now: datetime | None = None) -> list[str]:
         st = s.get(Setting, f"last_run:{kind}")
         old = st.value if st else None
         last = datetime.fromisoformat(old) if old else None
-        if last is None or now - last >= timedelta(minutes=minutes):
-            if _claim_setting(s, f"last_run:{kind}", old, now.isoformat()):
-                enqueue(s, kind)
-                added.append(kind)
+        due = last is None or now - last >= timedelta(minutes=minutes)
+        if due and _claim_setting(s, f"last_run:{kind}", old, now.isoformat()):  # one worker wins the claim
+            enqueue(s, kind)
+            added.append(kind)
     s.commit()
     return added
 
@@ -301,6 +313,7 @@ def retention(s: Session, days: int = 30) -> dict:
     """Logs of prompts, tool calls and runs are kept 30 days (architecture: after PII masking, 30 days).
     The audit chain, drafts and approvals are not touched. Expired cache entries go too."""
     import os
+
     from .db import AgentRun, CacheEntry, ModelCall, ToolCall
     days = int(os.getenv("BRAIN_RETENTION_DAYS", days))
     cutoff = utcnow() - timedelta(days=days)

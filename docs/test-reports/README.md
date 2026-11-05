@@ -132,7 +132,7 @@ audit chain intact every day, and the log size stable at about 3,500 rows with 7
 ## Security: a successful injection, or a model gone wrong
 
 Detection rules catch all 30 attacks they were written for and none of the 8 innocent look-alikes, but only 2 of
-8 attacks written afterwards. That is expected of rules. What protects Travelnauts is that a successful attack
+8 attacks written afterwards. That is expected of rules. What protects the client is that a successful attack
 can do nothing. `tests/security/test_hostile_model.py` swaps the model for a hostile one and shows:
 
 | Guarantee | Result |
@@ -202,11 +202,11 @@ broken at entry 201" and exited with an error, so tampering with a backup or the
 ## What this does not cover yet
 
 - **The real model.** All of this ran with the stand-in model. A first Gemma 4 sample (e4b, CPU only) is in
-  [gemma4-e4b-cpu.md](gemma4-e4b-cpu.md): it understands mail far better than the stand-in, keeps every safety check,
+  the Gemma 4 E4B report (in the client repo, it ran the client's house prompt): it understands mail far better than the stand-in, keeps every safety check,
   writes good Dutch that needs polish, and is far too slow without a GPU. Quality and cost with the real model are measured
   in the first pilot week with the same bench.
 - **Real Azure.** Point-in-time restore, failover, Entra sign-in, KEDA scaling and the Azure Monitor alerts are
-  configured but only testable in Travelnauts' subscription. CI compiles the templates on every change. Repeat the backup drill there before live.
+  configured but only testable in the client's subscription. CI compiles the templates on every change. Repeat the backup drill there before live.
 - **An outside penetration test.** These tests check what we thought of. Before live, have an independent party
   test the pilot environment.
 - **Real TravelSpirit.** Its behaviour under errors and load is simulated, not measured.

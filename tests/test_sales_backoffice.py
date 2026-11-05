@@ -1,4 +1,3 @@
-from brain.clock import utcnow
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -6,9 +5,19 @@ from sqlalchemy import select
 
 from brain import jobs
 from brain.agents import backoffice, proposal, sales, triage
-from brain.db import Draft, Family, InvoiceCheck, Mail, PartnerRequest, PriceItem, TripRequest
+from brain.clock import utcnow
+from brain.db import (
+    Draft,
+    Family,
+    InvoiceCheck,
+    Mail,
+    PartnerRequest,
+    PriceItem,
+    TripRequest,
+)
 from brain.files import pdf_text
 from brain.guardrails import _amounts
+from brain.tenant import tenant
 
 
 def drafted(s):
@@ -106,7 +115,7 @@ def test_roadbook_and_vouchers_are_pdfs_for_the_family(world):
     d = backoffice.roadbook(world, tr.id)
     text = pdf_text(d.data["roadbook"])
     assert fam.surname in text and "24/7" in text and Path(d.data["roadbook"]).exists()
-    assert d.data["vouchers"] and all(f"TN-{tr.id.upper()}" in pdf_text(v["path"]) for v in d.data["vouchers"])
+    assert d.data["vouchers"] and all(tenant().reference(tr.id) in pdf_text(v["path"]) for v in d.data["vouchers"])
     assert d.status == "draft"
 
 

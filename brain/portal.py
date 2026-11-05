@@ -22,7 +22,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .clock import utcnow
-from .db import Family, Partner, PartnerRequest, PortalLine, PortalLink, PortalMessage, TripRequest
+from .db import (
+    Family,
+    Partner,
+    PartnerRequest,
+    PortalLine,
+    PortalLink,
+    PortalMessage,
+    TripRequest,
+)
+from .tenant import tenant
+
+TEAM = "team"  # a portal message written by our own people; "partner" for the partner
 
 STATUSES = ("open", "asking", "confirmed", "alternative", "not_available")
 LINK_DAYS = 120
@@ -105,14 +116,14 @@ def view(s: Session, link: PortalLink) -> dict:
     lines = s.scalars(select(PortalLine).where(PortalLine.partner_request_id == pr.id).order_by(PortalLine.position)).all()
     msgs = s.scalars(select(PortalMessage).where(PortalMessage.partner_request_id == pr.id).order_by(PortalMessage.id)).all()
     s.commit()
-    return {"reference": f"TN-{tr.id.upper()}", "partner": p.name, "what": pr.what,
+    return {"reference": tenant().reference(tr.id), "company": tenant().short_name, "partner": p.name, "what": pr.what,
             "trip": {"destination": DESTINATIONS[tr.destination]["name"], "month": MONTHS_EN.get(tr.depart_month, tr.depart_month), "days": tr.days,
                      "depart_date": tr.depart_date.isoformat() if tr.depart_date else None},
             "party": {"adults": fam.adults, "children_ages": list(fam.child_ages or [])},
             "answer_by": (pr.sent_at + timedelta(days=get_settings().chase_partner_after_days)).date().isoformat() if pr.sent_at else None,
             "link_valid_until": link.expires_at.date().isoformat(),
             "lines": [line_dict(x) for x in lines],
-            "messages": [{"id": m.id, "line_id": m.line_id, "author": m.author, "name": m.author_name if m.author == "travelnauts" else p.name,
+            "messages": [{"id": m.id, "line_id": m.line_id, "author": m.author, "name": m.author_name if m.author == TEAM else p.name,
                           "text": m.text, "round": m.round, "at": m.created_at.isoformat()} for m in msgs]}
 
 
@@ -175,7 +186,7 @@ def add_message(s: Session, pr_id: int, author: str, name: str, text: str, line_
             raise KeyError(line_id)
     rnd = _round(s, pr_id)
     last = s.scalars(select(PortalMessage).where(PortalMessage.partner_request_id == pr_id).order_by(PortalMessage.id.desc())).first()
-    if last and last.author != author and author == "travelnauts":
+    if last and last.author != author and author == TEAM:
         rnd += 1  # we answer what they said: a new round
     flagged = author == "partner" and _flag_text(s, pr_id, text)
     m = PortalMessage(partner_request_id=pr_id, line_id=line_id, author=author, author_name=name, text=text, round=rnd, flagged=flagged)
@@ -199,9 +210,9 @@ def accept_alternative(s: Session, pr_id: int, line_id: int, by: str, by_name: s
         raise ValueError("No alternative to accept on this line")
     alt = x.alternative
     x.label, x.status, x.price_eur = alt["label"], "confirmed", alt.get("price_eur")
-    x.note = (x.note + f"\nAlternative accepted by Travelnauts ({by_name}).").strip()
+    x.note = (x.note + f"\nAlternative accepted by {tenant().short_name} ({by_name}).").strip()
     x.alternative, x.updated_at, x.updated_by = None, utcnow(), by
-    s.add(PortalMessage(partner_request_id=pr_id, line_id=x.id, author="travelnauts", author_name=by_name,
+    s.add(PortalMessage(partner_request_id=pr_id, line_id=x.id, author=TEAM, author_name=by_name,
                         text=f"We accept the alternative: {alt['label']}. Please book it.", round=_round(s, pr_id) + 1))
     auditchain.append(s, by, "portal_accept_alternative", "portal_line", x.id, ref=str(alt.get("price_eur")))
     s.commit()

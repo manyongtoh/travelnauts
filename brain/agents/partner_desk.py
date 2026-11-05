@@ -9,11 +9,12 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..clock import utcnow
 from ..config import get_settings
 from ..db import Draft, Family, Partner, PartnerRequest, TripRequest
 from ..synth.world import DESTINATIONS
+from ..tenant import tenant
 from .common import audit, run_step
-from ..clock import utcnow
 
 
 class PartnerMail(BaseModel):
@@ -24,7 +25,7 @@ class PartnerMail(BaseModel):
 REQUEST_INSTRUCTIONS = (
     "Write a short, clear availability request in English to CONTEXT.partner for CONTEXT.trip. Include travel month, "
     "nights, number of adults and the ages of the children, and room needs. Ask for price, availability and "
-    "cancellation terms. Sign as the Travelnauts back office. No customer names, use the booking reference."
+    "cancellation terms. Sign as CONTEXT.signature. No customer names, use the booking reference."
 )
 CHASE_INSTRUCTIONS = (
     "Write a polite, short reminder in English to CONTEXT.partner about the request with reference CONTEXT.reference "
@@ -86,7 +87,7 @@ def draft_request_mail(s: Session, partner_request_id: int) -> Draft:
     proposal = latest_version(s, tr.id)
     nights = next((r["nights"] for r in (proposal.data["route"] if proposal else []) if r["hotel"] == partner.name), None)
     with audit(s, "partner_desk", f"{tr.id}/{partner.id}", "request") as box:
-        ctx = {"partner": {"name": partner.name, "kind": partner.kind}, "reference": f"TN-{tr.id.upper()}",
+        ctx = {"partner": {"name": partner.name, "kind": partner.kind}, "reference": tenant().reference(tr.id), "signature": tenant().back_office_signature,
                "trip": {"destination": DESTINATIONS[tr.destination]["name"], "month": tr.depart_month, "nights": nights,
                         "adults": fam.adults, "child_ages": fam.child_ages,
                         "rooms": "one family room" if fam.adults + len(fam.child_ages) <= 4 else "two connecting rooms",
@@ -124,7 +125,7 @@ def draft_chase(s: Session, partner_request_id: int) -> Draft:
     pr = s.get(PartnerRequest, partner_request_id)
     partner = s.get(Partner, pr.partner_id)
     with audit(s, "partner_desk", f"{pr.request_id}/{partner.id}", "chase") as box:
-        ctx = {"partner": {"name": partner.name}, "reference": f"TN-{pr.request_id.upper()}",
+        ctx = {"partner": {"name": partner.name}, "reference": tenant().reference(pr.request_id), "signature": tenant().back_office_signature,
                "sent_at": pr.sent_at.date().isoformat() if pr.sent_at else None, "what": pr.what}
         out, _ = run_step(s, "partner_chase", PartnerMail, CHASE_INSTRUCTIONS, ctx)
         d = Draft(kind="partner_chase", request_id=pr.request_id, partner_request_id=pr.id, title=out.subject,
@@ -188,7 +189,7 @@ READ_INSTRUCTIONS = (
 def read_reply(s: Session, mail_id: str) -> dict:
     """A partner answered: record the offer on the right request so the back office can compare."""
     from ..db import Mail
-    from ..identity import agent  # noqa: F811
+    from ..identity import agent
     from ..toolserver import server
     me = agent("partner_desk")
     if s.get(Mail, mail_id).status == "done":

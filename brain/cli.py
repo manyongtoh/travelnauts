@@ -9,7 +9,7 @@ def main(argv: list[str] | None = None) -> None:
     import logging
     if not logging.getLogger().handlers:  # one line per event on stdout, picked up by Azure Monitor
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
-    p = argparse.ArgumentParser(prog="brain", description="Travelnauts company brain sandbox (synthetic data only)")
+    p = argparse.ArgumentParser(prog="brain", description="brain-core company brain (synthetic data only)")
     sub = p.add_subparsers(dest="cmd", required=True)
     sd = sub.add_parser("seed", help="(re)build the synthetic database")
     sd.add_argument("--seed", type=int, default=None)
@@ -28,8 +28,6 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("mcp", help="serve the tool server over MCP (stdio) as BRAIN_MCP_AGENT")
     sub.add_parser("reindex", help="re-read the knowledge vault")
     sub.add_parser("migrate", help="bring the database schema up to date (Alembic)")
-    n8 = sub.add_parser("n8n", help="inventory of exported n8n workflows")
-    n8.add_argument("paths", nargs="+")
     mc = sub.add_parser("modelcheck", help="a sample of the bench for a real model on slow hardware (test #1)")
     for flag, default in (("--mails", 30), ("--proposals", 4), ("--complaints", 3), ("--replies", 4)):
         mc.add_argument(flag, type=int, default=default)
@@ -55,6 +53,7 @@ def main(argv: list[str] | None = None) -> None:
         uvicorn.run("brain.api.app:app", host=a.host, port=a.port)
     elif a.cmd == "bench":
         import sys
+
         from .evals.bench import run, to_markdown
         rep = run(a.seed)
         print(to_markdown(rep))
@@ -94,10 +93,12 @@ def main(argv: list[str] | None = None) -> None:
         from .mcp_server import main as mcp_main
         mcp_main()
     elif a.cmd == "migrate":
+        from pathlib import Path
+
         from alembic import command
         from alembic.config import Config
+
         from .config import ROOT
-        from pathlib import Path
         base = Path.cwd() if (Path.cwd() / "alembic.ini").exists() else ROOT
         cfg = Config(str(base / "alembic.ini"))
         cfg.set_main_option("script_location", str(base / "migrations"))
@@ -112,14 +113,12 @@ def main(argv: list[str] | None = None) -> None:
         from .knowledge.vault import reindex
         with db.session() as s:
             print(json.dumps(reindex(s), indent=2))
-    elif a.cmd == "n8n":
-        from .n8n_inventory import main as n8n_main
-        n8n_main(a.paths)
     elif a.cmd == "modelcheck":
         from .evals.model_check import main as mc_main
         mc_main(["--mails", str(a.mails), "--proposals", str(a.proposals), "--complaints", str(a.complaints), "--replies", str(a.replies)])
     elif a.cmd == "check":
         import sys
+
         from . import db as _db
         from .alerts import as_json, checks
         with _db.session() as s:
@@ -130,20 +129,24 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(2 if any(x["level"] == "critical" for x in al) else 1 if al else 0)
     elif a.cmd == "verify":
         import sys
+
         from .ops_verify import verify_database
         r = verify_database()
         print(json.dumps(r, indent=2, default=str))
         sys.exit(0 if r["ok"] else 1)
     elif a.cmd == "envcheck":
         import sys
+
         from .environments import check
         c = check()
         print(json.dumps({"env": c.env, "ok": c.ok, "problems": c.problems}, indent=2))
         sys.exit(0 if c.ok else 1)
     elif a.cmd == "simulate":
         from pathlib import Path
+
         from .config import ROOT
-        from .evals.operations import run as sim_run, to_markdown as sim_md
+        from .evals.operations import run as sim_run
+        from .evals.operations import to_markdown as sim_md
         rep = sim_run(a.days)
         out = ROOT / "data" / "ops"
         out.mkdir(parents=True, exist_ok=True)

@@ -67,19 +67,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install pip-audit bandit ruff
-      - name: No undefined names, unused imports or invisible characters in our code
-        run: ruff check brain --select F,PLE
+      - run: pip install pip-audit bandit ruff==0.16.9  # pinned: newer ruff versions change the default rules
+      - name: Lint (rules and exceptions in pyproject.toml)
+        run: ruff check .
       - name: Dependencies have no known vulnerabilities
         run: |
           python -c "import tomllib; print('\n'.join(tomllib.load(open('pyproject.toml','rb'))['project']['dependencies']))" > req.txt
           pip-audit -r req.txt
       - name: No medium or high findings in our code
         run: bandit -q -r brain -ll
-      - name: Azure templates compile (infrastructure and alerts)
-        env:
-          PG_PASSWORD: compile-check-only  # placeholder; real values come from secrets at deploy
-        run: |
-          az bicep install
-          az bicep build --file infra/main.bicep --stdout > /dev/null
-          for p in infra/params/*.bicepparam; do az bicep build-params --file "$p" --stdout > /dev/null; done
+      - name: No client names in the core
+        run: python scripts/check_client_names.py

@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from . import auditchain
 from .clock import utcnow
 from .db import AgentRun, Employee, Job, ModelCall, Setting, TripRequest
+from .tenant import tenant
 
 log = logging.getLogger("brain.alerts")
 
@@ -112,7 +113,7 @@ def checks(s: Session, now: datetime | None = None) -> list[Alert]:
     # outage, are not the agent's fault and would only repeat another alert.
     per: dict[str, list[int]] = {}
     for agent, ok, error in s.execute(select(AgentRun.agent, AgentRun.ok, AgentRun.error).where(AgentRun.created_at >= hour)):
-        if error and (error.split(":")[0] in ("BudgetExceeded", "AgentPaused", "TravelSpiritUnavailable", "TimeoutError")
+        if error and (error.split(":")[0] in ("BudgetExceeded", "AgentPaused", "SystemUnavailable", "TravelSpiritUnavailable", "TimeoutError")
                       or "All models failed" in error):
             continue
         per.setdefault(agent, [0, 0])
@@ -166,7 +167,7 @@ def notify(s: Session, now: datetime | None = None) -> dict:
     for line in lines:
         (log.error if "CRITICAL" in line else log.warning)("BRAIN_ALERT env=%s %s", env, line)
     url = os.getenv("BRAIN_ALERT_WEBHOOK")
-    delivered = _post(url, f"Travelnauts brain ({env})\n\n" + "\n\n".join(lines)) if (url and lines) else None
+    delivered = _post(url, f"{tenant().short_name} brain ({env})\n\n" + "\n\n".join(lines)) if (url and lines) else None
     st = s.get(Setting, OPEN_KEY)
     value = {k: a.level for k, a in current.items()}
     if st:

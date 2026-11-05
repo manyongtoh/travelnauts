@@ -51,6 +51,7 @@ def test_specialist_and_team_lead_day(tmp_path, monkeypatch):
 
 def test_road_alert_after_thirty_minutes(world):
     from datetime import timedelta
+
     from brain import alerts
     from brain.clock import utcnow
     from brain.db import Draft

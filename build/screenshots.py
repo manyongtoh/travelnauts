@@ -38,7 +38,7 @@ with db.session() as s:
     tl = next(x for x in lines[2:] if x.label.startswith("Transfer"))
     portal.update_line(s, link, tl.id, "alternative", alternative={"label": tl.label + " by private car instead of train", "price_eur": 140, "note": "Train sold out that week"})
     portal.add_message(s, pr.id, "partner", "", "Is the youngest child still in a car seat?")
-    portal.add_message(s, pr.id, "travelnauts", "Ruben Stam", "Yes, one child seat please. Thanks!")
+    portal.add_message(s, pr.id, portal.TEAM, "Ruben Stam", "Yes, one child seat please. Thanks!")
     prid, token, spec_id = pr.id, url.rsplit("/", 1)[1], tr.specialist_id
     s.merge(Setting(key=f"autosend:{spec_id}:followup", value={"status": "on", "streak": 10, "on_by": spec_id, "on_at": utcnow().replace(microsecond=0).isoformat()}))
     from brain.db import Family

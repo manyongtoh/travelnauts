@@ -66,7 +66,7 @@ def candidates(s: Session) -> list[dict]:
     for f in fams:
         if _surname_key(f.surname):
             groups[_surname_key(f.surname)].append(f)
-    for _, fs in groups.items():
+    for fs in groups.values():
         for a, b in combinations(fs, 2):
             yrs_a, yrs_b = sorted(a.child_birth_years or []), sorted(b.child_birth_years or [])
             if yrs_a and yrs_a == yrs_b:

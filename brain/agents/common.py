@@ -1,7 +1,7 @@
 """Shared plumbing for every agent.
 
 run_step(): one model step with a typed output. It picks the model tier for the task, checks the daily
-budget, builds the prompt from the three layers (Travelnauts, agent, task context), masks personal data
+budget, builds the prompt from the three layers (house, agent, task context), masks personal data
 before the model sees it and puts it back afterwards, falls back to the next model if one fails, and
 logs the model call (tier, model, prompt version, tokens, cost) under the current trace.
 
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import contextvars
 import json
+import logging
 import os
 import re
 import time
@@ -26,6 +27,9 @@ from ..models import build_model
 from ..router import check_budget, model_for, price, tier_for
 from ..trace import current_trace, end_trace, start_trace
 
+log = logging.getLogger("brain.agents")
+_trace_warned_at = 0.0  # tracing failures are logged at most once every 10 minutes
+
 T = TypeVar("T", bound=BaseModel)
 _depth: contextvars.ContextVar[int] = contextvars.ContextVar("audit_depth", default=0)
 _calls: contextvars.ContextVar[list | None] = contextvars.ContextVar("model_calls", default=None)
@@ -36,7 +40,7 @@ class AgentPaused(RuntimeError):
 
 
 TRANSIENT_RETRIES = int(os.getenv("BRAIN_MODEL_TRANSIENT_RETRIES", "2"))
-TRANSIENT = re.compile(r"status_code: (429|500|502|503|504)\b|timed out|Timeout|overloaded|high demand", re.I)
+TRANSIENT = re.compile(r"status_code: (429|500|502|503|504)\b|timed out|Timeout|overloaded|high demand", re.IGNORECASE)
 
 
 def _with_transient_retries(call, name: str = ""):
@@ -46,7 +50,7 @@ def _with_transient_retries(call, name: str = ""):
     for attempt in range(tries + 1):
         try:
             return call()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             if attempt == tries or not TRANSIENT.search(str(e)):
                 raise
             time.sleep(min(30, 3 * 3 ** attempt))  # 3 s, then 9 s
@@ -74,7 +78,7 @@ def run_step(s: Session, task: str, output_type: type[T], instructions: str, con
             agent = Agent(build_model(name), output_type=output_type, instructions=system,
                           retries=OUTPUT_RETRIES,  # a malformed answer is sent back to the model to fix
                           model_settings={"timeout": MODEL_TIMEOUT, "temperature": 0.2})
-            result = _with_transient_retries(lambda: agent.run_sync(prompt), name)
+            result = _with_transient_retries(lambda agent=agent: agent.run_sync(prompt), name)
             usage = result.usage
             usage = usage if hasattr(usage, "input_tokens") else usage()
             call.tokens_in = int(getattr(usage, "input_tokens", 0) or 0)
@@ -104,6 +108,7 @@ BREAKER_FAILURES, BREAKER_MINUTES = 5, 5
 def circuit_open(s: Session, model: str) -> bool:
     """After 5 failed calls to a model in 5 minutes, stop sending it work for a while and use the fallback."""
     from datetime import timedelta
+
     from ..clock import utcnow
     since = utcnow() - timedelta(minutes=BREAKER_MINUTES)
     recent = s.query(ModelCall).filter(ModelCall.model == model, ModelCall.created_at >= since).order_by(ModelCall.id.desc()).limit(BREAKER_FAILURES).all()
@@ -140,7 +145,7 @@ def audit(s: Session, agent: str, subject: str | None, input_summary: str = ""):
     failed: BaseException | None = None
     try:
         yield box
-    except BaseException as e:  # noqa: BLE001
+    except BaseException as e:
         failed = e
         run.ok = False
         run.error = f"{type(e).__name__}: {e}"[:1000]
@@ -184,5 +189,8 @@ def _export_langfuse(run: AgentRun, calls: list[ModelCall]) -> None:
             lf.generation(trace_id=run.trace_id, name=c.task, model=c.model,
                           usage={"input": c.tokens_in, "output": c.tokens_out}, metadata={"tier": c.tier, "prompt": c.prompt_version,
                                                                                          "cost_eur": c.cost_eur, "ok": c.ok})
-    except Exception:  # noqa: BLE001  tracing must never break an agent
-        pass
+    except Exception as e:  # noqa: BLE001  tracing must never break an agent, but someone should know it is down
+        global _trace_warned_at
+        if time.monotonic() - _trace_warned_at > 600 or not _trace_warned_at:
+            _trace_warned_at = time.monotonic()
+            log.warning("Langfuse tracing failed, runs are not being traced (%s: %s)", type(e).__name__, e)

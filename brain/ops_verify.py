@@ -14,6 +14,7 @@ from .auditchain import verify as verify_chain
 def _schema_head() -> tuple[str | None, str | None]:
     from alembic.config import Config
     from alembic.script import ScriptDirectory
+
     from .config import ROOT
     head = ScriptDirectory.from_config(Config(str(ROOT / "alembic.ini"))).get_current_head()
     with db.engine().connect() as c:

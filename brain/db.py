@@ -5,19 +5,63 @@ so real data cannot slip in by accident during the synthetic stage.
 """
 from __future__ import annotations
 
+import os
 from datetime import date, datetime
 from typing import Any
 
-import os
-
-from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, event, select
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    create_engine,
+    event,
+    select,
+)
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    Session,
+    mapped_column,
+    relationship,
+    sessionmaker,
+    with_loader_criteria,
+)
 
 from .config import get_settings
+from .tenant import current_tenant_id
 
 
-class Base(DeclarativeBase):
+class TenantScoped:
+    """Every table carries the tenant it belongs to. Queries are scoped to the current tenant in the app (see
+    _scope_to_tenant below) and, on Postgres, by row-level security (migration a1c3e5f7b9d0)."""
+    tenant_id: Mapped[str] = mapped_column(String, index=True, default=lambda: current_tenant_id())
+
+
+class Base(TenantScoped, DeclarativeBase):
     pass
+
+
+@event.listens_for(Session, "do_orm_execute")
+def _scope_to_tenant(state) -> None:
+    """Every ORM select, update and delete only sees the current tenant's rows, get() included."""
+    if (state.is_select or state.is_update or state.is_delete) and not state.is_column_load \
+            and not state.is_relationship_load and not state.execution_options.get("all_tenants"):
+        tid = current_tenant_id()
+        state.statement = state.statement.options(
+            with_loader_criteria(TenantScoped, lambda cls: cls.tenant_id == tid, include_aliases=True))
+
+
+@event.listens_for(Session, "after_begin")
+def _tell_postgres_the_tenant(session, transaction, connection) -> None:
+    """Row-level security reads this setting; without it a Postgres session sees no rows at all."""
+    if connection.dialect.name == "postgresql":
+        connection.exec_driver_sql("select set_config('brain.tenant_id', %(t)s, true)", {"t": current_tenant_id()})
 
 
 def now() -> datetime:
@@ -179,6 +223,9 @@ class Draft(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     decided_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    # 1: a person approves (the default, always for money); 2: sent by itself after a hold with Stop (earned per
+    # person and kind, see autosend.py); 3: acts, a person handles exceptions. See autonomy.py.
+    autonomy_level: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
 
 class PartnerRequest(Base):
@@ -231,7 +278,7 @@ class PortalMessage(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     partner_request_id: Mapped[int] = mapped_column(ForeignKey("partner_requests.id"), index=True)
     line_id: Mapped[int | None] = mapped_column(ForeignKey("portal_lines.id"), nullable=True)
-    author: Mapped[str] = mapped_column(String)  # partner | travelnauts
+    author: Mapped[str] = mapped_column(String)  # partner | team
     author_name: Mapped[str] = mapped_column(String, default="")
     text: Mapped[str] = mapped_column(Text)
     round: Mapped[int] = mapped_column(Integer, default=1)
@@ -387,6 +434,7 @@ class Job(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    autonomy_level: Mapped[int] = mapped_column(Integer, default=1, server_default="1")  # the level this task may act at
 
 
 class Setting(Base):

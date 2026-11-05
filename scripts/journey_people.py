@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 from datetime import datetime, timedelta
 
 os.environ.setdefault("BRAIN_DATABASE_URL", "sqlite:////tmp/journey_people.db")
@@ -16,11 +17,19 @@ os.environ.setdefault("BRAIN_VAULT", "/tmp/journey-people-vault")
 os.environ.setdefault("BRAIN_FILES", "/tmp/journey-people-files")
 os.environ["PYDANTIC_AI_NO_BANNER"] = "1"
 
-from fastapi.testclient import TestClient  # noqa: E402
-from sqlalchemy import select  # noqa: E402
+from fastapi.testclient import TestClient
+from sqlalchemy import select
 
-from brain import clock, db, jobs  # noqa: E402
-from brain.db import Draft, Employee, Family, Job, KnowledgeGap, Mail, TripRequest  # noqa: E402
+from brain import clock, db, jobs
+from brain.db import (
+    Draft,
+    Employee,
+    Family,
+    Job,
+    KnowledgeGap,
+    Mail,
+    TripRequest,
+)
 
 T0 = datetime(2026, 11, 10, 7, 0)
 log: list[dict] = []
@@ -60,7 +69,7 @@ def main():
     from brain.api import app as appmod
     appmod._buckets.clear()
     c = TestClient(appmod.app, raise_server_exceptions=False)
-    H = lambda uid: {"X-Brain-User": uid}  # noqa: E731
+    H = lambda uid: {"X-Brain-User": uid}
 
     with db.session() as s:
         for m in s.scalars(select(Mail).where(Mail.status == "new")).all():
@@ -110,7 +119,6 @@ def main():
     drafts = c.get("/api/drafts", headers=H(spec.id)).json()
     note("specialist", "opens Today", requests=len(reqs), drafts=sorted({d["kind"] for d in drafts}),
          new_request=any((r.get("mail_id") == "p-new") for r in reqs))
-    new = next((r for r in reqs if r.get("mail_id") == "p-new"), None)
     with db.session() as s:
         m = s.get(Mail, "p-new")
         rid_new = (m.triage or {}).get("request_id")
@@ -241,7 +249,7 @@ def main():
         note("summary", "end of day", failed_jobs=s.query(Job).filter(Job.status == "failed").count(),
              open_gaps=s.query(KnowledgeGap).filter(KnowledgeGap.status == "open").count())
     if __name__ == "__main__":
-        json.dump(log, open("/tmp/journey_people.json", "w"), indent=1, default=str)
+        pathlib.Path("/tmp/journey_people.json").write_text(json.dumps(log, indent=1, default=str))
     clock.reset()
     return log
 

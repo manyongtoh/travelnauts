@@ -4,7 +4,7 @@
   BRAIN_ENV=pilot   anonymised data, TravelSpirit read-only user, no writing, Entra ID sign-in
   BRAIN_ENV=live    real customer data, draft-write API user, Entra ID sign-in (refused in this sandbox)
 
-Each environment has its own resource group, database, Key Vault and Entra app registration (see infra/).
+Each environment has its own resource group, database, Key Vault and Entra app registration (see infra/ in the client repo).
 The checks below stop a misconfiguration from mixing them, for example a test key in live.
 """
 from __future__ import annotations

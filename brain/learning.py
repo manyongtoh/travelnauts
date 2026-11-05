@@ -19,12 +19,20 @@ from sqlalchemy.orm import Session
 
 from .clock import today as clock_today
 from .clock import utcnow
-from .db import Draft, Employee, Family, KnowledgeGap, KnowledgeItem, PastProposal, TripRequest
+from .db import (
+    Draft,
+    Employee,
+    Family,
+    KnowledgeGap,
+    KnowledgeItem,
+    PastProposal,
+    TripRequest,
+)
 
 LEARN_FROM = ("proposal", "change", "followup", "extras", "answer", "next_trip")
 MIN_DRAFTS, MIN_PEOPLE, WINDOW_DAYS = 3, 2, 30
-GREETING_LINE = re.compile(r"^\s*(beste|hoi|hallo|dag|lieve|dear|hi|hello)\b", re.I)
-SIGN_OFF_LINE = re.compile(r"^\s*(met\s+)?(vriendelijke|hartelijke|warme)?\s*(groet(en)?|kind regards|regards|tot (snel|gauw))\b", re.I)
+GREETING_LINE = re.compile(r"^\s*(beste|hoi|hallo|dag|lieve|dear|hi|hello)\b", re.IGNORECASE)
+SIGN_OFF_LINE = re.compile(r"^\s*(met\s+)?(vriendelijke|hartelijke|warme)?\s*(groet(en)?|kind regards|regards|tot (snel|gauw))\b", re.IGNORECASE)
 
 
 # helpers ---------------------------------------------------------------------------------------------------------

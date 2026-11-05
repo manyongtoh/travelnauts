@@ -19,14 +19,15 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..clock import today as clock_today
 from ..db import Draft, Employee, Mail, TripRequest
 from ..guardrails import check_output
 from ..identity import agent
 from ..synth.world import DESTINATIONS
+from ..tenant import tenant
 from ..toolserver import server
 from .change import latest_version
 from .common import audit, run_step
-from ..clock import today as clock_today
 
 
 class MailText(BaseModel):
@@ -36,7 +37,7 @@ class MailText(BaseModel):
 
 def _spec(s: Session, tr: dict) -> str:
     e = s.get(Employee, tr["specialist_id"]) if tr.get("specialist_id") else None
-    return e.name if e else "Travelnauts"
+    return e.name if e else tenant().short_name
 
 
 # Alternatives --------------------------------------------------------------------------------
@@ -91,7 +92,7 @@ class ComplaintAssessment(BaseModel):
     severity: str = Field(description="low, medium or high")
     while_travelling: bool
     topics: list[str] = Field(description="for example hotel, transfer, guide, flight, price, communication")
-    actions: list[str] = Field(description="internal next steps for Travelnauts, in Dutch")
+    actions: list[str] = Field(description="internal next steps for our team, in Dutch")
     subject: str
     body: str = Field(description="reply to the family in Dutch")
 
@@ -122,7 +123,7 @@ def complaint(s: Session, mail_id: str) -> Draft:
                "family": {"name": fam["contact_name"], "first_name": (fam["contact_name"] or "").split(" ")[0]},
                "trip": {"destination": DESTINATIONS[trip["destination"]]["nl"], "depart_date": trip["depart_date"],
                         "status": trip["status"]} if trip else None,
-               "emergency_line": "+31 20 000 0000 (sandbox)", "specialist": _spec(s, trip) if trip else "Travelnauts"}
+               "emergency_line": tenant().emergency_line, "specialist": _spec(s, trip) if trip else tenant().short_name}
         out, _ = run_step(s, "complaint_reply", ComplaintAssessment, COMPLAINT_INSTRUCTIONS, ctx)
         if (m.triage or {}).get("while_travelling"):  # the dates decide this, not the model: on the road is always high
             out.while_travelling, out.severity = True, "high"
@@ -211,8 +212,8 @@ def extras(s: Session, request_id: str) -> Draft:
         cands.sort(key=lambda p: (-sum(w in p["name"].lower() for w in wishes.split() if len(w) > 4), p["cost_eur"]))
         picks = []
         for p in cands[:4]:
-            from ..pricing import MARGIN
-            sell = round(p["cost_eur"] * persons * (1 + MARGIN["excursion"]))  # same rule as the calculation service
+            from ..pricing import margin
+            sell = round(p["cost_eur"] * persons * (1 + margin("excursion")))  # same rule as the calculation service
             picks.append({"name": p["name"], "stop": p["stop"], "price_eur": sell, "price_item": p["id"]})
         policy = server.call(s, me, "knowledge.search", query="reisverzekering annuleringsverzekering", k=1)
         ctx = {"family": {"name": fam["contact_name"], "child_ages": fam["child_ages"]}, "extras": picks,

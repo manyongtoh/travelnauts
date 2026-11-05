@@ -12,7 +12,7 @@
 
 Load test (`brain loadtest`, stand-in model, local Postgres 16): 8 workers handled 1,613 mails in 44 seconds,
 about 2,000 a minute. Every mail was triaged exactly once, no job ran twice, all request numbers were unique,
-and 40 approvals by different people at the same moment left the audit chain intact. Travelnauts gets about
+and 40 approvals by different people at the same moment left the audit chain intact. The client gets about
 300 mails a day. With a real model, the model's response time sets the pace (a few seconds per step), and the
 parallel workers are what keep the queue short.
 
@@ -55,6 +55,6 @@ What to do day to day and in an incident: [runbook.md](runbook.md). Latest resul
 
 - The rate limit is per replica, in memory. With many replicas, move it to Azure API Management or Redis.
 - Search by meaning uses local embeddings; with a large vault, move vectors to pgvector or Azure AI Search.
-- Microsoft sign-in in the screens is written (MSAL) but needs Travelnauts' Entra app registrations to try.
-- The backup drill and the runbook are tested in the sandbox; repeat the drill on Azure point-in-time restore before live, and fill in the contact table in the runbook with Travelnauts.
+- Microsoft sign-in in the screens is written (MSAL) but needs the client's Entra app registrations to try.
+- The backup drill and the runbook are tested in the sandbox; repeat the drill on Azure point-in-time restore before live, and fill in the contact table in the runbook with the client.
 - Alerts are built (brain check every 15 minutes, Teams webhook, Azure Monitor mail with a dead man's switch); confirm in the pilot that the mails arrive and agree who receives them.

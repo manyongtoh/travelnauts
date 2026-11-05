@@ -6,7 +6,18 @@ from sqlalchemy import select
 
 from brain import clock, jobs, learning
 from brain.agents import proposal, triage
-from brain.db import Draft, Employee, Family, KnowledgeGap, KnowledgeItem, Mail, Partner, PartnerRequest, PastProposal, TripRequest
+from brain.db import (
+    Draft,
+    Employee,
+    Family,
+    KnowledgeGap,
+    KnowledgeItem,
+    Mail,
+    Partner,
+    PartnerRequest,
+    PastProposal,
+    TripRequest,
+)
 from brain.knowledge.store import KnowledgeBase
 from brain.workflow import BlockedByCheck, approve_draft
 
@@ -98,8 +109,8 @@ def test_childrens_ages_count_up(world):
 
 
 def test_agents_see_the_familys_history(world):
-    from brain.toolserver import server
     from brain.identity import agent
+    from brain.toolserver import server
     tr = world.scalars(select(TripRequest).where(TripRequest.status == "booked")).first()
     rel = server.call(world, agent("proposal_writer"), "ts.read_relation", family_id=tr.family_id)
     assert tr.destination in rel["history"]["booked_before"] and "something_went_wrong_before" in rel["history"]
@@ -112,7 +123,7 @@ def test_requests_go_to_who_knows_the_destination_unless_they_are_much_busier(wo
     team = team_with_new_requests(world, 1)
     people = world.scalars(select(Employee).where(Employee.role == "specialist", Employee.team_id == team,
                                                   Employee.active.is_(True)).order_by(Employee.id)).all()
-    expert, other = people[-1], people[0]
+    expert = people[-1]
     dest = world.scalars(select(TripRequest).where(TripRequest.team_id == team)).first().destination
     for i in range(10):  # the expert owns the destination's knowledge
         world.add(KnowledgeItem(id=f"k-expert-note-{i}", title="x", body="x", destination=dest, topic="family", owner_id=expert.id,
@@ -182,7 +193,11 @@ def test_a_family_question_the_brain_cannot_answer_teaches_it(world):
 # 7. search -----------------------------------------------------------------------------------------------------------
 
 def test_search_understands_how_specialists_ask(world):
-    from brain.evals.sets import KNOWLEDGE_PARAPHRASES, KNOWLEDGE_PARAPHRASES_HELD_OUT, KNOWLEDGE_QUESTIONS
+    from brain.evals.sets import (
+        KNOWLEDGE_PARAPHRASES,
+        KNOWLEDGE_PARAPHRASES_HELD_OUT,
+        KNOWLEDGE_QUESTIONS,
+    )
     from brain.knowledge.store import searchable
     kb = KnowledgeBase(world)
     live = {i.id for i in world.scalars(searchable()).all()}

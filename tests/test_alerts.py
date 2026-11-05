@@ -152,7 +152,7 @@ def test_only_https_webhooks_are_used(world, monkeypatch):
     for bad in ("file:///etc/passwd", "ftp://x.example/a", "http://hooks.example/a"):
         monkeypatch.setenv("BRAIN_ALERT_WEBHOOK", bad)
         assert alerts._allowed(bad) is False
-    assert alerts._allowed("https://travelnauts.webhook.office.com/x")
+    assert alerts._allowed("https://example.webhook.office.com/x")
 
 
 def test_runs_that_failed_because_the_model_was_down_are_not_blamed_on_the_agent(world):

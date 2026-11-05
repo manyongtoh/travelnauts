@@ -15,16 +15,44 @@ from sqlalchemy import func, select
 
 from .. import auditchain, autosend, db, jobs
 from ..agents import followup, galileo, knowledge_desk, partner_desk, proposal, triage
+from ..clock import utcnow
 from ..config import get_settings
-from ..db import (AgentRun, AuditEntry, Draft, Employee, Family, Job, KnowledgeItem, Mail, ModelCall, Setting, ToolCall,
-                  PartnerRequest, TripRequest, as_dict)
-from ..identity import (ROLES, EntraConfig, Principal, auth_mode, from_employee, verify_entra_token)
+from ..db import (
+    AgentRun,
+    AuditEntry,
+    Draft,
+    Employee,
+    Family,
+    Job,
+    KnowledgeItem,
+    Mail,
+    ModelCall,
+    PartnerRequest,
+    Setting,
+    ToolCall,
+    TripRequest,
+    as_dict,
+)
+from ..identity import (
+    ROLES,
+    EntraConfig,
+    Principal,
+    auth_mode,
+    from_employee,
+    verify_entra_token,
+)
 from ..knowledge.store import KnowledgeBase
 from ..router import daily_cap, spent_today
 from ..synth.world import DESTINATIONS
+from ..tenant import tenant
 from ..toolserver import server as toolserver
-from ..workflow import BlockedByCheck, approve_draft, backoffice_overview, reject_draft, teamlead_overview
-from ..clock import utcnow
+from ..workflow import (
+    BlockedByCheck,
+    approve_draft,
+    backoffice_overview,
+    reject_draft,
+    teamlead_overview,
+)
 
 STATIC = Path(__file__).parent / "static"
 CUSTOMER_DRAFTS = {"proposal", "change", "followup", "answer", "trip_alert", "galileo", "alternatives", "extras",
@@ -38,7 +66,7 @@ import os as _os
 
 _TEST = _os.getenv("BRAIN_ENV", "test") == "test"
 # API documentation only in the test environment; in pilot and live it would map the attack surface for free.
-app = FastAPI(title="Travelnauts company brain (sandbox)", version="0.3.0",
+app = FastAPI(title="Company brain (brain-core)", version="0.3.0",
               docs_url="/docs" if _TEST else None, redoc_url=None, openapi_url="/openapi.json" if _TEST else None)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
@@ -105,7 +133,7 @@ async def limits(request: Request, call_next):
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"  # customer data never sits in a browser or proxy cache
         return response
-    except Exception as e:  # noqa: BLE001  never show a stack trace to a user
+    except Exception as e:
         import logging
         logging.getLogger("brain").exception("unhandled")
         return JSONResponse({"detail": f"Something went wrong ({type(e).__name__}). It is logged; try again or ask the admin."},
@@ -426,6 +454,7 @@ def make_roadbook(rid: str, user: Principal = Depends(current_user)):
 def get_file(kind: str, name: str, user: Principal = Depends(current_user)):
     """Roadbooks, vouchers and attachments, only for people who may see the trip."""
     from fastapi.responses import FileResponse
+
     from ..files import files_dir
     if kind not in ("roadbooks", "vouchers", "attachments") or "/" in name or ".." in name:
         _404("file")
@@ -433,7 +462,7 @@ def get_file(kind: str, name: str, user: Principal = Depends(current_user)):
     if not path.exists():
         _404("file")
     import re as _re
-    ref = _re.search(r"(r\d{3,})", name.lower()) or _re.search(r"tn-(r\d{3,})", name.lower())
+    ref = _re.search(r"(r\d{3,})", name.lower()) or _re.search(rf"{tenant().ref_re.lower()}-(r\d{{3,}})", name.lower())
     with db.session() as s:
         if ref and not ("back_office" in user.roles):
             _visible_request(s, ref.group(1), user)
@@ -726,7 +755,7 @@ class Question(BaseModel):
 @app.post("/api/ask")
 def ask(q: Question, user: Principal = Depends(need("knowledge.search"))):
     with db.session() as s:
-        return knowledge_desk.ask(s, q.question, q.destination, q.team_id or user.team_id, role=sorted(user.roles)[0])
+        return knowledge_desk.ask(s, q.question, q.destination, q.team_id or user.team_id, role=min(user.roles))
 
 
 @app.get("/api/knowledge")
@@ -920,7 +949,7 @@ async def portal_file(token: str, request: Request):
         if not data.startswith(b"%PDF-") or len(data) > PORTAL_FILE_MAX:
             raise HTTPException(400, "Only PDF files up to 5 MB")
         pr = s.get(PartnerRequest, link.partner_request_id)
-        name = f"portal-tn-{pr.request_id}-{pr.id}-{utcnow():%Y%m%d%H%M%S}.pdf"
+        name = f"portal-{tenant().reference_prefix.lower()}-{pr.request_id}-{pr.id}-{utcnow():%Y%m%d%H%M%S}.pdf"
         path = files_dir() / "attachments" / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
@@ -951,7 +980,7 @@ def portal_staff_message(prid: int, body: PortalMsgIn, user: Principal = Depends
     with db.session() as s:
         _portal_staff(s, prid, user)
         try:
-            return portal.add_message(s, prid, "travelnauts", user.name, body.text, body.line_id)
+            return portal.add_message(s, prid, portal.TEAM, user.name, body.text, body.line_id)
         except (KeyError, ValueError) as e:
             raise HTTPException(400, str(e))
 

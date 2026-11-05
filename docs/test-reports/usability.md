@@ -43,4 +43,4 @@ At 1024 and 1280 pixels no screen scrolls sideways.
 2. **Undo after Approve and send**, like the 10 second hold of automatic send: a short window to take a mail back.
 3. **Search and filters on All my trips** (family name, destination, status) once real volumes are in.
 4. **Keyboard shortcuts** for people who approve all day (next item, approve, discard).
-5. **House colours**: if Travelnauts has a palette, swap it in one place in the stylesheet.
+5. **House colours**: if the client has a palette, swap it in one place in the stylesheet.

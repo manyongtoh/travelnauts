@@ -9,12 +9,13 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..clock import utcnow
 from ..db import Draft, Employee
 from ..identity import agent
 from ..synth.world import DESTINATIONS
+from ..tenant import tenant
 from ..toolserver import server
 from .common import audit, run_step
-from ..clock import utcnow
 
 ME = agent("trip_monitor")
 
@@ -52,7 +53,7 @@ def run(s: Session, now: datetime | None = None) -> dict:
                 out, _ = run_step(s, "trip_alert", TripAlert, INSTRUCTIONS, {
                     "family": {"name": fam["contact_name"]}, "flight": f, "status": st,
                     "trip": {"destination": DESTINATIONS[t["destination"]]["nl"]},
-                    "specialist": spec.name if spec else "Travelnauts", "emergency_line": "+31 20 000 0000 (sandbox)"})
+                    "specialist": spec.name if spec else tenant().short_name, "emergency_line": tenant().emergency_line})
                 s.add(Draft(kind="trip_alert", request_id=t["id"], title=out.subject, body=out.body,
                             data={"flight": f["number"], "status": st, "warnings": [f"Vlucht {f['number']}: {st['status']}"
                                   + (f", {st['delay_minutes']} min vertraging" if st["delay_minutes"] else "")]}))
@@ -64,6 +65,6 @@ def run(s: Session, now: datetime | None = None) -> dict:
 
 def flight_fields(f: dict) -> dict:
     """TravelSpirit flight rows differ per export; take the usual names and never fail on a missing one."""
-    g = lambda *ks: next((f[k] for k in ks if f.get(k)), None)  # noqa: E731
+    g = lambda *ks: next((f[k] for k in ks if f.get(k)), None)
     return {"number": g("number", "flight", "flight_number", "FlightNumber"), "date": g("date", "depart_date", "Date"),
             "from": g("from", "origin", "From") or "?", "to": g("to", "destination", "To") or "?"}

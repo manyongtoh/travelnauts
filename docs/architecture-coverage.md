@@ -4,7 +4,7 @@ Every part of the tech architecture document, where it lives in the code, and it
 
 - **Built:** works and is tested here.
 - **Stand-in:** same interface, local replacement for an Azure or outside service; switching is configuration.
-- **Written, untested:** code or template exists but needs Azure or Travelnauts access to run.
+- **Written, untested:** code or template exists but needs Azure or client access to run.
 - **Later:** planned for after the pilot, as in the document.
 
 ## Platform
@@ -61,7 +61,7 @@ Every part of the tech architecture document, where it lives in the code, and it
 | Cite, approve, owner and review date, gaps, trace errors | store, knowledge desk, team lead screen | Built |
 | Nightly re-index; changed text needs approval again; old policy archived | `vault.reindex` | Built |
 | Three prompt layers, versioned, version stored per model call | `brain/prompts/` | Built |
-| 5 to 10 best examples picked by Jorine and a team lead | `examples.search` uses earlier proposals | Stand-in (needs the real examples) |
+| 5 to 10 best examples picked by a senior specialist and a team lead | `examples.search` uses earlier proposals | Stand-in (needs the real examples) |
 
 ## Guardrails, privacy, access
 
@@ -92,9 +92,9 @@ Every part of the tech architecture document, where it lives in the code, and it
 | Team metrics for Power BI | `/api/metrics/teams.csv` | Built (CSV); Power BI report itself not built |
 | Azure Monitor and alerts to Teams | | Needs Azure |
 | Test, pilot and live with their own rules | `brain/environments.py`, `brain envcheck` | Built |
-| Infrastructure as code per environment, autoscaling API and KEDA-scaled workers, probes | `infra/main.bicep`, `infra/params/` | Written, untested |
+| Infrastructure as code per environment, autoscaling API and KEDA-scaled workers, probes | `infra/` in the client repo | Written, untested |
 | Postgres, migrations, parallel workers | `migrations/`, `brain migrate`, `jobs.claim` | Built and tested on Postgres 16 (95 tests, load test) |
-| Deploy one way up with approval | `.github/workflows/deploy.yml` | Written, untested |
+| Deploy one way up with approval | `deploy.yml` in the client repo | Written, untested |
 | n8n workflows: export, sort, rebuild | `brain n8n` | Built (inventory and advice) |
 
 ## Customer journey

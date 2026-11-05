@@ -7,8 +7,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import Draft
-from ..knowledge.store import MIN_SCORE, KnowledgeBase
 from ..identity import agent
+from ..knowledge.store import MIN_SCORE, KnowledgeBase
 from ..toolserver import server
 from .common import audit, run_step
 

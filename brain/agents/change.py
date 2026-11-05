@@ -12,8 +12,9 @@ from sqlalchemy.orm import Session
 
 from ..db import Draft, Employee, Family, Mail, TripRequest
 from ..identity import agent
-from ..toolserver import server
 from ..synth.world import DESTINATIONS
+from ..tenant import tenant
+from ..toolserver import server
 from .common import audit, run_step
 
 ME = agent("change")
@@ -104,7 +105,7 @@ def handle_change(s: Session, mail_id: str) -> Draft:
             "applied": [o.model_dump() for o in applied], "manual": [o.model_dump() for o in manual],
             "route_after": new_route, "days_after": days_after,
             "price_before": before["sell_eur"], "price_after": after["sell_eur"],
-            "specialist": spec.name if spec else "Travelnauts"})
+            "specialist": spec.name if spec else tenant().short_name})
         changed = {r["hotel"] for r in new_route} | {r["hotel"] for r in route}
         recheck = sorted(h for h in changed if next((x["nights"] for x in new_route if x["hotel"] == h), None) !=
                          next((x["nights"] for x in route if x["hotel"] == h), None))
