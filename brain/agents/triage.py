@@ -442,7 +442,8 @@ def suggest_families(s: Session, surname: str, subject: str, body: str) -> list[
             out.setdefault(tr.family_id, {"family_id": tr.family_id, "why": [], "request_id": tr.id})["why"].append(
                 f"mentions booking TN-R{int(ref):03d}")
     if surname:
-        for f in s.scalars(select(Family).where(func.lower(Family.surname) == surname.lower()).limit(5)).all():
+        for f in s.scalars(select(Family).where(func.lower(Family.surname) == surname.lower(),
+                                                ~Family.notes.like("Samengevoegd met %")).limit(5)).all():
             out.setdefault(f.id, {"family_id": f.id, "why": []})["why"].append(f"same surname ({surname})")
     return sorted(out.values(), key=lambda x: -len(x["why"]))[:5]
 

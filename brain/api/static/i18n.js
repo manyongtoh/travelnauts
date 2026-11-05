@@ -181,7 +181,12 @@ const NL = {
   "Asking hotel": "Vraagt hotel", "Confirmed": "Bevestigd", "Alternative offered": "Alternatief aangeboden", "Accept alternative": "Alternatief accepteren", "Valid until": "Geldig tot",
   "Line": "Regel", "Thread": "Gesprek", "Round #": "Ronde #", "Answered in the portal": "Beantwoord in het portaal",
   // duplicates
-  "Duplicate records": "Dubbele records", "Merge": "Samenvoegen", "Keep apart": "Apart houden", "Evidence": "Bewijs", "Merged (logged)": "Samengevoegd (gelogd)",
+  "Duplicate records": "Dubbele records", "Duplicates": "Dubbelen", "Duplicate families": "Dubbele families", "# pairs": "# paren",
+  "The same family twice: entered twice in TravelSpirit, or a first mail from the other parent's address. Nothing merges by itself: a wrong merge sends one family's mail to another. Merging here moves trips, mail and addresses; the TravelSpirit administrator merges there from the plan.":
+    "Dezelfde familie twee keer: dubbel ingevoerd in TravelSpirit, of een eerste mail van het adres van de andere ouder. Niets wordt vanzelf samengevoegd: een verkeerde samenvoeging stuurt de mail van het ene gezin naar het andere. Samenvoegen hier verplaatst reizen, mail en adressen; de TravelSpirit-beheerder voegt daar samen volgens het plan.",
+  "Download merge plan for TravelSpirit": "Download samenvoegplan voor TravelSpirit", "in TravelSpirit": "in TravelSpirit", "new in the brain": "nieuw in het brein",
+  "Merge into it": "Samenvoegen hierin", "Keep": "Houden", "Swap": "Omdraaien", "likely": "waarschijnlijk", "possible": "mogelijk", "No likely duplicates": "Geen waarschijnlijke dubbelen",
+  "Kept apart (logged)": "Apart gehouden (gelogd)",  "Merge": "Samenvoegen", "Keep apart": "Apart houden", "Evidence": "Bewijs", "Merged (logged)": "Samengevoegd (gelogd)",
   // agent names in logs
   "triage": "sorteren", "proposal writer": "voorstelschrijver", "partner desk": "partneragent", "knowledge desk": "kennisbalie", "invoice matcher": "factuurcontrole",
   "complaints": "klachten", "alternatives": "alternatieven", "extras": "extra's", "roadbook": "reisboek", "change": "wijziging", "team insight": "teaminzicht", "next trip": "volgende reis",
@@ -197,6 +202,9 @@ const NL_RULES = [
   [/^You sent the last (\d+) (.+?) without changing a word\. Send them automatically from now on\? Each one waits (\d+) seconds on screen with a Stop button first, and every check still applies\.$/,
     (m, n, k, s) => `Je hebt de laatste ${n} ${NL[k] || k} verstuurd zonder een woord te veranderen. Voortaan automatisch versturen? Elk bericht staat eerst ${s} seconden op je scherm met een Stop-knop, en alle controles blijven gelden.`],
   [/^Not sent: (.+)$/, (m, x) => "Niet verstuurd: " + x],
+  [/^Merged \(logged\): (\d+) trips, (\d+) mails moved$/, (m, a, b) => `Samengevoegd (gelogd): ${a} reizen, ${b} mails verplaatst`],
+  [/^Keep · (.+)$/, (m, x) => "Houden · " + x.replace("in TravelSpirit", "in TravelSpirit").replace("new in the brain", "nieuw in het brein").replace(/(\d+) trips/, "$1 reizen")],
+  [/^Merge into it · (.+)$/, (m, x) => "Samenvoegen hierin · " + x.replace("new in the brain", "nieuw in het brein").replace(/(\d+) trips/, "$1 reizen")],
   [/^Model: (.+)$/, (m, x) => "Model: " + x],
   [/^Minutes per (.+) today$/, (m, x) => `Minuten per ${(NL[x] || x).toLowerCase()} nu`],
 ];

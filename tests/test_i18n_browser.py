@@ -10,6 +10,8 @@ def test_dutch_switch(server, tmp_path):  # noqa: F811
         ctx = b.new_context()
         ctx.add_init_script("localStorage.setItem('me', 'marloes-kuiper')")
         p = ctx.new_page()
+        errors = []
+        p.on("pageerror", lambda e: errors.append(str(e)))
         p.goto(f"{base}/static/teamlead.html")
         p.wait_for_timeout(1200)
         assert "Overview" in p.inner_text("nav")
@@ -25,10 +27,17 @@ def test_dutch_switch(server, tmp_path):  # noqa: F811
         p.wait_for_timeout(1000)
         assert "Wat het brein oplevert" in p.inner_text("#view")
         p.screenshot(path=str(tmp_path / "nl.png"))
+        for view in ("duplicates", "insight", "knowledge", "gaps", "complaints", "log"):
+            p.click(f'[data-view="{view}"]')
+            p.wait_for_timeout(700)
+        p.click('[data-view="duplicates"]')
+        p.wait_for_timeout(800)
+        assert "Dubbele families" in p.inner_text("#view")
         p.reload()  # remembered for this person
         p.wait_for_timeout(1200)
         assert "Overzicht" in p.inner_text("nav")
         p.click('.lang[data-lang="en"]')
         p.wait_for_timeout(1500)
         assert "Overview" in p.inner_text("nav")
+        assert not errors, errors
         b.close()

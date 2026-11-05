@@ -11,9 +11,9 @@
 let team = store.get("tl:team") || "all", kfilter = "proposed";
 const app = shell({
   role: "Team lead",
-  nav: [["overview", "Overview"], ["complaints", "Complaints"], ["value", "Value"], ["insight", "Insight"], ["knowledge", "Knowledge"], ["gaps", "Knowledge gaps"], ["log", "Log"]],
+  nav: [["overview", "Overview"], ["complaints", "Complaints"], ["value", "Value"], ["insight", "Insight"], ["knowledge", "Knowledge"], ["gaps", "Knowledge gaps"], ["duplicates", "Duplicates"], ["log", "Log"]],
   needs: "team.metrics",
-  onNav: v => ({overview: viewOverview, complaints: viewComplaints, value: viewValue, insight: viewInsight, knowledge: viewKnowledge, gaps: viewGaps, log: viewLog})[v](),
+  onNav: v => ({overview: viewOverview, complaints: viewComplaints, value: viewValue, insight: viewInsight, knowledge: viewKnowledge, gaps: viewGaps, duplicates: viewDuplicates, log: viewLog})[v](),
 });
 $("#tb-left").textContent = "Pilot · synthetic stage";
 
@@ -230,6 +230,28 @@ async function viewValue() {
     await post("/api/value/baseline", {minutes, hours_to_first_proposal: +$("#v-hours").value, measured: $("#v-measured").checked});
     toast("Baseline saved"); viewValue();
   };
+}
+async function viewDuplicates() { renderDuplicates(await api("/api/duplicates")); }
+function renderDuplicates(rows) {
+  badge("duplicates", rows.filter(r => r.level === "likely").length);
+  $("#view").innerHTML = `<div class="vhead"><span class="label">${rows.length} pairs</span><h1>Duplicate families</h1>
+      <p>The same family twice: entered twice in TravelSpirit, or a first mail from the other parent's address. Nothing merges by itself: a wrong merge sends one family's mail to another. Merging here moves trips, mail and addresses; the TravelSpirit administrator merges there from the plan.</p></div>
+    <div class="actions" style="margin-bottom:16px"><a class="btn btn-outline" href="/api/duplicates.csv" download="travelspirit-merge-plan.csv">Download merge plan for TravelSpirit</a></div>
+    <ul class="list">${rows.map((r, i) => `<li class="row" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;align-items:start;gap:14px">
+      <div><span class="label">Keep · ${r.keep_in_travelspirit ? "in TravelSpirit" : "new in the brain"} · ${r.keep_trips} trips</span><b style="display:block">${esc(r.keep_name)}</b><span class="mono">${esc(r.keep)}</span></div>
+      <div><span class="label">Merge into it · ${r.drop_in_travelspirit ? "in TravelSpirit" : "new in the brain"} · ${r.drop_trips} trips</span><b style="display:block">${esc(r.drop_name)}</b><span class="mono">${esc(r.drop)}</span>
+        <p class="sub" style="margin-top:6px"><span class="pill ${r.level === "likely" ? "pill-concept" : "pill-local"}">${esc(r.level)}</span> ${r.evidence.map(esc).join(" · ")}</p></div>
+      <div style="display:flex;flex-direction:column;gap:6px"><button class="btn btn-primary btn-sm" data-merge="${i}">Merge</button><button class="btn btn-outline btn-sm" data-swap="${i}">Swap</button><button class="btn-link" data-apart="${i}">Keep apart</button></div></li>`).join("")
+      || `<li class="row empty"><b>No likely duplicates</b></li>`}</ul>`;
+  $$("[data-merge]").forEach(b => b.onclick = async () => { const r = rows[b.dataset.merge];
+    const res = await post("/api/duplicates/merge", {keep: r.keep, drop: r.drop});
+    toast(`Merged (logged): ${res.moved.trips} trips, ${res.moved.mails} mails moved`); viewDuplicates(); });
+  $$("[data-swap]").forEach(b => b.onclick = () => { const r = rows[b.dataset.swap];
+    [r.keep, r.drop, r.keep_name, r.drop_name, r.keep_trips, r.drop_trips, r.keep_in_travelspirit, r.drop_in_travelspirit] =
+      [r.drop, r.keep, r.drop_name, r.keep_name, r.drop_trips, r.keep_trips, r.drop_in_travelspirit, r.keep_in_travelspirit];
+    renderDuplicates(rows); });
+  $$("[data-apart]").forEach(b => b.onclick = async () => { const r = rows[b.dataset.apart];
+    await post("/api/duplicates/apart", {keep: r.keep, drop: r.drop}); toast("Kept apart (logged)"); viewDuplicates(); });
 }
 async function viewLog() {
   const runs = await api("/api/audit?limit=60");

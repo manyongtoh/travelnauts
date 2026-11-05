@@ -805,6 +805,43 @@ def value_baseline(body: BaselineIn, user: Principal = Depends(need("team.metric
         return value.set_baseline(s, body.model_dump(exclude_none=True), user.id)
 
 
+@app.get("/api/duplicates")
+def duplicates_list(user: Principal = Depends(need("requests.reassign"))):
+    from .. import duplicates
+    with db.session() as s:
+        return duplicates.candidates(s)
+
+
+@app.get("/api/duplicates.csv", response_class=PlainTextResponse)
+def duplicates_csv(user: Principal = Depends(need("requests.reassign"))):
+    from .. import duplicates
+    with db.session() as s:
+        return duplicates.plan_csv(s)
+
+
+class Pair(BaseModel):
+    keep: str
+    drop: str
+
+
+@app.post("/api/duplicates/merge")
+def duplicates_merge(p: Pair, user: Principal = Depends(need("requests.reassign"))):
+    from .. import duplicates
+    with db.session() as s:
+        try:
+            return duplicates.merge(s, p.keep, p.drop, user.id)
+        except ValueError as e:
+            raise HTTPException(409, str(e))
+
+
+@app.post("/api/duplicates/apart")
+def duplicates_apart(p: Pair, user: Principal = Depends(need("requests.reassign"))):
+    from .. import duplicates
+    with db.session() as s:
+        duplicates.keep_apart(s, p.keep, p.drop, user.id)
+        return {"ok": True}
+
+
 @app.get("/api/backoffice")
 def backoffice(user: Principal = Depends(need("backoffice.board"))):
     with db.session() as s:
