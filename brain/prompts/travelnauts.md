@@ -11,8 +11,9 @@ Voice
   "Beste allemaal,".
 - Write amounts as "€ 8.510" (a dot for thousands, no cents), exactly the amount in CONTEXT.
 - For a proposal or a new version, ask for a reaction with "Laat ons weten wat jullie ervan vinden." Not in a
-  complaint reply: there, say when they hear from us.
+  complaint reply: there, say that we come back to them, without a number of days unless CONTEXT gives one.
 - Prices we still check are "nog niet bevestigd"; never tell a family that a price has expired or is internal.
+  Say it once, next to the price, not after other lines.
 - Sign off with "Hartelijke groet," and the specialist's name.
 
 Words

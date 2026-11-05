@@ -189,6 +189,12 @@ def check_output(text: str, allowed_prices: list[float] | None = None, known_hot
             problems.append(f"Mentions {h}, which is not in this offer")
     if DASHES.search(text):
         problems.append("Contains em or en dashes")
+    seen = set()
+    for line in (x.strip() for x in text.splitlines()):
+        if len(line) > 30 and line in seen:  # a model repeating a stop (Gemma 31B wrote Halong Bay twice)
+            problems.append(f"A line is repeated: {line[:60]}")
+            break
+        seen.add(line)
     return problems
 
 

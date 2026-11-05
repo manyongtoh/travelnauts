@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import contextvars
 import json
+import os
+import re
 import time
 from contextlib import contextmanager
 from typing import Any, TypeVar
@@ -31,6 +33,23 @@ _calls: contextvars.ContextVar[list | None] = contextvars.ContextVar("model_call
 
 class AgentPaused(RuntimeError):
     pass
+
+
+TRANSIENT_RETRIES = int(os.getenv("BRAIN_MODEL_TRANSIENT_RETRIES", "2"))
+TRANSIENT = re.compile(r"status_code: (429|500|502|503|504)\b|timed out|Timeout|overloaded|high demand", re.I)
+
+
+def _with_transient_retries(call, name: str = ""):
+    """A busy provider answers 429, 500 or 503 now and then (Google's Gemma API did so on 25 of 84 calls). Wait and
+    try again a couple of times before counting it as a failure or moving on to the fallback model."""
+    tries = TRANSIENT_RETRIES if name.startswith("openai:") else 0  # hosted only: a local model that times out is not busy
+    for attempt in range(tries + 1):
+        try:
+            return call()
+        except Exception as e:  # noqa: BLE001
+            if attempt == tries or not TRANSIENT.search(str(e)):
+                raise
+            time.sleep(min(30, 3 * 3 ** attempt))  # 3 s, then 9 s
 
 
 def run_step(s: Session, task: str, output_type: type[T], instructions: str, context: dict,
@@ -55,7 +74,7 @@ def run_step(s: Session, task: str, output_type: type[T], instructions: str, con
             agent = Agent(build_model(name), output_type=output_type, instructions=system,
                           retries=OUTPUT_RETRIES,  # a malformed answer is sent back to the model to fix
                           model_settings={"timeout": MODEL_TIMEOUT, "temperature": 0.2})
-            result = agent.run_sync(prompt)
+            result = _with_transient_retries(lambda: agent.run_sync(prompt), name)
             usage = result.usage
             usage = usage if hasattr(usage, "input_tokens") else usage()
             call.tokens_in = int(getattr(usage, "input_tokens", 0) or 0)
