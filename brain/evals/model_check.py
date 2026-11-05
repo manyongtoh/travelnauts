@@ -11,13 +11,12 @@ import json
 import random
 import time
 from collections import Counter
-from pathlib import Path
 
 from sqlalchemy import select
 
 from .. import db
 from ..config import ROOT
-from ..db import Draft, Mail, ModelCall, PartnerRequest, TripRequest
+from ..db import Mail, ModelCall, PartnerRequest, TripRequest
 from ..synth.generate import build
 from .bench import pct, triage_report
 

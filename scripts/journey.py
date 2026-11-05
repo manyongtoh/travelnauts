@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 from datetime import datetime, timedelta
 
 os.environ.setdefault("BRAIN_DATABASE_URL", "sqlite:////tmp/journey.db")
@@ -191,7 +190,7 @@ def main():
         tr = s.get(TripRequest, rid)
         fam = tr.family_id
         s.add(Mail(id="j-complaint", received_at=clock.utcnow(), sender="familie.visser@ziggo.example",
-                   subject=f"Teleurgesteld over ons hotel", status="new",
+                   subject="Teleurgesteld over ons hotel", status="new",
                    body="Het tweede hotel was vies en de kamer was te klein voor ons gezin. We willen graag een vergoeding.",
                    truth={}))
         s.commit()

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException

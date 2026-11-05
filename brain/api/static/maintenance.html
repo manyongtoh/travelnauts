@@ -38,7 +38,7 @@ async function viewHealth() {
       <div class="card"><h2>Model budget</h2><p class="sub">Daily cap for this environment; agents stop when it is reached</p>
         <div class="kpis" style="grid-template-columns:1fr 1fr;margin:0 0 14px"><div class="kpi"><span class="label">Spent today</span><b>€ ${b.spent_today_eur.toFixed(2)}</b></div>
         <div class="kpi"><span class="label">Cap</span><b>€ ${b.cap_eur.toFixed(2)}</b></div></div>
-        <div class="row" style="padding:0;grid-template-columns:1fr auto"><input id="cap" type="number" step="0.5" min="0" value="${b.cap_eur}" style="height:38px;border:1px solid var(--sand);border-radius:8px;padding:0 10px">
+        <div class="row" style="padding:0;grid-template-columns:1fr auto"><input id="cap" aria-label="${esc(T("Cap"))} (EUR)" type="number" step="0.5" min="0" value="${b.cap_eur}" style="height:38px;border:1px solid var(--sand);border-radius:8px;padding:0 10px">
         <button class="btn btn-outline btn-sm" id="setcap">Set cap</button></div>
         <h2 style="margin-top:18px">Tools</h2><p class="sub">${H.tools.calls} calls in 24 h · ${H.tools.denied} denied · ${H.tools.errors} errors · ${H.tools.cache_hits} from cache</p>
         <div class="actions"><button class="btn btn-outline btn-sm" id="tick">Run the scheduler now</button></div></div>

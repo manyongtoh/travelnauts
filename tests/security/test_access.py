@@ -239,7 +239,6 @@ def test_entra_mode_rejects_forged_and_expired_tokens(world, monkeypatch):
 
 
 def test_injection_hidden_in_a_partner_pdf_is_caught(world, tmp_path):
-    from datetime import datetime
     from brain.agents import triage
     from brain.files import simple_pdf
     path = simple_pdf(tmp_path / "offer.pdf", f"Offer {tenant().reference('r001')}", ["Total EUR 900",

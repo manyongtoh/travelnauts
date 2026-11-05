@@ -193,7 +193,7 @@ def galileo(ctx: dict) -> dict:
 
 
 STOP = {"de", "het", "een", "en", "van", "in", "is", "op", "te", "voor", "met", "we", "wij", "jullie", "naar", "kan",
-        "kunnen", "kinderen", "kind", "gezin", "jaar", "geschikt", "hoe", "wat", "welke", "zit", "nog", "goed", "voor", "zijn", "er", "met", "uit", "voeten", "makkelijk"}
+        "kunnen", "kinderen", "kind", "gezin", "jaar", "geschikt", "hoe", "wat", "welke", "zit", "nog", "goed", "zijn", "er", "uit", "voeten", "makkelijk"}
 
 
 def answer(ctx: dict) -> dict:

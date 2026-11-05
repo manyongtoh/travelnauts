@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -86,8 +86,6 @@ class KnowledgeBase:
         vs = idx["emb"].scores(q)
         q_dest = destination or destination_in(query)  # "Bali" is Indonesia: a boost, never a filter
         q_topics = topics(query)
-        rank_kw = {j: r for r, j in enumerate(sorted(range(len(kw)), key=lambda j: -kw[j]))}
-        rank_vs = {j: r for r, j in enumerate(sorted(range(len(vs)), key=lambda j: -vs[j]))}
         owners = {e.id: e.name for e in self.s.scalars(select(Employee)).all()}
         kw_max = max(float(kw.max()), 1e-6)
         today = clock_today()

@@ -1,11 +1,9 @@
 """Stored XSS: hostile text in mails, names and knowledge must never run in a colleague's browser."""
-from brain.clock import utcnow
 import os
 import socket
 import subprocess
 import sys
 import time
-from datetime import datetime
 
 import pytest
 

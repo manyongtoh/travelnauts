@@ -98,9 +98,9 @@ async function viewComplaints() {
       <h2 class="d-title">${esc(d.mail ? d.mail.subject : d.title)}</h2>
       ${d.mail ? `<div class="concept"><pre class="c-text">${esc(d.mail.body)}</pre></div>` : ""}
       <p class="label sect">Internal actions</p><ul class="att">${d.data.actions.map(a => `<li class="t">${esc(a)}</li>`).join("")}</ul>
-      <p class="label sect">Draft reply</p><div class="concept"><textarea class="c-text" id="cb-${d.id}" rows="9">${esc(d.body)}</textarea>
+      <p class="label sect">Draft reply</p><div class="concept"><textarea class="c-text" id="cb-${d.id}" rows="9" aria-label="${esc(T("Draft reply"))}">${esc(d.body)}</textarea>
       ${(d.data.warnings || []).length ? `<div class="check"><b>Check:</b> ${d.data.warnings.map(esc).join(" · ")}</div>` : ""}</div>
-      <div class="actions"><button class="btn btn-primary" data-ok="${d.id}">Approve and send</button><button class="btn-link" data-no="${d.id}">Discard</button></div></div>`).join("")
+      <div class="actions"><button class="btn btn-primary" data-ok="${d.id}">Approve and send</button><button class="btn-link" data-confirm="Click again to discard" data-no="${d.id}">Discard</button></div></div>`).join("")
       || `<div class="detail empty"><b>No open complaints</b></div>`}`;
   $$("[data-ok]").forEach(b => b.onclick = async () => {
     try { await post(`/api/drafts/${b.dataset.ok}/approve`, {final_body: $(`#cb-${b.dataset.ok}`).value}); toast("Approved (logged)"); } catch (e) { toast(e.message); }
@@ -121,7 +121,7 @@ async function viewInsight() {
       <p class="sub" style="color:var(--terra-ink)">Which family wrote this? Never linked by the brain itself: the reply would go to this address.</p>
       <ul class="att">${unlinked.map(m => `<li><div class="row-act" style="flex-wrap:wrap;gap:8px"><span class="t"><b>${esc(m.subject)}</b>
         <span class="mono" style="color:var(--muted)">${esc(m.sender)} · ${esc(m.category || "")}${m.shared_address ? " · shared address" : ""}</span></span>
-        <select data-link="${esc(m.id)}" style="height:30px;border:1px solid var(--sand);border-radius:6px;background:var(--white)"><option value="">Link to family…</option>
+        <select data-link="${esc(m.id)}" aria-label="${esc(T("Link to family…"))}" style="height:30px;border:1px solid var(--sand);border-radius:6px;background:var(--white)"><option value="">Link to family…</option>
         ${m.candidates.map(c => `<option value="${esc(c.family_id)}">${esc(c.name)} (${esc(c.why.join(", "))})</option>`).join("")}
         <option value="?">Other family (id)…</option></select>
         <label style="font-size:12px"><input type="checkbox" data-remember="${esc(m.id)}" ${m.shared_address ? "" : "checked"}> remember this address</label></div></li>`).join("")}</ul></div>` : ""}
@@ -133,10 +133,10 @@ async function viewInsight() {
       ${(x.ownerless || []).length ? `<div class="card" style="grid-column:1/-1;border-color:#E5B39C;background:var(--terra-tint)"><h2>Requests without an owner</h2>
         <p class="sub" style="color:var(--terra-ink)">The specialist on these trips has left. Reassign them today.</p>
         <ul class="att">${x.ownerless.map(rid => `<li><div class="row-act"><span class="t"><b class="mono">${esc(rid)}</b></span>
-          <select data-reassign="${rid}" style="height:30px;border:1px solid var(--sand);border-radius:6px;background:var(--white)"><option value="">Reassign to…</option>${people.filter(p => p.role === "specialist" && p.team_id === t).map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select></div></li>`).join("")}</ul></div>` : ""}
+          <select data-reassign="${rid}" aria-label="${esc(T("Reassign to…"))} ${esc(rid)}" style="height:30px;border:1px solid var(--sand);border-radius:6px;background:var(--white)"><option value="">Reassign to…</option>${people.filter(p => p.role === "specialist" && p.team_id === t).map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select></div></li>`).join("")}</ul></div>` : ""}
       <div class="card"><h2>Stuck requests</h2><p class="sub">${x.open ?? 0} open · ${x.waiting_for_specialist ?? 0} waiting for a specialist · first draft after ${x.avg_hours_to_first_draft ?? "n/a"} h</p>
         <ul class="att">${x.stuck.map(r => `<li><div class="row-act"><span class="t"><b class="mono">${esc(r.request_id)}</b> ${esc(r.status.replace("_", " "))}, ${r.days} days</span>
-          <select data-reassign="${r.request_id}" style="height:30px;border:1px solid var(--sand);border-radius:6px;background:var(--white)"><option value="">Reassign to…</option>${people.filter(p => p.role === "specialist" && p.team_id === t).map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select></div></li>`).join("") || `<li class="empty"><b>Nothing stuck</b></li>`}</ul></div></div>`; }).join("")}`;
+          <select data-reassign="${r.request_id}" aria-label="${esc(T("Reassign to…"))} ${esc(r.request_id)}" style="height:30px;border:1px solid var(--sand);border-radius:6px;background:var(--white)"><option value="">Reassign to…</option>${people.filter(p => p.role === "specialist" && p.team_id === t).map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select></div></li>`).join("") || `<li class="empty"><b>Nothing stuck</b></li>`}</ul></div></div>`; }).join("")}`;
   bindTeam(viewInsight);
   $("#runins").onclick = runIns;
   $$("[data-link]").forEach(s => s.onchange = async () => {
@@ -242,7 +242,7 @@ function renderDuplicates(rows) {
       <div><span class="label">Keep · ${r.keep_in_travelspirit ? "in TravelSpirit" : "new in the brain"} · ${r.keep_trips} ${r.keep_trips === 1 ? "trip" : "trips"}</span><b style="display:block">${esc(r.keep_name)}</b><span class="mono">${esc(r.keep)}</span></div>
       <div><span class="label">Merge into it · ${r.drop_in_travelspirit ? "in TravelSpirit" : "new in the brain"} · ${r.drop_trips} ${r.drop_trips === 1 ? "trip" : "trips"}</span><b style="display:block">${esc(r.drop_name)}</b><span class="mono">${esc(r.drop)}</span>
         <p class="sub" style="margin-top:6px"><span class="pill ${r.level === "likely" ? "pill-concept" : "pill-local"}">${esc(r.level)}</span> ${r.evidence.map(esc).join(" · ")}</p></div>
-      <div style="display:flex;flex-direction:column;gap:6px"><button class="btn btn-primary btn-sm" data-merge="${i}">Merge</button><button class="btn btn-outline btn-sm" data-swap="${i}">Swap</button><button class="btn-link" data-apart="${i}">Keep apart</button></div></li>`).join("")
+      <div style="display:flex;flex-direction:column;gap:6px"><button class="btn btn-primary btn-sm" data-confirm="Click again to merge" data-merge="${i}">Merge</button><button class="btn btn-outline btn-sm" data-swap="${i}">Swap</button><button class="btn-link" data-apart="${i}">Keep apart</button></div></li>`).join("")
       || `<li class="row empty"><b>No likely duplicates</b></li>`}</ul>`;
   $$("[data-merge]").forEach(b => b.onclick = async () => { const r = rows[b.dataset.merge];
     const res = await post("/api/duplicates/merge", {keep: r.keep, drop: r.drop});

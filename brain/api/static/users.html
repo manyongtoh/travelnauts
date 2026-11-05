@@ -18,11 +18,11 @@ async function viewUsers() {
   $("#view").innerHTML = `<div class="vhead"><span class="label">${U.users.length} people · next access review ${esc(U.next_access_review)}</span><h1>Users</h1>
     <p>Change a role or remove access the day someone leaves. Every change is written to the audit chain. Nobody here sees performance per person.</p></div>
     <ul class="list"><li class="row row-head label" style="${cols}"><span>Name</span><span>Email</span><span>Role</span><span>Team</span><span>Last active</span><span></span></li>
-    ${U.users.map(u => `<li class="row" style="${cols};${u.active ? "" : "opacity:.5"}"><b>${esc(u.name)}</b><span class="mono">${esc(u.email || "")}</span>
-      <span><select data-role="${u.id}" style="height:32px;border:1px solid var(--sand);border-radius:6px;background:var(--white)">${Object.entries(U.roles).map(([k, n]) =>
+    ${U.users.map(u => `<li class="row ${u.active ? "" : "inactive"}" style="${cols}"><b>${esc(u.name)}</b><span class="mono">${esc(u.email || "")}</span>
+      <span><select data-role="${u.id}" aria-label="${esc(T("Role"))}: ${esc(u.name)}" style="height:32px;border:1px solid var(--sand);border-radius:6px;background:var(--white)">${Object.entries(U.roles).map(([k, n]) =>
         `<option value="${k}" ${k === u.role ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></span>
       <span>${esc(TEAMS[u.team_id] || "")}</span><span class="mono">${u.last_active ? esc(u.last_active.replace("T", " ").slice(0, 16)) : "never"}</span>
-      <span><button class="btn btn-outline btn-sm" data-active="${u.id}" data-now="${u.active}">${u.active ? "Remove access" : "Restore"}</button></span></li>`).join("")}</ul>`;
+      <span><button class="btn btn-outline btn-sm" ${u.active ? 'data-confirm="Click again to remove access"' : ""} data-active="${u.id}" data-now="${u.active}">${u.active ? "Remove access" : "Restore"}</button></span></li>`).join("")}</ul>`;
   $$("[data-role]").forEach(s => s.onchange = async () => {
     try { await post(`/api/admin/users/${s.dataset.role}`, {role: s.value}); toast("Role changed (logged)"); } catch (e) { toast(e.message); }
     viewUsers(); });

@@ -26,7 +26,7 @@ const COLS = [
   ["answered", "Reply in, offer ready", "Compare and choose"],
   ["declined", "Declined", "Partner said no"],
 ];
-const ago = h => h == null ? "" : h < 24 ? `${h} h` : `${Math.round(h / 24)} d`;
+const ago = h => h == null ? "" : (h = Math.max(0, h)) < 24 ? `${h} h` : `${Math.round(h / 24)} d`;
 
 function teamChips() {
   return `<div class="fchips"><span class="label" style="margin-right:6px">Team</span>${[["all", "All"], ...Object.entries(TEAMS)].map(([id, n]) =>
@@ -56,7 +56,7 @@ async function viewBoard() {
       <p class="sub" style="color:var(--terra-ink)">The agent could not tell which request these answer. Pick the request; the mail is then read as usual.</p>
       <ul class="att">${b.partner_mail_to_match.map(m => `<li><div class="row-act" style="flex-wrap:wrap;gap:8px"><span class="t"><b>${esc(m.subject || "(no subject)")}</b>
         <span class="mono" style="color:var(--muted)">${esc(m.from)}${m.reading && m.reading.note ? " · " + esc(m.reading.note) : ""}</span></span>
-        <select data-match="${esc(m.mail_id)}" style="height:30px;border:1px solid var(--sand);border-radius:6px;background:var(--white)"><option value="">Answers request…</option>
+        <select data-match="${esc(m.mail_id)}" aria-label="${esc(T("Answers request…"))}" style="height:30px;border:1px solid var(--sand);border-radius:6px;background:var(--white)"><option value="">Answers request…</option>
         ${(() => { const open = cards.filter(c => ["waiting", "chased", "unclear"].includes(c.status));
                    const theirs = open.filter(c => c.partner_id === m.partner_id); return theirs.length ? theirs : open; })().map(c =>
           `<option value="${c.id}">${esc(c.request_id)} · ${esc(c.partner)} · ${esc(c.what)}</option>`).join("")}</select></div></li>`).join("")}</ul></div>` : ""}
@@ -107,7 +107,7 @@ async function openPortal(prid) {
   const v = await api(`/api/partner-requests/${prid}/portal`);
   let box = $(".portalpanel"); if (!box) { box = document.createElement("aside"); box.className = "portalpanel"; document.body.append(box); }
   const msgs = lid => v.messages.filter(m => m.line_id === lid).map(m => `<li class="${m.author === "partner" ? "them" : ""}"><small>${m.author === "partner" ? "Partner" : esc(m.name)} · round ${m.round}${m.flagged ? " · <b class=\"hot\">check: looks like instructions</b>" : ""}</small><span data-raw>${esc(m.text)}</span></li>`).join("");
-  box.innerHTML = `<div class="pp-head"><div><span class="label">Partner request ${prid} · ${esc(v.status)}</span><h2>Portal and thread</h2>
+  box.innerHTML = `<div class="pp-head"><div><span class="label">Partner request ${prid} · ${esc(prStatus(v.status))}</span><h2>Portal and thread</h2>
       <p class="sub">${v.has_link ? `Link valid until ${esc(v.link_valid_until)}${v.last_seen_by_partner ? " · partner last opened " + esc(v.last_seen_by_partner.slice(0, 16).replace("T", " ")) : " · not opened yet"}` : "No portal link yet"}</p></div>
       <button class="btn-link" id="pp-close" aria-label="Close">Close</button></div>
     ${v.lines.map(l => `<div class="pp-line"><div class="row-act"><span class="t"><b>${esc(l.label)}</b><small style="display:block;color:var(--muted)">${esc(l.detail)}</small></span>
@@ -118,7 +118,7 @@ async function openPortal(prid) {
         <button class="btn btn-primary btn-sm" data-accept="${l.id}">Accept alternative</button></div>` : ""}
       <ul class="msgs">${msgs(l.id)}</ul></div>`).join("") || `<p class="sub">No lines: this partner answers by mail.</p>`}
     <h3 style="margin:16px 0 6px">Thread</h3><ul class="msgs">${msgs(null) || "<li>No messages yet.</li>"}</ul>
-    <textarea id="pp-text" placeholder="Write to the partner (English)" maxlength="2000"></textarea>
+    <textarea id="pp-text" aria-label="${esc(T("Write to the partner (English)"))}" placeholder="Write to the partner (English)" maxlength="2000"></textarea>
     <div style="display:flex;gap:8px;justify-content:space-between;margin-top:8px;flex-wrap:wrap">
       <button class="btn btn-outline btn-sm" id="pp-link">New link for the partner</button><button class="btn btn-primary btn-sm" id="pp-send">Send to partner</button></div>`;
   $("#pp-close").onclick = () => box.remove();
@@ -149,7 +149,7 @@ async function viewCheck() {
     $("#detail").innerHTML = `<div class="detail"><span class="label">${d.kind === "partner_chase" ? "Reminder" : "Availability request"} · ${esc(d.request_id)}</span>
       <h2 class="d-title">${esc(d.title)}</h2><p class="d-sum">To ${esc(d.data.to)}</p>
       <div class="concept"><div class="c-head"><div><div class="c-title">Draft mail</div><div class="c-to">Edit freely before sending</div></div><span class="pchip gold">draft</span></div>
-      <textarea class="c-text" id="b-${d.id}" rows="14">${esc(d.body)}</textarea></div>
+      <textarea class="c-text" id="b-${d.id}" rows="14" aria-label="${esc(T("Draft mail"))}">${esc(d.body)}</textarea></div>
       <div class="actions"><button class="btn btn-primary btn-lg" id="ok">${icon("send")} Approve and send</button><button class="btn-link" id="no">Reject</button></div>
       <div class="guard">${icon("shield")} In the sandbox nothing is actually sent; the request moves to "Sent, waiting".</div></div>`;
     $("#ok").onclick = async () => { await post(`/api/drafts/${id}/approve`, {by: BY, final_body: $(`#b-${id}`).value}); toast("Approved and marked as sent"); openDraft = null; viewCheck(); };
