@@ -46,7 +46,7 @@ def test_new_relation_from_the_other_parent_is_suggested(world):
     from brain.agents import triage
     from brain.clock import utcnow
     from brain.db import Family, Mail
-    f = world.scalars(select(Family).where(Family.child_birth_years != "[]")).first()
+    f = next(x for x in world.scalars(select(Family).order_by(Family.id)).all() if x.child_birth_years)
     world.add(Mail(id="dup1", received_at=utcnow(), sender="papa.nieuw@gmail.example", subject="Reis naar Japan",
                    body=f"Hallo, wij willen in juli 3 weken naar Japan met de kinderen.\n\nGroet,\nKees {f.surname}", status="new", truth={}))
     world.commit()

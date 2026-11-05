@@ -39,4 +39,5 @@ include = ["brain*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]  # tests share helpers (from tests.test_api import ...)
 filterwarnings = ["ignore::DeprecationWarning"]
