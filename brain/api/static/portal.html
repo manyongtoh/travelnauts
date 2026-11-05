@@ -11,7 +11,7 @@
   .facts{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 0}
   .line{background:var(--card);border:1px solid var(--sand);border-radius:var(--r-lg);padding:14px 16px;margin-bottom:12px}
   .line.confirmed{border-color:#9cc9c2}.line.alternative,.line.not_available{border-color:#E5B39C}
-  .line h3{margin:0;font-size:16px}.line .ldetail{color:var(--muted);font-size:13.5px;margin:2px 0 10px}
+  .line h2{margin:0;font-size:16px}.line .ldetail{color:var(--muted);font-size:13.5px;margin:2px 0 10px}
   .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
   *{min-width:0}.line,.wrap{box-sizing:border-box;max-width:100%}
   .grid label,.alt label{display:flex;flex-direction:column;font-size:12.5px;color:var(--muted);gap:3px}
@@ -23,11 +23,12 @@
   .msgs li{background:var(--white);border:1px solid var(--sand);border-radius:10px;padding:8px 10px;font-size:13.5px;max-width:85%}
   .msgs li.them{align-self:flex-end;background:#eef6f4}
   .msgs small{display:block;color:var(--muted);font-size:11.5px}
-  .saved{color:var(--sea);font-size:13px}
+  .saved{color:var(--sea-ink);font-size:13px}
+  input,select{min-height:44px} .btn{min-height:44px}  /* comfortable to tap on a phone */
   @media (max-width:600px){.grid{grid-template-columns:1fr 1fr}.grid label:last-child{grid-column:1/-1}}
 </style></head>
 <body>
-<div class="banner">TRAVELNAUTS · PARTNER REQUEST</div>
+<header><div class="banner">TRAVELNAUTS · PARTNER REQUEST</div></header>
 <main class="wrap" id="app"><p>Loading…</p></main>
 <script>
 const token = location.pathname.split("/").pop();
@@ -42,7 +43,7 @@ async function call(path, opts = {}) {
 }
 let V = null;
 async function load() {
-  try { V = await call(""); } catch (e) { $("#app").innerHTML = `<div class="line"><h3>Link not valid</h3><p>${esc(e.message)}</p></div>`; return; }
+  try { V = await call(""); } catch (e) { $("#app").innerHTML = `<div class="line"><h2>Link not valid</h2><p>${esc(e.message)}</p></div>`; return; }
   const t = V.trip, p = V.party;
   const kids = p.children_ages.length ? `, children ${p.children_ages.join(", ")}` : "";
   const done = V.lines.filter(l => l.status === "confirmed").length;
@@ -52,7 +53,7 @@ async function load() {
       ${V.answer_by ? `<span class="pill pill-concept">please answer by ${esc(V.answer_by)}</span>` : ""}<span class="pill">${done} of ${V.lines.length} confirmed</span></div></div></div>
     <p class="sub">Answer each line when you know it: confirmed with a price, still asking your supplier, or an alternative. Save per line; we see it straight away. Questions go in the thread below.</p>
     ${V.lines.map(lineHtml).join("")}
-    <div class="line"><h3>Thread</h3><ul class="msgs">${V.messages.filter(m => !m.line_id).map(msgHtml).join("") || `<li>No messages yet.</li>`}</ul>
+    <div class="line"><h2>Thread</h2><ul class="msgs">${V.messages.filter(m => !m.line_id).map(msgHtml).join("") || `<li>No messages yet.</li>`}</ul>
       <textarea id="msg" placeholder="A question or a note for Travelnauts" maxlength="2000"></textarea>
       <div class="row-end"><label class="btn btn-outline btn-sm" style="cursor:pointer">Upload a PDF offer<input type="file" id="pdf" accept="application/pdf" hidden></label>
         <button class="btn btn-primary btn-sm" id="send">Send message</button></div></div>
@@ -67,7 +68,7 @@ const msgHtml = m => `<li class="${m.author === "partner" ? "them" : ""}"><small
 function lineHtml(l) {
   const alt = l.alternative || {};
   const thread = V.messages.filter(m => m.line_id === l.id);
-  return `<div class="line ${l.status}" id="l${l.id}"><h3>${esc(l.label)}</h3><div class="ldetail">${esc(l.detail)}</div>
+  return `<div class="line ${l.status}" id="l${l.id}"><h2>${esc(l.label)}</h2><div class="ldetail">${esc(l.detail)}</div>
     <div class="grid"><label>Status<select data-f="status">${STATUS.map(([k, n]) => `<option value="${k}" ${k === l.status ? "selected" : ""}>${n}</option>`).join("")}</select></label>
       <label>Price in euro (total)<input data-f="price" type="number" min="0" step="1" value="${l.price_eur ?? ""}"></label>
       <label>Price valid until<input data-f="valid" type="date" value="${l.valid_until ?? ""}"></label></div>

@@ -256,3 +256,15 @@ details.moreacts .menu{position:absolute;z-index:20;left:0;top:calc(100% + 6px);
 details.moreacts .menu button{background:none;border:0;text-align:left;padding:9px 12px;border-radius:var(--r-sm);font-weight:600;font-size:14px}
 details.moreacts .menu button:hover{background:var(--hover)}
 @media (max-width:1100px){.today > div:first-child{position:static;max-height:none}}
+
+/* Accessibility (5 Nov): skip link, landmarks without changing the layout, busy and armed buttons, inactive rows */
+header{display:contents}
+.skip{position:absolute;left:12px;top:-60px;z-index:100;background:var(--ink);color:#fff;padding:10px 14px;border-radius:var(--r-sm);font-weight:600}
+.skip:focus{top:12px}
+main:focus{outline:none}
+button[aria-busy="true"]{cursor:progress;opacity:.7}
+.armed{color:var(--terra-ink)!important;text-decoration-color:var(--terra)!important;font-weight:700}
+.btn.armed{background:var(--terra-ink)!important;color:#fff!important;border-color:var(--terra-ink)!important}
+.row.inactive b,.row.inactive .mono{color:var(--muted)}
+.row.inactive{background:var(--sand-soft)}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}

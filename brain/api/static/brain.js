@@ -31,11 +31,29 @@ const api = async (path, opts = {}) => {
   const type = r.headers.get("content-type") || "";
   return type.includes("json") ? r.json() : r.text();
 };
+// The button that started an action stays busy until the answer is in: no double approvals, and you see it working.
+let lastPressed = null;
+document.addEventListener("click", e => { lastPressed = {el: e.target.closest("button"), at: Date.now()}; }, true);
 const post = async (path, body) => {
-  const r = await api(path, {method: "POST", body: body || {}});
-  if (r && r.ask_autosend) askAutoSend(r.ask_autosend);
-  return r;
+  const btn = lastPressed && Date.now() - lastPressed.at < 1500 ? lastPressed.el : null;
+  if (btn) { btn.disabled = true; btn.setAttribute("aria-busy", "true"); }
+  try {
+    const r = await api(path, {method: "POST", body: body || {}});
+    if (r && r.ask_autosend) askAutoSend(r.ask_autosend);
+    return r;
+  } finally {
+    if (btn) { btn.disabled = false; btn.removeAttribute("aria-busy"); }
+  }
 };
+// Destructive buttons ask once more in place (no pop-up): the first click arms them for four seconds.
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-confirm]");
+  if (!b) return;
+  if (b.dataset.armed) { delete b.dataset.armed; b.classList.remove("armed"); return; }
+  e.preventDefault(); e.stopImmediatePropagation();
+  b.dataset.armed = "1"; b.dataset.label = b.innerHTML; b.classList.add("armed"); b.textContent = T(b.dataset.confirm);
+  setTimeout(() => { if (b.dataset.armed) { delete b.dataset.armed; b.classList.remove("armed"); b.innerHTML = b.dataset.label; } }, 4000);
+}, true);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
 const eur = n => n == null ? "" : "€ " + Math.round(n).toLocaleString("nl-NL");
 const $ = s => document.querySelector(s);
@@ -61,10 +79,11 @@ const ICON = {
 const icon = n => `<svg class="i" viewBox="0 0 24 24">${ICON[n] || ""}</svg>`;
 
 function toast(msg) {
-  let box = $(".toasts"); if (!box) { box = document.createElement("div"); box.className = "toasts"; document.body.append(box); }
+  let box = $(".toasts"); if (!box) { box = document.createElement("div"); box.className = "toasts"; box.setAttribute("role", "status"); box.setAttribute("aria-live", "polite"); document.body.append(box); }
   box.innerHTML = `<div class="toast">${esc(msg)}</div>`;
   requestAnimationFrame(() => box.firstChild.classList.add("show"));
-  clearTimeout(box._h); box._h = setTimeout(() => box.firstChild && box.firstChild.classList.remove("show"), 2600);
+  // long enough to read: a short confirmation goes in 3 seconds, a refusal with its reason stays longer
+  clearTimeout(box._h); box._h = setTimeout(() => box.firstChild && box.firstChild.classList.remove("show"), Math.max(3000, 70 * String(msg).length));
 }
 
 function greeting() { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"; }
@@ -76,27 +95,30 @@ function shell({role, nav, links, who, onNav, needs}) {
   links = links || [];
   document.body.dataset.role = ROLE_KEY[role] || "other";
   document.title = `${T(role)} · ${T("Company brain")}`;
-  document.body.innerHTML = `<div class="app">
-    <aside class="sidebar">
+  document.body.innerHTML = `<a class="skip" href="#view">Skip to content</a><div class="app">
+    <aside class="sidebar" aria-label="Menu">
       <div class="brand"><span class="brand-name">Company brain</span><span class="label">${esc(role)}</span></div>
-      <nav class="nav">${nav.map(([id, l]) => `<button class="nav-btn" data-view="${id}">${esc(l)}<span class="badge" id="badge-${id}" hidden></span></button>`).join("")}</nav>
+      <nav class="nav" aria-label="Views">${nav.map(([id, l]) => `<button class="nav-btn" data-view="${id}">${esc(l)}<span class="badge" id="badge-${id}" hidden></span></button>`).join("")}</nav>
       <div class="side-links" id="side-links"></div>
       <div class="whoami" id="whoami">${who || ""}</div>
     </aside>
     <div class="main">
-      <div class="banner">SANDBOX · MADE-UP DATA · NOTHING IS SENT</div>
+      <header><div class="banner" role="note">SANDBOX · MADE-UP DATA · NOTHING IS SENT</div>
       <div class="topbar"><span class="label" id="tb-left"></span>
         <div class="tb-right"><span class="tchip"><span class="live"></span><span id="tb-model">model</span></span>
           <span class="pill pill-local" id="tb-ts">TravelSpirit · fake</span><span class="pill pill-concept">Synthetic data</span>
           <a class="tchip" href="/docs" style="text-decoration:none;color:inherit">API</a>
           <span class="langs" role="group" aria-label="Language"><button class="lang" data-lang="en" aria-pressed="${LANG === "en"}">EN</button><button class="lang" data-lang="nl" aria-pressed="${LANG === "nl"}">NL</button></span></div></div>
-      <main class="content" id="view"></main>
+      </header>
+      <main class="content" id="view" tabindex="-1"></main>
     </div></div>`;
   $$(".nav-btn").forEach(b => b.onclick = () => go(b.dataset.view));
   $$(".lang").forEach(b => b.onclick = () => b.dataset.lang !== LANG && setLang(b.dataset.lang));
   function go(id) {
     $$(".nav-btn").forEach(b => { if (b.dataset.view !== id) b.removeAttribute("aria-current"); else b.setAttribute("aria-current", "page"); });
     store.set(role + ":view", id); onNav(id);
+    if (document.activeElement && document.activeElement.classList.contains("nav-btn")) {}  // keep focus on the menu while browsing it
+    else $("#view").focus({preventScroll: true});
   }
   api("/api/status").then(s => {
     $("#tb-model").textContent = `Model: ${s.model}`;
