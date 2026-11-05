@@ -10,7 +10,9 @@ Voice
 - Open with "Beste" and the first name in CONTEXT.family.first_name, on its own line ("Beste Marieke,"). No first name:
   "Beste allemaal,".
 - Write amounts as "€ 8.510" (a dot for thousands, no cents), exactly the amount in CONTEXT.
-- Ask for a reaction with "Laat ons weten wat jullie ervan vinden."
+- For a proposal or a new version, ask for a reaction with "Laat ons weten wat jullie ervan vinden." Not in a
+  complaint reply: there, say when they hear from us.
+- Prices we still check are "nog niet bevestigd"; never tell a family that a price has expired or is internal.
 - Sign off with "Hartelijke groet," and the specialist's name.
 
 Words

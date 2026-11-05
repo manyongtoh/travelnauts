@@ -139,10 +139,20 @@ def triage_mail(s: Session, mail_id: str) -> dict:
         if res.confidence < 0.6 or res.category == "complaint":
             res, _ = run_step(s, "triage", TriageResult, INSTRUCTIONS, ctx, tier="large", escalated=True)
             escalated = True
+        from ..knowledge.concepts import destination_in
         if res.destination and res.destination not in DESTINATIONS:
             # a real model often answers with the name ("Sri Lanka", "Bali") instead of our key: translate, never guess
-            from ..knowledge.concepts import destination_in
             res.destination = destination_in(res.destination)
+        if not res.destination and res.category in ("new_request", "question", "change", "complaint"):
+            # Gemma left it empty on half the clean mail (run 2): when the mail names exactly one of our destinations,
+            # take it; two or none stays empty, so routing never rests on a guess
+            text = f"{mail['subject']} {mail['body']}"
+            named = {k for k, d in DESTINATIONS.items()
+                     if re.search(rf"\b({re.escape(d['nl'])}|{re.escape(d['name'])})\b", text, re.I)}
+            if len(named) == 1:
+                res.destination = named.pop()
+            elif not named:
+                res.destination = destination_in(text)  # a place we know (Bali is Indonesia), or nothing
         team = team_for(s, res.destination)
         out = res.model_dump() | {"team_id": team.id if team else None, "escalated": escalated}
         if not m.family_id and not m.partner_id:  # a partner writing from their own address or domain

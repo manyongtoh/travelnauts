@@ -29,7 +29,7 @@ Before the fixes listed at the bottom.
 - **Destination 50%:** most likely the model answers with the name ("Sri Lanka") where the brain expects its key.
 - **Speed: not usable on CPU.** A GPU (Azure) or a hosted endpoint is needed; expect tens of times faster.
 
-## Fixed after this run (to be confirmed by the next run)
+## Fixed after this run (confirmed by [run 2](gemma4-e4b-cpu-run2.md))
 
 - Triage translates a destination name into the brain's key (via the same aliases as search), never guessing.
 - House style: open with "Beste" and the first name, amounts as "€ 8.510", "Laat ons weten wat jullie ervan vinden",

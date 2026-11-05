@@ -45,13 +45,17 @@ def triage_report(mails: list[Mail]) -> dict:
     confusion = Counter()
     fields, fields_n = Counter(), 0
     dest_ok = dest_n = 0
+    dest_miss: list[str] = []
     for m in mails:
         t, got = m.truth, m.triage or {}
         confusion[(t["category"], got.get("category"))] += 1
         cat_ok += t["category"] == got.get("category")
         if t["category"] in ("new_request", "question") and (t.get("destination") or "destination" in t.get("accept", {})):
             dest_n += 1
-            dest_ok += match(t, "destination", got.get("destination"))
+            ok = match(t, "destination", got.get("destination"))
+            dest_ok += ok
+            if not ok:
+                dest_miss.append(f"{m.id}: wanted {t.get('destination')}, got {got.get('destination')}")
         if t["category"] == "new_request":
             fields_n += 1
             for ft, fg in FIELDS:
@@ -59,6 +63,7 @@ def triage_report(mails: list[Mail]) -> dict:
     return {"mails": len(mails), "category_accuracy_pct": pct(cat_ok, len(mails)),
             "destination_accuracy_pct": pct(dest_ok, dest_n),
             "new_request_fields_pct": {k: pct(v, fields_n) for k, v in fields.items()},
+            "destination_missed": dest_miss[:10],
             "misclassified": sorted(f"{a} -> {b} ({n})" for (a, b), n in confusion.items() if a != b)}
 
 

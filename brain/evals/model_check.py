@@ -147,6 +147,9 @@ def to_markdown(r: dict) -> str:
         mis = t(f"triage_{k}").get("misclassified")
         if mis:
             lines.append(f"Misclassified ({k}): {', '.join(mis)}")
+        miss = t(f"triage_{k}").get("destination_missed")
+        if miss:
+            lines.append(f"Destination missed ({k}): {'; '.join(miss)}")
     if r["errors"]:
         lines += ["", "## Errors", ""] + [f"- {e['step']} {e.get('mail') or e.get('request')}: {e['error']}" for e in r["errors"][:15]]
     for p in r.get("proposal_samples", []):
