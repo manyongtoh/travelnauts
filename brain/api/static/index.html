@@ -8,9 +8,11 @@
 <main class="content" style="max-width:980px;margin:0 auto">
   <div class="hello"><span class="label">Travelnauts pilot · synthetic stage</span><h1>Company brain</h1>
     <p class="summary">Pick who you are. In the pilot this is your Microsoft sign-in with a second factor (Entra ID); what you can see and do follows your role.</p></div>
+  <div style="margin:-6px 0 16px"><span class="langs" role="group" aria-label="Language"><button class="lang" data-lang="en">EN</button><button class="lang" data-lang="nl">NL</button></span></div>
   <div id="people"></div>
   <p class="guard" id="status"></p>
 </main>
+<script src="i18n.js"></script>
 <script src="brain.js"></script>
 <script>
 const HOME = {specialist: "specialist.html", team_lead: "teamlead.html", back_office: "backoffice.html", content: "teamlead.html", admin: "maintenance.html"};
@@ -19,6 +21,7 @@ const ORDER = [["specialist", "Sales specialists", "Own requests and drafts, kno
   ["team_lead", "Team leads", "Team view and metrics, reassign, approve knowledge and exceptions"],
   ["content", "Product and content", "Write and approve knowledge"],
   ["admin", "Admin (Myt)", "Maintenance, users, budgets; no customer content by default"]];
+$$(".lang").forEach(b => { b.setAttribute("aria-pressed", b.dataset.lang === LANG); b.onclick = () => b.dataset.lang !== LANG && setLang(b.dataset.lang); });
 (async () => {
   const s = await api("/api/status");
   $("#status").textContent = `Model: ${s.model} · data: ${s.data_stage} · TravelSpirit: ${s.travelspirit} (${s.travelspirit_write}) · sign-in: ${s.auth}`;

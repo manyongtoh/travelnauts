@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
 from .. import auditchain, db, jobs
@@ -705,6 +705,36 @@ def gaps(team: str | None = None, user: Principal = Depends(need("knowledge.sear
 def teamlead(user: Principal = Depends(need("team.metrics"))):
     with db.session() as s:
         return teamlead_overview(s)
+
+
+@app.get("/api/value")
+def value_report(days: int = 30, team: str | None = None, user: Principal = Depends(need("team.metrics"))):
+    """What the brain is worth, per period and team, against the baseline (estimates are labelled)."""
+    from .. import value
+    with db.session() as s:
+        return value.report(s, max(1, min(days, 366)), team if team and team != "all" else None)
+
+
+@app.get("/api/value.csv", response_class=PlainTextResponse)
+def value_csv(days: int = 30, team: str | None = None, user: Principal = Depends(need("team.metrics"))):
+    from .. import value
+    with db.session() as s:
+        return value.to_csv(value.report(s, max(1, min(days, 366)), team if team and team != "all" else None))
+
+
+class BaselineIn(BaseModel):
+    measured: bool | None = None
+    hours_to_first_proposal: float | None = Field(None, ge=0, le=1000)
+    minutes: dict[str, float] = {}
+
+
+@app.post("/api/value/baseline")
+def value_baseline(body: BaselineIn, user: Principal = Depends(need("team.metrics"))):
+    from .. import value
+    if any(v < 0 or v > 1000 for v in body.minutes.values()):
+        raise HTTPException(400, "Minutes must be between 0 and 1000")
+    with db.session() as s:
+        return value.set_baseline(s, body.model_dump(exclude_none=True), user.id)
 
 
 @app.get("/api/backoffice")

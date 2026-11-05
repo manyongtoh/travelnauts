@@ -5,14 +5,15 @@
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="brain.css"></head>
 <body>
+<script src="i18n.js"></script>
 <script src="brain.js"></script>
 <script>
 let team = store.get("tl:team") || "all", kfilter = "proposed";
 const app = shell({
   role: "Team lead",
-  nav: [["overview", "Overview"], ["complaints", "Complaints"], ["insight", "Insight"], ["knowledge", "Knowledge"], ["gaps", "Knowledge gaps"], ["log", "Log"]],
+  nav: [["overview", "Overview"], ["complaints", "Complaints"], ["value", "Value"], ["insight", "Insight"], ["knowledge", "Knowledge"], ["gaps", "Knowledge gaps"], ["log", "Log"]],
   needs: "team.metrics",
-  onNav: v => ({overview: viewOverview, complaints: viewComplaints, insight: viewInsight, knowledge: viewKnowledge, gaps: viewGaps, log: viewLog})[v](),
+  onNav: v => ({overview: viewOverview, complaints: viewComplaints, value: viewValue, insight: viewInsight, knowledge: viewKnowledge, gaps: viewGaps, log: viewLog})[v](),
 });
 $("#tb-left").textContent = "Pilot · synthetic stage";
 
@@ -188,6 +189,48 @@ async function viewGaps() {
   bindTeam(viewGaps);
 }
 
+let vdays = +(store.get("tl:vdays") || 30);
+const KIND_LABEL = {proposal: "Proposals", change: "Changes", followup: "Follow-ups", partner_request: "Partner requests", partner_chase: "Partner chases",
+  extras: "Extras offers", roadbook: "Roadbooks", answer: "Answers", complaint_reply: "Complaint replies", alternatives: "Alternatives",
+  next_trip: "Next trip ideas", trip_alert: "Trip alerts"};
+const n = v => v == null ? "–" : v;
+async function viewValue() {
+  const q = `days=${vdays}&team=${encodeURIComponent(team)}`;
+  const r = await api(`/api/value?${q}`), b = r.baseline;
+  const kinds = Object.entries(r.quality.per_kind).filter(([, k]) => k.drafted);
+  const cols = "grid-template-columns:minmax(0,1.6fr) repeat(5,minmax(80px,1fr))";
+  $("#view").innerHTML = `<div class="vhead"><span class="label">Value</span><h1>What the brain is worth</h1>
+      <p>Counted from what happened in the last ${vdays} days. Hours saved is an estimate: drafts sent, times the minutes a person used to spend, minus what was rewritten.</p></div>
+    <div class="filters">${teamChips()}<div class="fchips"><span class="label" style="margin-right:6px">Period</span>${[7, 30, 90, 365].map(d =>
+      `<button class="fchip" data-days="${d}" aria-pressed="${vdays === d}">${d} days</button>`).join("")}</div></div>
+    ${b.measured ? "" : `<div class="guard">${icon("shield")} The baseline is an assumption until Travelnauts measures it with the pilot group. Change it below; every figure updates.</div>`}
+    <div class="kpis">
+      <div class="kpi"><span class="label">Hours saved (est.)</span><b>${r.hours_saved_estimate}</b></div>
+      <div class="kpi"><span class="label">First proposal ready</span><b>${r.speed.median_hours_to_first_proposal_draft == null ? "–" : r.speed.median_hours_to_first_proposal_draft + " h"}</b><small>was ${b.hours_to_first_proposal} h</small></div>
+      <div class="kpi"><span class="label">Sent unchanged</span><b>${n(r.quality.sent_unchanged_pct)}%</b><small>rewritten ${n(r.quality.avg_rewrite_pct)}%</small></div>
+      <div class="kpi"><span class="label">Done unprompted</span><b>${r.unprompted.drafts}</b><small>drafts nobody asked for</small></div>
+      <div class="kpi"><span class="label">Partner answered</span><b>${n(r.back_office.answered_pct)}%</b><small>median ${n(r.back_office.median_reply_days)} days</small></div>
+      <div class="kpi"><span class="label">Booked</span><b>${n(r.sales.booked_pct)}%</b><small>of ${r.sales.proposals_sent} proposals sent</small></div>
+    </div>
+    <ul class="list"><li class="row row-head label" style="${cols}"><span>Work</span><span>Drafted</span><span>Sent</span><span>Unchanged</span><span>Sent automatically</span><span>Minutes each</span></li>
+    ${kinds.map(([k, x]) => `<li class="row" style="${cols}"><b>${esc(KIND_LABEL[k] || k)}</b><span class="mono">${x.drafted}</span><span class="mono">${x.sent}</span>
+      <span class="mono">${n(x.sent_unchanged_pct)}%</span><span class="mono">${x.auto_sent}</span>
+      <span><input class="mono" type="number" min="0" max="1000" step="1" data-min="${k}" value="${b.minutes[k] ?? 0}" style="width:70px" aria-label="Minutes per ${esc(KIND_LABEL[k] || k)} today"></span></li>`).join("") || `<li class="row">Nothing drafted in this period.</li>`}</ul>
+    <div class="actions" style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <label>Hours to first proposal today <input class="mono" type="number" min="0" max="1000" id="v-hours" value="${b.hours_to_first_proposal}" style="width:70px"></label>
+      <label><input type="checkbox" id="v-measured" ${b.measured ? "checked" : ""}> Baseline measured</label>
+      <button class="btn btn-primary" id="v-save">Save baseline</button>
+      <a class="btn btn-outline" href="/api/value.csv?${q}" download="brain-value.csv">Download CSV</a></div>
+    <p class="sub" style="margin-top:14px;color:var(--muted)">Also: ${r.back_office.invoices_checked} invoices checked, ${r.unprompted.followups_withdrawn} follow-ups withdrawn because the family wrote first,
+      ${r.knowledge.gaps_answered} knowledge gaps answered, ${r.knowledge.learned_waiting} learned notes waiting for review, ${r.safety.mail_flagged} suspicious mails held.</p>`;
+  bindTeam(viewValue);
+  $$("[data-days]").forEach(x => x.onclick = () => { vdays = +x.dataset.days; store.set("tl:vdays", vdays); viewValue(); });
+  $("#v-save").onclick = async () => {
+    const minutes = {}; $$("[data-min]").forEach(i => minutes[i.dataset.min] = +i.value);
+    await post("/api/value/baseline", {minutes, hours_to_first_proposal: +$("#v-hours").value, measured: $("#v-measured").checked});
+    toast("Baseline saved"); viewValue();
+  };
+}
 async function viewLog() {
   const runs = await api("/api/audit?limit=60");
   const cols = "grid-template-columns:150px 140px 170px minmax(0,1fr) 70px 70px";

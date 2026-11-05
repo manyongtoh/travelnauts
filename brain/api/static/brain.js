@@ -64,7 +64,7 @@ function toast(msg) {
 }
 
 function greeting() { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"; }
-function today() { return new Date().toLocaleDateString("en-GB", {weekday: "long", day: "numeric", month: "long", year: "numeric"}).replace(",", ""); }
+function today() { return new Date().toLocaleDateString(LANG === "nl" ? "nl-NL" : "en-GB", {weekday: "long", day: "numeric", month: "long", year: "numeric"}).replace(",", ""); }
 
 // shell({role, nav: [[id, label]], links: [[href, label]], who: html}) builds the page frame; views live in <main id="view">.
 function shell({role, nav, links, who, onNav, needs}) {
@@ -81,10 +81,12 @@ function shell({role, nav, links, who, onNav, needs}) {
       <div class="topbar"><span class="label" id="tb-left"></span>
         <div class="tb-right"><span class="tchip"><span class="live"></span><span id="tb-model">model</span></span>
           <span class="pill pill-local" id="tb-ts">TravelSpirit · fake</span><span class="pill pill-concept">Synthetic data</span>
-          <a class="tchip" href="/docs" style="text-decoration:none;color:inherit">API</a></div></div>
+          <a class="tchip" href="/docs" style="text-decoration:none;color:inherit">API</a>
+          <span class="langs" role="group" aria-label="Language"><button class="lang" data-lang="en" aria-pressed="${LANG === "en"}">EN</button><button class="lang" data-lang="nl" aria-pressed="${LANG === "nl"}">NL</button></span></div></div>
       <main class="content" id="view"></main>
     </div></div>`;
   $$(".nav-btn").forEach(b => b.onclick = () => go(b.dataset.view));
+  $$(".lang").forEach(b => b.onclick = () => b.dataset.lang !== LANG && setLang(b.dataset.lang));
   function go(id) {
     $$(".nav-btn").forEach(b => { if (b.dataset.view !== id) b.removeAttribute("aria-current"); else b.setAttribute("aria-current", "page"); });
     store.set(role + ":view", id); onNav(id);
@@ -96,9 +98,9 @@ function shell({role, nav, links, who, onNav, needs}) {
   const ready = loadMe().then(me => {
     const here = location.pathname.split("/").pop();
     $("#side-links").innerHTML = SCREENS.filter(([h, , p]) => h !== here && me.can.includes(p)).map(([h, l]) => `<a href="${h}">${esc(l)} →</a>`).join("");
-    if (!who) $("#whoami").innerHTML = `<span class="avatar">${esc(initials(me.name))}</span><div>${esc(me.name)}<small>${esc(me.roles.map(r => ROLE_LABEL[r] || r).join(", "))} · <a href="index.html" style="color:inherit">switch</a></small></div>`;
+    if (!who) $("#whoami").innerHTML = `<span class="avatar">${esc(initials(me.name))}</span><div>${esc(me.name)}<small>${esc(me.roles.map(r => T(ROLE_LABEL[r] || r)).join(", "))} · <a href="index.html" style="color:inherit">switch</a></small></div>`;
     if (needs && !me.can.includes(needs)) {
-      $("#view").innerHTML = `<div class="detail empty"><b>Not for your role</b>${esc(me.name)} (${esc(me.roles.map(r => ROLE_LABEL[r]).join(", "))}) cannot open this screen. <a href="index.html">Sign in as someone else</a>.</div>`;
+      $("#view").innerHTML = `<div class="detail empty"><b>Not for your role</b>${esc(me.name)} (${esc(me.roles.map(r => T(ROLE_LABEL[r] || r)).join(", "))}) cannot open this screen. <a href="index.html">Sign in as someone else</a>.</div>`;
       throw new Error("forbidden");
     }
     return me;
