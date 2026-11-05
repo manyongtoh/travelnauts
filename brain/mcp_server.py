@@ -14,6 +14,7 @@ import os
 from mcp.server.mcpserver import MCPServer
 
 from . import db
+from .tenant import tenant
 from .identity import AGENTS, agent
 from .toolserver import server as tools
 
@@ -21,8 +22,8 @@ from .toolserver import server as tools
 def build(agent_id: str | None = None) -> MCPServer:
     agent_id = agent_id or os.getenv("BRAIN_MCP_AGENT", "agent:knowledge_desk")
     me = agent(agent_id)
-    mcp = MCPServer(name=f"travelnauts-brain ({agent_id})",
-                    instructions="Tools of the Travelnauts company brain. Drafts only; nothing is sent or booked.")
+    mcp = MCPServer(name=f"{tenant().tenant_id}-brain ({agent_id})",
+                    instructions=f"Tools of the {tenant().name} company brain. Drafts only; nothing is sent or booked.")
     for name in sorted(AGENTS[me.id]):
         t = tools.tools.get(name)
         if t is None:

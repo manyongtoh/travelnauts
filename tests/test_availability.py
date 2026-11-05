@@ -1,4 +1,4 @@
-"""Test #11: a proposal while partners are still checking availability. Both options are built; Travelnauts
+"""Test #11: a proposal while partners are still checking availability. Both options are built; the client
 chooses with one setting (BRAIN_AVAILABILITY_RULE = warn | block). In both, a partner that said 'not available'
 stops the proposal until an alternative is chosen."""
 import pytest

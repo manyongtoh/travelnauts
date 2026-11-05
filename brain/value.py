@@ -1,9 +1,9 @@
-"""What the brain is worth: the numbers behind the success fee, against a baseline Travelnauts measures.
+"""What the brain is worth: the numbers behind the success fee, against a baseline the client measures.
 
 Everything is counted from what actually happened (requests, drafts, approvals, partner answers). Minutes saved
 are an estimate: drafts the brain made, times the minutes a person used to spend on that task (the baseline,
 measured with the pilot group before go-live), minus the share the specialist rewrote. The baseline values are
-editable and shown as assumptions until Travelnauts has measured them.
+editable and shown as assumptions until the client has measured them.
 """
 from __future__ import annotations
 

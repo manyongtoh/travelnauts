@@ -26,7 +26,7 @@ free tier. Any other provider with an OpenAI compatible endpoint works by changi
 2. On GitHub: **Settings > Secrets and variables > Actions > New repository secret**, name `GEMMA_API_KEY`.
 3. **Actions > gemma > Run workflow**, where `hosted`, model `gemma-4-31b-it`, 60 mails, 10 proposals.
 
-Synthetic data only: a free tier may keep what is sent to it. The pilot runs Gemma in Travelnauts' own Azure
+Synthetic data only: a free tier may keep what is sent to it. The pilot runs Gemma in the client's own Azure
 environment instead. The hosted run measures quality and the speed of a larger model on a GPU; it is not the
 pilot's cost or speed.
 
@@ -59,7 +59,7 @@ ollama run gemma4 "Zeg hallo in één zin."   # quick check
 ### 3. Point the brain at it
 
 ```bash
-cd travelnauts
+cd brain-core
 pip install -e ".[dev]"
 export BRAIN_MODEL_BASE_URL=http://localhost:11434/v1
 export BRAIN_MODEL_SMALL=ollama:gemma4

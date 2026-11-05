@@ -204,8 +204,8 @@ def partners_list(s: Session, destination: str | None = None) -> list[dict]:
 @server.tool("galileo.write_commands", access="text", customer_data=False)
 def galileo_check(s: Session, commands: list[str]) -> dict:
     """Check Galileo commands against the allowed formats. Text only: nothing is executed."""
-    from .agents.galileo import ALLOWED
-    bad = [c for c in commands if not any(p.match(c) for p in ALLOWED)]
+    from .agents.galileo import allowed
+    bad = [c for c in commands if not any(p.match(c) for p in allowed())]
     return {"ok": not bad, "unknown_format": bad}
 
 
@@ -232,7 +232,8 @@ def match_partner_request(s: Session, m) -> "PartnerRequest | None":
     chosen = (m.triage or {}).get("partner_request_id")
     if chosen:
         return s.get(PartnerRequest, chosen)
-    ref = _re.search(r"TN-?\s?(R\d{3,})", f"{m.subject} {m.body}", _re.I)
+    from .tenant import tenant
+    ref = _re.search(rf"{tenant().ref_re}-?\s?(R\d{{3,}})", f"{m.subject} {m.body}", _re.I)
     if ref:
         rows = s.scalars(select(PartnerRequest).where(PartnerRequest.request_id == ref.group(1).lower())).all()
         mine = [pr for pr in rows if pr.partner_id == m.partner_id] if m.partner_id else rows
@@ -246,7 +247,7 @@ def match_partner_request(s: Session, m) -> "PartnerRequest | None":
 
 @server.tool("partners.read_reply")
 def partners_read_reply(s: Session, mail_id: str) -> dict:
-    """Read a partner's reply mail and the request it answers (matched on the TN reference)."""
+    """Read a partner's reply mail and the request it answers (matched on our booking reference)."""
     import re as _re
     from .db import Mail, PartnerRequest
     m = s.get(Mail, mail_id)

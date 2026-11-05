@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import Draft, Employee
+from ..tenant import tenant
 from ..identity import agent
 from ..synth.world import DESTINATIONS
 from ..toolserver import server
@@ -52,7 +53,7 @@ def run(s: Session, now: datetime | None = None) -> dict:
                 out, _ = run_step(s, "trip_alert", TripAlert, INSTRUCTIONS, {
                     "family": {"name": fam["contact_name"]}, "flight": f, "status": st,
                     "trip": {"destination": DESTINATIONS[t["destination"]]["nl"]},
-                    "specialist": spec.name if spec else "Travelnauts", "emergency_line": "+31 20 000 0000 (sandbox)"})
+                    "specialist": spec.name if spec else tenant().short_name, "emergency_line": tenant().emergency_line})
                 s.add(Draft(kind="trip_alert", request_id=t["id"], title=out.subject, body=out.body,
                             data={"flight": f["number"], "status": st, "warnings": [f"Vlucht {f['number']}: {st['status']}"
                                   + (f", {st['delay_minutes']} min vertraging" if st["delay_minutes"] else "")]}))

@@ -6,12 +6,16 @@ company signatures, couples, families, and endings that are not names at all.
 """
 import random
 
+from brain.tenant import tenant
+
+CO, DOM = tenant().short_name, tenant().own_domains[0]  # the tenant whose mail this is
+
 REQ = "Wij willen in de zomer met de kinderen naar Costa Rica. Kunnen jullie een voorstel maken?"
-QUOTE = ("\n\nOp 3 nov. 2026 om 10:12 schreef Sanne de Vries | Travelnauts <sanne@travelnauts.example>:\n"
+QUOTE = (f"\n\nOp 3 nov. 2026 om 10:12 schreef Sanne de Vries | {CO} <sanne@{DOM}>:\n"
          "> Beste familie,\n> Hierbij ons voorstel.\n> Hartelijke groet,\n> Sanne de Vries\n")
-QUOTE_EN = ("\n\nOn Tue, 3 Nov 2026 at 10:12, Sanne de Vries <sanne@travelnauts.example> wrote:\n"
+QUOTE_EN = (f"\n\nOn Tue, 3 Nov 2026 at 10:12, Sanne de Vries <sanne@{DOM}> wrote:\n"
             "> Dear family,\n> Kind regards,\n> Sanne de Vries\n")
-FWD_OUTLOOK = ("\n\n-----Oorspronkelijk bericht-----\nVan: Sanne de Vries <sanne@travelnauts.example>\n"
+FWD_OUTLOOK = (f"\n\n-----Oorspronkelijk bericht-----\nVan: Sanne de Vries <sanne@{DOM}>\n"
                "Verzonden: dinsdag 3 november 2026 10:12\nOnderwerp: Voorstel\n\nBeste familie,\nGroet, Sanne de Vries")
 
 PEOPLE = [("Marieke Visser", "Visser"), ("Jan van der Berg", "van der Berg"), ("Anne-Marie Dijkstra", "Dijkstra"),
@@ -71,7 +75,7 @@ def cases() -> list[tuple[str, str, str]]:
         (f"{REQ}\n\nBest,\nThe team at Acme Travel", "", ""),
         (f"{REQ}\n\nCheers!", "", ""),
         (f"{REQ}{QUOTE}", "", ""),  # only the quoted history is signed: that is our specialist, not the family
-        (f"{REQ}\n\nGroeten,\nSanne\nTravelnauts", "", ""),  # our own signature in a forward
+        (f"{REQ}\n\nGroeten,\nSanne\n{CO}", "", ""),  # our own signature in a forward
     ]
     return out
 
@@ -89,7 +93,7 @@ def held_out() -> list[tuple[str, str, str]]:
         (f"{R}\n\nGroeten,\nfam. de Graaf", "", "de Graaf"),
         (f"{R}\n\nThanks a lot!\nChris & Sam", "Chris & Sam", ""),
         (f"{R}\n\nGr Wouter", "Wouter", ""),
-        (f"{R}\n\nGroeten,\n\nEva\n\nOp ma 2 nov. 2026 schreef Travelnauts <info@travelnauts.example>:\n> Bedankt voor je bericht",
+        (f"{R}\n\nGroeten,\n\nEva\n\nOp ma 2 nov. 2026 schreef {CO} <info@{DOM}>:\n> Bedankt voor je bericht",
          "Eva", ""),
         (f"{R}\n\nLiefs,\nMama", "", ""),
         (f"{R}\n\nMet vriendelijke groet,\n\nIng. P.J. Hendriks", "", ""),
@@ -100,7 +104,7 @@ def held_out() -> list[tuple[str, str, str]]:
         (f"{R}\n\nGroetjes!!\nSophie van Dam xx", "Sophie van Dam", "van Dam"),
         (f"{R}\n\nGroeten,\nJ.", "", ""),
         (f"{R}\n\nVriendelijke groet,\nM. Peters\nnamens de familie Peters", "M. Peters", "Peters"),
-        (f"{R}\n\nGroet,\nPeter\n\n________________________________\nVan: Travelnauts\nVerzonden: maandag", "Peter", ""),
+        (f"{R}\n\nGroet,\nPeter\n\n________________________________\nVan: {CO}\nVerzonden: maandag", "Peter", ""),
         (f"{R}\n\nGroeten,\nTim en Lisa", "Tim en Lisa", ""),
         (f"{R}\n\nHoi! Groetjes, Fleur", "Fleur", ""),
         (f"{R}\n\nGroeten uit Zwolle,\nBram", "Bram", ""),

@@ -2,7 +2,8 @@
 runs them; the specialist checks and runs them in Galileo.
 
 The command formats below are common Galileo (Travelport) patterns used as PLACEHOLDERS. Replace
-them with Travelnauts' own command list before the anonymised data stage.
+them with the tenant's own command list before the anonymised data stage. The agency phone remark comes
+from the tenant config.
 """
 from __future__ import annotations
 
@@ -26,11 +27,16 @@ ALLOWED = [
     re.compile(r"^A\d{2}[A-Z]{3}[A-Z]{3}[A-Z]{3}(\*[A-Z0-9]{2})?$"),  # availability
     re.compile(r"^0\d[A-Z]\d$"),                                     # sell from availability line
     re.compile(r"^N\.[A-Z]+/[A-Z0-9]+(MR|MRS|MS|CHD)(\*C\d{2})?$"),     # name
-    re.compile(r"^P\.AMSB\*TRAVELNAUTS$"),                           # agency phone (placeholder)
     re.compile(r"^T\.TAU/\d{2}[A-Z]{3}$"),                           # ticketing time limit
     re.compile(r"^R\.[A-Z]+$"),                                      # received from
     re.compile(r"^\*R$"),                                            # display booking
 ]
+
+
+def allowed() -> list[re.Pattern]:
+    """The fixed patterns plus this tenant's agency phone remark."""
+    from ..tenant import tenant
+    return ALLOWED + [re.compile("^" + re.escape(tenant().galileo_agency_remark) + "$")]
 
 
 class Command(BaseModel):
@@ -61,7 +67,7 @@ def first_saturday(month_nl: str, today: date | None = None) -> date:
 
 
 def check(cmds: list[Command]) -> list[str]:
-    return [f"Controleer '{c.cmd}': onbekend formaat" for c in cmds if not any(p.match(c.cmd) for p in ALLOWED)]
+    return [f"Controleer '{c.cmd}': onbekend formaat" for c in cmds if not any(p.match(c.cmd) for p in allowed())]
 
 
 def write_commands(s: Session, request_id: str) -> Draft:

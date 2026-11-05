@@ -5,7 +5,7 @@ objects (mail, relation, dossier). A new API version gets its own adapter (adapt
 functions; which one is used is a setting per environment.
 
 The field names below are an ASSUMED shape, recorded in tests/contract/recorded/. Replace the recordings
-with real TravelSpirit responses as soon as Travelnauts shares test access; the contract tests then show
+with real TravelSpirit responses as soon as the client shares test access; the contract tests then show
 exactly which mappings need to change. All ids go through id_map, so a change in TravelSpirit's ids after
 the merger touches one place.
 """

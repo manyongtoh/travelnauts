@@ -19,12 +19,13 @@ from pathlib import Path
 from . import db
 from .anonymise import Refused, anonymise_mail, anonymise_relation
 from .config import get_settings
+from .tenant import tenant
 from .db import Family, Mail
 
 
 def ref_for(source_id: str) -> str:
     """Stable, one way reference, so the same relation maps to the same anonymous family."""
-    return "anon-" + hashlib.sha256(f"travelnauts:{source_id}".encode()).hexdigest()[:10]
+    return "anon-" + hashlib.sha256(f"{tenant().tenant_id}:{source_id}".encode()).hexdigest()[:10]
 
 
 def ingest(path: Path | str) -> dict:

@@ -1,4 +1,8 @@
-# Travelnauts company brain: sandbox
+# brain-core
+
+The company brain platform of Myt B.V. Proprietary: see [LICENSE](LICENSE). Clients plug in through a tenant
+pack in their own repo; the core ships one invented sample tenant, Wolkenwaai Reizen, and contains no client
+names or data (CI checks this).
 
 A working version of the company brain from the proposal and the tech architecture, running on
 **made-up data only**: the tool server (also over MCP), a job queue and scheduler, the model
@@ -8,10 +12,10 @@ roadbooks and vouchers as PDF, and booking file checks),
 evals that gate CI, and five screens (specialist, team lead, back office, maintenance, user management).
 See [docs/architecture-coverage.md](docs/architecture-coverage.md) for what is built, what is a stand-in
 and what still needs Azure, [docs/operations.md](docs/operations.md) for how it scales and what keeps it robust, [docs/runbook.md](docs/runbook.md)
-for daily checks and incidents, [docs/test-reports](docs/test-reports/README.md) for the latest results,
-[docs/next-steps.md](docs/next-steps.md) for what is needed from Travelnauts, and [docs/lists](docs/lists) for the open questions and test lists.
+for daily checks and incidents (a template; each client repo keeps its filled-in copy), and
+[docs/test-reports](docs/test-reports/README.md) for the latest results.
 
-Nothing here is Travelnauts data. Families, partners, hotels, prices and staff are invented.
+Nothing here is client data. Families, partners, hotels, prices and staff are invented.
 Agents only ever write drafts; a person approves every mail before it goes out.
 
 ## Run it
@@ -25,7 +29,6 @@ pytest -q             # 185 tests (BRAIN_TEST_DATABASE_URL=postgresql+psycopg://
 brain bench --gate    # evals; fails when a gate from the architecture is not met
 brain mcp             # the tool server over MCP, as BRAIN_MCP_AGENT
 brain envcheck        # check the test, pilot or live configuration
-brain n8n export.json # inventory of exported n8n workflows
 brain migrate         # database migrations (pilot and live)
 brain worker --drain  # scaled workers: work the queue until it is empty
 brain loadtest        # many mails, several workers at once (use Postgres)
@@ -94,7 +97,7 @@ Nothing it learns is used before a person approves it.
 
 ## Safety rules built in
 
-- `BRAIN_DATA_STAGE=live` refuses to start. Live needs the go-live approval from Inge and Jonas.
+- `BRAIN_DATA_STAGE=live` refuses to start. Live needs the go-live approval from the client's management.
 - In the synthetic stage the app refuses to run if any row is not marked synthetic.
 - Agents cannot write final records in TravelSpirit, only drafts (`BRAIN_TRAVELSPIRIT_WRITE=drafts|off`).
 - Partner mails carry a booking reference, never the family's name.
@@ -123,13 +126,13 @@ Indonesia, partner replies, out of office) were kept apart on purpose: the rules
 point. They are the yardstick for Gemma. The knowledge desk misses on hard questions partly because search is
 still keyword based; search by meaning is the next step there.
 
-## What is a placeholder until Travelnauts provides it
+## What is a placeholder until a client provides it
 
-See [docs/next-steps.md](docs/next-steps.md). In short: TravelSpirit API documentation and test access,
+Each client repo lists what it still has to provide. In short: TravelSpirit API documentation and test access,
 anonymised example proposals and partner mails, the Excel calculation template, the Galileo command
 list, and the real booking terms. Everything that stands in for these is marked as a placeholder.
 
 ## Ownership
 
-Built by Myt B.V. The generic parts (agent framework, knowledge rules, test bench, screens) are Myt's
-and reusable; Travelnauts specific content and data stay with Travelnauts, as set out in the contract.
+Built and owned by Myt B.V. Client-specific content and data stay in the client's own repo and database, as set
+out in each client's agreement.

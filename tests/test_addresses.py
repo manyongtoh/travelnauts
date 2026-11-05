@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from brain.tenant import tenant
 from brain.agents import triage
 from brain.agents.triage import normalise_address, original_sender, resolve_family
 from brain.clock import utcnow
@@ -40,7 +41,7 @@ def test_the_other_parent_writing_from_their_own_address_is_not_linked_by_itself
 def test_a_booking_number_is_a_suggestion_not_a_link(world):
     fam, tr = booked_family(world)
     got, notes = resolve_family(world, "iemand@anders.example", CHANGE, "Kunnen we de datum verschuiven?",
-                                f"Re: TN-{tr.id.upper()}")
+                                f"Re: {tenant().reference(tr.id)}")
     assert got is None
     c = next(c for c in notes["candidates"] if c["family_id"] == fam.id)
     assert any("booking" in w for w in c["why"])
@@ -66,8 +67,8 @@ def test_a_colleague_forwarding_a_family_mail_is_read_as_the_family(world):
     fam, _ = booked_family(world)
     body = (f"Zie hieronder, kun jij dit oppakken?\n\n---------- Doorgestuurd bericht ---------\nVan: {fam.contact_name} "
             f"<{fam.email}>\nDatum: 3 nov 2026\nOnderwerp: Vraag\n\nKunnen we een nacht langer blijven?")
-    assert original_sender("sanne@travelnauts.example", body) == fam.email.lower()
-    assert resolve_family(world, "sanne@travelnauts.example", CHANGE, body)[0].id == fam.id
+    assert original_sender(f"sanne@{tenant().own_domains[0]}", body) == fam.email.lower()
+    assert resolve_family(world, f"sanne@{tenant().own_domains[0]}", CHANGE, body)[0].id == fam.id
     assert original_sender("someone@gmail.example", body) == "someone@gmail.example"  # only our own colleagues' forwards
 
 

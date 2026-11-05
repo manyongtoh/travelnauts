@@ -1,4 +1,4 @@
-"""Build the synthetic Travelnauts: staff, families, partners, prices, past proposals,
+"""Build the synthetic tenant (by default the invented Wolkenwaai Reizen): staff, families, partners, prices, past proposals,
 knowledge, an inbox and some trips already in progress. Deterministic for a given seed."""
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from ..db import (AgentRun, Draft, Employee, Family, KnowledgeGap, KnowledgeItem
                   PastProposal, PriceItem, Team, TripRequest)
 from .world import BACK_OFFICE, CITIES, DESTINATIONS, FIRST_NAMES, STAFF, SURNAMES, TEAMS, WISHES
 from ..clock import utcnow
+from ..tenant import tenant
 
 MONTHS = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober",
           "november", "december"]
@@ -88,7 +89,7 @@ def build(seed: int = 42, n_families: int = 200, hard: bool = True) -> dict:
         employees.append(Employee(id="noor-visser", name="Noor Visser", role="content", team_id=None))
         employees.append(Employee(id="myt-beheer", name="Myt beheer", role="admin", team_id=None))
         for e in employees:
-            e.email = f"{e.id}@travelnauts.example"
+            e.email = f"{e.id}@{tenant().own_domains[0]}"
         s.add_all(employees)
         s.flush()
         specialists = {t: [e for e in employees if e.role == "specialist" and e.team_id == t] for t in TEAMS}
@@ -252,7 +253,7 @@ def build(seed: int = 42, n_families: int = 200, hard: bool = True) -> dict:
             ])
             dur = rng.choice([f"ongeveer {days} dagen", f"{days // 7} weken" if days % 7 == 0 else f"{days} dagen", f"{days} dagen"])
             body = "\n".join([
-                rng.choice(["Hallo,", "Beste Travelnauts,", "Goedemiddag,"]),
+                rng.choice(["Hallo,", f"Beste {tenant().short_name},", "Goedemiddag,"]),
                 "",
                 rng.choice([f"Wij willen graag in {month} naar {d['nl']}, {dur}.",
                             f"In {month} hopen we {dur} door {d['nl']} te reizen.",
@@ -410,21 +411,21 @@ def build(seed: int = 42, n_families: int = 200, hard: bool = True) -> dict:
             price = pr.offer["price_eur"]
             kind = rng.choices(["match", "differs", "unknown"], [0.6, 0.3, 0.1])[0]
             amount = price if kind == "match" else (round(price * rng.choice([1.08, 1.12, 0.9]), -1) if kind == "differs" else price)
-            ref = f"TN-{pr.request_id.upper()}" if kind != "unknown" else "TN-R9" + str(rng.randint(10, 99))
+            ref = tenant().reference(pr.request_id) if kind != "unknown" else f"{tenant().reference_prefix}-R9" + str(rng.randint(10, 99))
             mail(received_at=today - timedelta(hours=rng.randint(2, 60)), sender=p.email, subject=f"Invoice INV-2026-{1000 + inv_n}",
-                 body=f"Dear Travelnauts,\n\nPlease find invoice INV-2026-{1000 + inv_n} for booking {ref}: amount EUR {amount:,.0f}. "
+                 body=f"Dear {tenant().short_name},\n\nPlease find invoice INV-2026-{1000 + inv_n} for booking {ref}: amount EUR {amount:,.0f}. "
                       f"Payment within 30 days.\n\nKind regards,\n{p.name} accounts", partner_id=p.id,
                  truth={"category": "invoice", "expected_status": kind, "partner_request_id": pr.id})
         for pr in [p for p in prs_all if p.status in ("waiting", "chased")][:3]:
             p = partner_by_id[pr.partner_id]
             price = rng.choice([860, 1040, 1180, 1320])
             avail = rng.random() < 0.8
-            ref = f"TN-{pr.request_id.upper()}"
+            ref = tenant().reference(pr.request_id)
             path = simple_pdf(files_dir() / "attachments" / f"offer_{ref}_{p.id}.pdf", f"{p.name}: offer {ref}",
                               [f"Reference: {ref}", "Room: family room for 2 adults and children", f"Available: {'yes' if avail else 'no, fully booked'}",
                                f"Total price: EUR {price:,}", "Cancellation: free until 45 days before arrival"])
             m = mail(received_at=today - timedelta(hours=rng.randint(1, 20)), sender=p.email, subject=f"RE: Availability request {ref}",
-                     body=f"Dear Travelnauts team,\n\nPlease find our offer for {ref} attached.\n\nRegards,\nReservations", partner_id=p.id,
+                     body=f"Dear {tenant().short_name} team,\n\nPlease find our offer for {ref} attached.\n\nRegards,\nReservations", partner_id=p.id,
                      truth={"category": "partner_reply", "partner_request_id": pr.id, "price_eur": price, "available": avail})
             m.attachments = [{"name": path.name, "path": str(path), "mime": "application/pdf"}]
         if hard:

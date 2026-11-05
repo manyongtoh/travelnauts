@@ -1,7 +1,7 @@
 """The made-up world the sandbox runs on.
 
 Every hotel, partner, person and price here is invented. Destinations and seasons are
-real places with general knowledge, but nothing here is Travelnauts material and nothing
+real places with general knowledge, but nothing here is client material and nothing
 should be read as checked travel advice (entry rules in particular are placeholders).
 """
 

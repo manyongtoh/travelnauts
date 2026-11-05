@@ -1,0 +1,18 @@
+Proprietary licence
+
+Copyright (c) 2026 Myt B.V., Amsterdam, the Netherlands (KvK 62003283). All rights reserved.
+
+This software, brain-core, including its source code, object code, documentation, prompts, evaluation sets,
+synthetic data and designs (together "the Software"), is the property of Myt B.V.
+
+No licence is granted except in a written agreement signed by Myt B.V. Without such an agreement you may not
+use, copy, modify, merge, publish, distribute, sublicense or sell the Software or any part of it.
+
+Clients of Myt B.V. use the Software under the licence set out in their agreement with Myt B.V. That agreement
+takes precedence over this file. Configuration, data and client-specific code that a client owns under its
+agreement are kept in that client's own repository and are not part of the Software.
+
+Contributions to the Software by anyone other than Myt B.V. are accepted only under a written agreement that
+licenses or assigns them to Myt B.V.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXCEPT AS AGREED IN WRITING BY MYT B.V.

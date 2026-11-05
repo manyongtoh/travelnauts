@@ -232,7 +232,7 @@ class PortalMessage(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     partner_request_id: Mapped[int] = mapped_column(ForeignKey("partner_requests.id"), index=True)
     line_id: Mapped[int | None] = mapped_column(ForeignKey("portal_lines.id"), nullable=True)
-    author: Mapped[str] = mapped_column(String)  # partner | travelnauts
+    author: Mapped[str] = mapped_column(String)  # partner | team
     author_name: Mapped[str] = mapped_column(String, default="")
     text: Mapped[str] = mapped_column(Text)
     round: Mapped[int] = mapped_column(Integer, default=1)

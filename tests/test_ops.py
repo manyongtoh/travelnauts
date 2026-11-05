@@ -1,8 +1,4 @@
-import json
-from pathlib import Path
-
 from brain.environments import check
-from brain.n8n_inventory import inventory
 
 
 def test_test_environment_defaults_pass():
@@ -19,11 +15,3 @@ def test_live_refuses_a_test_key_vault_and_database():
                        "BRAIN_MODEL": "openai:gpt-4o", "AZURE_KEYVAULT_NAME": "kv-brain-test",
                        "BRAIN_DATABASE_URL": "postgresql://x@pg-brain-test/brain"})
     assert not c.ok and any("Key Vault" in p for p in c.problems) and any("Database" in p for p in c.problems)
-
-
-def test_n8n_inventory_sorts_workflows():
-    rows = {r["workflow"]: r for r in inventory(json.loads((Path(__file__).parent / "fixtures" / "n8n_export.json").read_text()))}
-    assert rows["TravelSpirit export naar sheet"]["advice"] == "rebuild in code"
-    assert rows["TravelSpirit export naar sheet"]["touches_travelspirit"]
-    assert rows["Nieuwe aanvraag naar Slack"]["advice"] == "keep"
-    assert rows["Oude test"]["advice"] == "retire"

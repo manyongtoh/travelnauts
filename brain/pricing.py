@@ -1,7 +1,6 @@
 """The calculation that today happens in Excel: cost lines, margin per kind, selling price.
 
-Margins are sandbox assumptions. Replace with Travelnauts' own calculation template at the
-anonymised data stage.
+Margins come from the tenant's pricing template (tenant.toml in the tenant pack), never from code.
 """
 from __future__ import annotations
 
@@ -15,7 +14,11 @@ from sqlalchemy.orm import Session
 from .db import PriceItem
 from .clock import today as clock_today
 
-MARGIN = {"flight": 0.06, "hotel": 0.22, "excursion": 0.25, "transfer": 0.20, "car": 0.18}
+
+
+def margin(kind: str) -> float:
+    from .tenant import tenant
+    return tenant().pricing.margin(kind)
 
 
 @dataclass
@@ -33,7 +36,7 @@ class Line:
 
     @property
     def sell(self) -> float:
-        return round(self.cost * (1 + MARGIN.get(self.kind, 0.2)), 2)
+        return round(self.cost * (1 + margin(self.kind)), 2)
 
 
 @dataclass

@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 import pytest
+from brain.tenant import tenant
 
 
 def run(tmp_path, monkeypatch):
@@ -63,8 +64,8 @@ def test_a_misread_invoice_amount_is_sent_to_a_person(world, monkeypatch):
     from brain.db import Mail
     orig = sandbox_model.HANDLERS["invoice_extract"]
     monkeypatch.setitem(sandbox_model.HANDLERS, "invoice_extract", lambda ctx: orig(ctx) | {"amount_eur": 1.24})
-    world.add(Mail(id="inv-x", received_at=utcnow(), sender="accounts@x.example", subject="Invoice 9 TN-R001",
-                   body="Invoice 9\nReference TN-R001\nTotal EUR 1.240", status="triaged", truth={}))
+    world.add(Mail(id="inv-x", received_at=utcnow(), sender="accounts@x.example", subject=f"Invoice 9 {tenant().reference('r001')}",
+                   body=f"Invoice 9\nReference {tenant().reference('r001')}\nTotal EUR 1.240", status="triaged", truth={}))
     world.commit()
     chk = backoffice.invoices(world, "inv-x")
     assert chk.status == "check" and "1240" in chk.note

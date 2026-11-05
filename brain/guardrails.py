@@ -107,7 +107,7 @@ class Pseudonymiser:
         elif isinstance(obj, str):
             if key in NAME_KEYS:
                 for part in re.findall(r"[A-Za-zÀ-ÿ'-]+", obj):
-                    if len(part) > 1 and part.lower() not in PARTICLES | {"travelnauts", "gezin"}:
+                    if len(part) > 1 and part.lower() not in PARTICLES | {"gezin"} | _company_words():
                         self._tag("NAAM", part)
             free_text = "\n" in obj or len(obj) > 80  # names are only searched in mail-like text, not in field values
             if free_text:
@@ -216,3 +216,9 @@ def _walk(obj, key=None):
             yield from _walk(v, key)
     else:
         yield key, obj
+
+
+def _company_words() -> set[str]:
+    """The company's own name is never a family name to mask."""
+    from .tenant import tenant
+    return set(tenant().name_words)

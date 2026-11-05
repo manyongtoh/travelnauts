@@ -19,6 +19,7 @@ os.environ["PYDANTIC_AI_NO_BANNER"] = "1"
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import select  # noqa: E402
 
+from brain.tenant import tenant
 from brain import clock, db, jobs  # noqa: E402
 from brain.db import Draft, Employee, InvoiceCheck, Job, Mail, Partner, PartnerRequest, TripRequest  # noqa: E402
 
@@ -88,7 +89,7 @@ def main():
     with db.session() as s:
         prs = s.scalars(select(PartnerRequest).where(PartnerRequest.request_id == rid).order_by(PartnerRequest.id)).all()
         parts = [(pr.id, s.get(Partner, pr.partner_id)) for pr in prs]
-    ref = f"TN-{rid.upper()}"
+    ref = tenant().reference(rid)
 
     # Tuesday: replies arrive the way partners write them
     at(T0 + timedelta(days=1, hours=1))
@@ -98,7 +99,7 @@ def main():
         dom = lambda p: p.email.split("@")[1]  # noqa: E731
         replies = [
             ("bo-r1", f"reservations@{dom(pa)}", f"RE: Availability request {ref}",
-             f"Dear Travelnauts,\n\nYes, we can confirm availability for {ref}. Total price EUR 1.240 for the family room.\n\nKind regards,\nReservations"),
+             f"Dear {tenant().short_name},\n\nYes, we can confirm availability for {ref}. Total price EUR 1.240 for the family room.\n\nKind regards,\nReservations"),
             ("bo-r2", pb.email, "RE: Availability request",  # no reference at all
              "Hello,\n\nSorry, we are fully booked on those dates. Could we offer the week after instead?\n\nBest,\nMaria"),
             ("bo-r3", f"info@{dom(pc)}", f"RE: {ref}",

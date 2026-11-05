@@ -9,7 +9,7 @@ def main(argv: list[str] | None = None) -> None:
     import logging
     if not logging.getLogger().handlers:  # one line per event on stdout, picked up by Azure Monitor
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
-    p = argparse.ArgumentParser(prog="brain", description="Travelnauts company brain sandbox (synthetic data only)")
+    p = argparse.ArgumentParser(prog="brain", description="brain-core company brain (synthetic data only)")
     sub = p.add_subparsers(dest="cmd", required=True)
     sd = sub.add_parser("seed", help="(re)build the synthetic database")
     sd.add_argument("--seed", type=int, default=None)
@@ -28,8 +28,6 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("mcp", help="serve the tool server over MCP (stdio) as BRAIN_MCP_AGENT")
     sub.add_parser("reindex", help="re-read the knowledge vault")
     sub.add_parser("migrate", help="bring the database schema up to date (Alembic)")
-    n8 = sub.add_parser("n8n", help="inventory of exported n8n workflows")
-    n8.add_argument("paths", nargs="+")
     mc = sub.add_parser("modelcheck", help="a sample of the bench for a real model on slow hardware (test #1)")
     for flag, default in (("--mails", 30), ("--proposals", 4), ("--complaints", 3), ("--replies", 4)):
         mc.add_argument(flag, type=int, default=default)
@@ -112,9 +110,6 @@ def main(argv: list[str] | None = None) -> None:
         from .knowledge.vault import reindex
         with db.session() as s:
             print(json.dumps(reindex(s), indent=2))
-    elif a.cmd == "n8n":
-        from .n8n_inventory import main as n8n_main
-        n8n_main(a.paths)
     elif a.cmd == "modelcheck":
         from .evals.model_check import main as mc_main
         mc_main(["--mails", str(a.mails), "--proposals", str(a.proposals), "--complaints", str(a.complaints), "--replies", str(a.replies)])

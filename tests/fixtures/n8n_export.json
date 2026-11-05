@@ -1,9 +1,0 @@
-[{"name": "TravelSpirit export naar sheet", "active": true, "nodes": [
-  {"name": "Elke nacht", "type": "n8n-nodes-base.scheduleTrigger", "parameters": {}},
-  {"name": "Haal dossiers", "type": "n8n-nodes-base.httpRequest", "parameters": {"url": "https://api.travelspirit.example/v1/dossiers"}, "credentials": {"httpHeaderAuth": {"name": "TravelSpirit admin"}}},
-  {"name": "Bereken marge", "type": "n8n-nodes-base.code", "parameters": {"jsCode": "return items.map(i => ({...i, marge: i.json.prijs * 0.22}))"}},
-  {"name": "Naar Google Sheet", "type": "n8n-nodes-base.googleSheets", "parameters": {}, "credentials": {"googleSheetsOAuth2Api": {"name": "Sheets Travelnauts"}}}]},
- {"name": "Nieuwe aanvraag naar Slack", "active": true, "nodes": [
-  {"name": "Webhook", "type": "n8n-nodes-base.webhook", "parameters": {}},
-  {"name": "Slack", "type": "n8n-nodes-base.slack", "parameters": {}, "credentials": {"slackApi": {"name": "Slack"}}}]},
- {"name": "Oude test", "active": false, "nodes": [{"name": "Start", "type": "n8n-nodes-base.manualTrigger", "parameters": {}}]}]

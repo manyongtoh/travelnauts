@@ -25,6 +25,7 @@ from collections import Counter
 from datetime import datetime, timedelta
 
 from sqlalchemy import func, select
+from ..tenant import tenant
 
 
 def _pg_restart(url: str) -> str:
@@ -96,7 +97,7 @@ def run(days: int = 14, seed: int = 7, mails_per_day: int = 25) -> dict:
                 p = s.get(__import__("brain.db", fromlist=["Partner"]).Partner, pr.partner_id)
                 ok = rng.random() < 0.85
                 s.add(Mail(id=f"sim{mail_no:05d}", received_at=day + timedelta(minutes=rng.randint(0, 120)), sender=p.email,
-                           subject=f"RE: Availability request TN-{pr.request_id.upper()}", partner_id=p.id, truth={"category": "partner_reply"},
+                           subject=f"RE: Availability request {tenant().reference(pr.request_id)}", partner_id=p.id, truth={"category": "partner_reply"},
                            body=("Dear team,\n\nWe confirm availability, family room, EUR " + str(rng.choice([780, 920, 1100])) + ".\n\nRegards")
                            if ok else "Dear team,\n\nUnfortunately we are fully booked.\n\nRegards"))
         s.commit()

@@ -1,7 +1,7 @@
 """Shared plumbing for every agent.
 
 run_step(): one model step with a typed output. It picks the model tier for the task, checks the daily
-budget, builds the prompt from the three layers (Travelnauts, agent, task context), masks personal data
+budget, builds the prompt from the three layers (house, agent, task context), masks personal data
 before the model sees it and puts it back afterwards, falls back to the next model if one fails, and
 logs the model call (tier, model, prompt version, tokens, cost) under the current trace.
 

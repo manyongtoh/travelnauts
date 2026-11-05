@@ -23,6 +23,7 @@ from ..synth.world import DESTINATIONS
 from ..toolserver import server
 from .change import latest_version
 from .common import audit, run_step
+from ..tenant import tenant
 from ..clock import utcnow
 from ..clock import today as clock_today
 
@@ -31,7 +32,7 @@ from ..clock import today as clock_today
 
 class InvoiceFields(BaseModel):
     invoice_no: str | None = None
-    reference: str | None = Field(None, description="our booking reference, like TN-R012")
+    reference: str | None = Field(None, description="our booking reference, like WW-R012")
     amount_eur: float | None = None
     due_days: int | None = None
 
@@ -51,7 +52,7 @@ def invoices(s: Session, mail_id: str) -> InvoiceCheck:
         rows = []
         if f.reference:
             rows = s.scalars(select(PartnerRequest).where(
-                PartnerRequest.request_id == f.reference.upper().replace("TN-", "").lower())).all()
+                PartnerRequest.request_id == f.reference.upper().replace(f"{tenant().reference_prefix}-", "").lower())).all()
             mine = [r for r in rows if r.partner_id == m.partner_id] if m.partner_id else rows
             pr = mine[0] if len(mine) == 1 else None  # several partners on the trip and no sender match: a person picks
         expected = (pr.offer or {}).get("price_eur") if pr and pr.status == "answered" else None
@@ -120,7 +121,7 @@ def _pdf(path, title: str, blocks: list[tuple[str, str]]) -> str:
         story.append(Spacer(1, 4 * mm))
     path.parent.mkdir(parents=True, exist_ok=True)
     SimpleDocTemplate(str(path), pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm, topMargin=20 * mm, bottomMargin=20 * mm,
-                      title=title, author="Travelnauts").build(story)
+                      title=title, author=tenant().name).build(story)
     return str(path)
 
 
@@ -153,7 +154,7 @@ def roadbook(s: Session, request_id: str) -> Draft:
         rb_path = files_dir() / "roadbooks" / f"roadbook_{request_id}.pdf"
         _pdf(rb_path, f"Reisboek {d['nl']}, familie {fam['surname']}",
              [("", txt.intro), ("Vluchten", flights), *days,
-              ("Belangrijke nummers", "Travelnauts 24/7: +31 20 000 0000 (sandbox)\nJullie specialist: via de app of mail"),
+              ("Belangrijke nummers", f"{tenant().short_name} 24/7: {tenant().emergency_line}\nJullie specialist: via de app of mail"),
               ("PAGEBREAK", ""), (f"Voor de kinderen ({', '.join(str(a) for a in fam['child_ages'])} jaar)", txt.kids_page)])
         vouchers = []
         partners = {p["id"]: p for p in server.call(s, me, "partners.list", destination=tr["destination"])}
@@ -162,9 +163,9 @@ def roadbook(s: Session, request_id: str) -> Draft:
             if not p:
                 continue
             vp = files_dir() / "vouchers" / f"voucher_{request_id}_{p['id']}.pdf"
-            _pdf(vp, f"Voucher {p['name']}", [("", f"Referentie TN-{request_id.upper()}\nGasten: familie {fam['surname']}, "
+            _pdf(vp, f"Voucher {p['name']}", [("", f"Referentie {tenant().reference(request_id)}\nGasten: familie {fam['surname']}, "
                                                    f"{fam['adults']} volwassenen en {len(fam['child_ages'])} kinderen\n"
-                                                   f"Verblijf: {r['nights']} nachten in {r['stop']}\nBetaald door Travelnauts. "
+                                                   f"Verblijf: {r['nights']} nachten in {r['stop']}\nBetaald door {tenant().name}. "
                                                    f"Extra's ter plaatse zelf afrekenen.")])
             vouchers.append({"partner": p["name"], "path": str(vp)})
         dr = Draft(kind="roadbook", request_id=request_id, title=f"Reisboek en {len(vouchers)} vouchers", body=txt.intro + "\n\n" + txt.kids_page,

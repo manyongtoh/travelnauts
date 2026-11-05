@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import Draft, Employee, PriceItem, TripRequest
+from ..tenant import tenant
 from ..guardrails import check_output, fix_dashes
 from ..identity import agent
 from ..synth.generate import route_for
@@ -99,7 +100,7 @@ def write_proposal(s: Session, request_id: str) -> Draft:
             "route": route,
             "price": {k: v for k, v in calc.items() if k != "lines"},
             "knowledge": knowledge,
-            "specialist": spec.name if spec else "het team van Travelnauts",
+            "specialist": spec.name if spec else f"het team van {tenant().short_name}",
             "examples": [e["text"] for e in examples[:1]],
         }
         known, in_route = hotels_for(s, tr["destination"]), {r["hotel"] for r in route}

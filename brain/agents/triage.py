@@ -9,7 +9,6 @@ Order of work:
 """
 from __future__ import annotations
 
-import os
 import re
 from datetime import timedelta
 from typing import Literal
@@ -306,8 +305,15 @@ GREETING = re.compile(r"^\s*(?:(?:hoi|hallo|hi|hey)[!,.]*\s+)?(met\s+)?(vriendel
 PARTICLES = {"van", "de", "der", "den", "ter", "ten", "het", "'t", "in", "la", "le", "da", "di", "du", "el", "al", "op"}
 NOT_A_NAME = {"team", "marketing", "sales", "afdeling", "gezin", "hele", "ons", "onze", "wij", "we", "papa", "mama", "opa",
               "oma", "uit", "from", "the", "kids", "kinderen", "iedereen", "allemaal", "bv", "b.v.", "nv", "holding",
-              "travel", "reizen", "reisbureau", "reisgezelschap", "travelnauts", "company", "group", "groep", "stichting",
+              "travel", "reizen", "reisbureau", "reisgezelschap", "company", "group", "groep", "stichting",
               "vereniging", "zonnebloem", "x"}
+
+
+def _not_a_name() -> set[str]:
+    from ..tenant import tenant
+    return NOT_A_NAME | set(tenant().name_words)
+
+
 FAMILY = re.compile(r"^(?:de\s+|the\s+)?(?:familie|fam\.?|family)\s+(.+)$|^(?:the\s+)?(.+?)\s+family$", re.I)
 
 
@@ -320,7 +326,7 @@ def _first_name(tok: str) -> bool:
 def _person(text: str) -> tuple[str, str] | None:
     """'Jan van der Berg' -> (full, 'van der Berg'); 'Anouk en Pieter' -> (full, ''); not a person -> None."""
     toks = text.split()
-    if not toks or len(toks) > 7 or any(t.lower().strip(".,") in NOT_A_NAME for t in toks):
+    if not toks or len(toks) > 7 or any(t.lower().strip(".,") in _not_a_name() for t in toks):
         return None
     if all(t.isupper() or t.islower() for t in toks if t.isalpha()):  # MARIEKE VISSER, marieke: fix the case only if sure
         if not _first_name(toks[0]):
@@ -364,7 +370,7 @@ def name_from_sign_off(body: str | None) -> tuple[str, str]:
     while lines and not lines[-1].strip():
         lines.pop()
     tail = lines[-12:]
-    if any("travelnauts" in ln.lower() for ln in tail[-4:]):
+    if _own_signature(tail[-4:]):
         return "", ""  # our own signature (a forward or a test mail)
     cand = None
     for i in range(len(tail) - 1, -1, -1):
@@ -393,16 +399,29 @@ def name_from_sign_off(body: str | None) -> tuple[str, str]:
     return got if got else ("", "")
 
 
+def _own_signature(lines: list[str]) -> bool:
+    """The company's own name or domain in the last lines: a forward or a test mail signed by us."""
+    from ..tenant import tenant
+    t = tenant()
+    marks = [t.short_name.lower()] + [d for d in t.own_domains]
+    return any(m in ln.lower() for ln in lines for m in marks)
+
+
 def _surname_only(text: str) -> str | None:
     toks = text.split()
-    if not toks or len(toks) > 4 or any(t.lower() in NOT_A_NAME for t in toks):
+    if not toks or len(toks) > 4 or any(t.lower() in _not_a_name() for t in toks):
         return None
     if not toks[-1][:1].isupper() or not all(t.lower() in PARTICLES or t[:1].isupper() for t in toks):
         return None
     return " ".join(t.lower() if t.lower() in PARTICLES else t for t in toks)
 
 
-OWN_DOMAINS = {d.strip().lower() for d in os.getenv("BRAIN_OWN_DOMAINS", "travelnauts.nl,travelnauts.example").split(",") if d.strip()}
+
+
+def own_domains() -> set[str]:
+    from ..tenant import tenant
+    return set(tenant().own_domains)
+
 FWD_FROM = re.compile(r"^\s*(?:van|from)\s*:\s*(?:.*?<)?([\w.+'-]+@[\w-]+(?:\.[\w-]+)+)>?", re.I | re.M)
 
 
@@ -419,10 +438,10 @@ def normalise_address(addr: str | None) -> str:
 def original_sender(sender: str | None, body: str | None) -> str:
     """A colleague forwarding a family's mail: the family is the 'Van:' inside, not the colleague."""
     addr = normalise_address(sender)
-    if addr.rsplit("@", 1)[-1] in OWN_DOMAINS:
+    if addr.rsplit("@", 1)[-1] in own_domains():
         for m in FWD_FROM.finditer(body or ""):
             inner = normalise_address(m.group(1))
-            if inner and inner.rsplit("@", 1)[-1] not in OWN_DOMAINS:
+            if inner and inner.rsplit("@", 1)[-1] not in own_domains():
                 return inner
     return addr
 
@@ -446,11 +465,13 @@ def suggest_families(s: Session, surname: str, subject: str, body: str) -> list[
     a booking number or a surname is easy to type, and the reply would go to that address."""
     from ..db import Family
     out: dict[str, dict] = {}
-    for ref in re.findall(r"\bTN-?R?(\d{3,})\b", f"{subject} {body}", re.I):
+    from ..tenant import tenant
+    pre = tenant().ref_re
+    for ref in re.findall(rf"\b{pre}-?R?(\d{{3,}})\b", f"{subject} {body}", re.I):
         tr = s.get(TripRequest, f"r{int(ref):03d}")
         if tr:
             out.setdefault(tr.family_id, {"family_id": tr.family_id, "why": [], "request_id": tr.id})["why"].append(
-                f"mentions booking TN-R{int(ref):03d}")
+                f"mentions booking {tenant().reference(f'r{int(ref):03d}')}")
     if surname:
         for f in s.scalars(select(Family).where(func.lower(Family.surname) == surname.lower(),
                                                 ~Family.notes.like("Samengevoegd met %")).limit(5)).all():
@@ -471,7 +492,7 @@ def resolve_partner(s: Session, sender: str | None, body: str | None = None):
     if len(exact) == 1:
         return exact[0]
     domain = addr.rsplit("@", 1)[1]
-    if domain in FREEMAIL or domain in OWN_DOMAINS:
+    if domain in FREEMAIL or domain in own_domains():
         return None
     same = [p for p in partners if normalise_address(p.email).rsplit("@", 1)[-1] == domain]
     return same[0] if len(same) == 1 else None

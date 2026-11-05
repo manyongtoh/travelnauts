@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
+from ..tenant import tenant
 from .. import auditchain, autosend, db, jobs
 from ..agents import followup, galileo, knowledge_desk, partner_desk, proposal, triage
 from ..config import get_settings
@@ -38,7 +39,7 @@ import os as _os
 
 _TEST = _os.getenv("BRAIN_ENV", "test") == "test"
 # API documentation only in the test environment; in pilot and live it would map the attack surface for free.
-app = FastAPI(title="Travelnauts company brain (sandbox)", version="0.3.0",
+app = FastAPI(title="Company brain (brain-core)", version="0.3.0",
               docs_url="/docs" if _TEST else None, redoc_url=None, openapi_url="/openapi.json" if _TEST else None)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
@@ -433,7 +434,7 @@ def get_file(kind: str, name: str, user: Principal = Depends(current_user)):
     if not path.exists():
         _404("file")
     import re as _re
-    ref = _re.search(r"(r\d{3,})", name.lower()) or _re.search(r"tn-(r\d{3,})", name.lower())
+    ref = _re.search(r"(r\d{3,})", name.lower()) or _re.search(rf"{tenant().ref_re.lower()}-(r\d{{3,}})", name.lower())
     with db.session() as s:
         if ref and not ("back_office" in user.roles):
             _visible_request(s, ref.group(1), user)
@@ -920,7 +921,7 @@ async def portal_file(token: str, request: Request):
         if not data.startswith(b"%PDF-") or len(data) > PORTAL_FILE_MAX:
             raise HTTPException(400, "Only PDF files up to 5 MB")
         pr = s.get(PartnerRequest, link.partner_request_id)
-        name = f"portal-tn-{pr.request_id}-{pr.id}-{utcnow():%Y%m%d%H%M%S}.pdf"
+        name = f"portal-{tenant().reference_prefix.lower()}-{pr.request_id}-{pr.id}-{utcnow():%Y%m%d%H%M%S}.pdf"
         path = files_dir() / "attachments" / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
@@ -951,7 +952,7 @@ def portal_staff_message(prid: int, body: PortalMsgIn, user: Principal = Depends
     with db.session() as s:
         _portal_staff(s, prid, user)
         try:
-            return portal.add_message(s, prid, "travelnauts", user.name, body.text, body.line_id)
+            return portal.add_message(s, prid, portal.TEAM, user.name, body.text, body.line_id)
         except (KeyError, ValueError) as e:
             raise HTTPException(400, str(e))
 

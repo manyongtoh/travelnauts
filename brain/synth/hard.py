@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import random
 from datetime import datetime, timedelta
+from ..tenant import fill_company, tenant
 
 # (body template, truth). {name} {first} {sig} are filled per family.
 NEW_REQUESTS = [
@@ -23,11 +24,11 @@ NEW_REQUESTS = [
      {"destination": "thailand", "days": 16, "month": "mei", "child_ages": [4, 8], "budget": None}),
     ("Beste,\n\nZuid Afrika, zomervakantie, 3 weken, kinderen: 5, 8 en 12 jaar. Budget €18.000.\n\nMvg,\n{name}",
      {"destination": "south-africa", "days": 21, "accept": {"month": ["juli", "augustus"]}, "child_ages": [5, 8, 12], "budget": 18000}),
-    ("Hoi Travelnauts!\n\nWe dromen al jaren van Bali. Herfstvakantie dit jaar lukt niet meer, dus volgend jaar oktober, twee weken. Kids zijn 10 en 13.\n\nLiefs, {first}",
+    ("Hoi %COMPANY%!\n\nWe dromen al jaren van Bali. Herfstvakantie dit jaar lukt niet meer, dus volgend jaar oktober, twee weken. Kids zijn 10 en 13.\n\nLiefs, {first}",
      {"destination": "indonesia", "days": 14, "month": "oktober", "child_ages": [10, 13], "budget": None}),
     ("Hallo,\n\nKaapstad en daarna Kruger, dat lijkt ons wat. In februari, zo'n 18 dagen. Wij met z'n vieren, de meiden zijn 7 en 11.\nBudget tussen de 12 en 14 duizend.\n\n{name}",
      {"destination": "south-africa", "days": 18, "month": "februari", "child_ages": [7, 11], "accept": {"budget": [12000, 13000, 14000]}}),
-    ("Dear Travelnauts,\n\nMy partner and I are planning Costa Rica with our son (11) for 2.5 weeks in March. We like wildlife and some adventure.\n\nBest,\n{name}",
+    ("Dear %COMPANY%,\n\nMy partner and I are planning Costa Rica with our son (11) for 2.5 weeks in March. We like wildlife and some adventure.\n\nBest,\n{name}",
      {"destination": "costa-rica", "accept": {"days": [17, 18]}, "month": "maart", "child_ages": [11], "budget": None}),
     ("Goeiedag,\n\nTokyo en Kyoto met kinderen van 9 en 14, na Pasen, ongeveer 20 dagen. Wat kost zoiets?\n\n{name}",
      {"destination": "japan", "days": 20, "month": "april", "child_ages": [9, 14], "budget": None}),
@@ -35,7 +36,7 @@ NEW_REQUESTS = [
      {"destination": "tanzania", "days": 15, "month": "augustus", "child_ages": [8, 10], "budget": 15000}),
     ("Hallo,\n\nWe twijfelen tussen Thailand of Vietnam. Januari, 3 weken. Kinderen 5 en 7. Wat raden jullie aan?\n\nGroet, {name}",
      {"accept": {"destination": ["thailand", "vietnam"]}, "days": 21, "month": "januari", "child_ages": [5, 7], "budget": None}),
-    ("Beste Travelnauts,\n\nVolgend jaar in juli willen we met onze drie kinderen (3, 6 en 9) naar Viëtnam. Liefst niet meer dan 18 dagen en een budget van ongeveer €16.500.\n\nMet vriendelijke groet,\n{name}\n{sig}",
+    ("Beste %COMPANY%,\n\nVolgend jaar in juli willen we met onze drie kinderen (3, 6 en 9) naar Viëtnam. Liefst niet meer dan 18 dagen en een budget van ongeveer €16.500.\n\nMet vriendelijke groet,\n{name}\n{sig}",
      {"destination": "vietnam", "days": 18, "month": "juli", "child_ages": [3, 6, 9], "budget": 16500}),
     ("Hi there,\n\nLooking for a family trip to Tanzania (safari!) for 16 days around Christmas. Kids are 12 and 15. Budget roughly EUR 20,000.\n\nCheers,\n{name}",
      {"destination": "tanzania", "days": 16, "month": "december", "child_ages": [12, 15], "budget": 20000}),
@@ -69,7 +70,7 @@ CHANGES = [  # filled against a real route: {last} {mid} {long}
 ]
 
 PARTNER_REPLIES = [
-    "Dear Travelnauts team,\n\nWe confirm availability for your request {ref}. Family room, breakfast included, EUR 940.\n\nKind regards,\nReservations",
+    "Dear %COMPANY% team,\n\nWe confirm availability for your request {ref}. Family room, breakfast included, EUR 940.\n\nKind regards,\nReservations",
     "Hello,\n\nUnfortunately we are fully booked on those dates for {ref}. We can offer the week after.\n\nBest regards",
     "Dear team,\n\nThank you for your request {ref}. Please find our offer attached: two connecting rooms, EUR 1,180.\n\nWarm regards",
     "Hi,\n\nRe {ref}: transfers and the guided tour are confirmed for the requested dates.\n\nRegards,\nOperations",
@@ -83,7 +84,7 @@ COMPLAINTS = [
 
 OTHER = [
     ("Afwezig: Re: uw reis", "Ik ben afwezig tot en met 12 november en lees mijn mail niet. Voor dringende zaken: bel kantoor."),
-    ("Factuur 2026-1187", "Dear Travelnauts, please find attached invoice 2026-1187 for transfers in October. Payment within 30 days."),
+    ("Factuur 2026-1187", "Dear %COMPANY%, please find attached invoice 2026-1187 for transfers in October. Payment within 30 days."),
     ("You won a free cruise!", "Click here to claim your free cruise for 2 persons. Limited offer."),
 ]
 
@@ -120,8 +121,8 @@ def add_hard_mails(rng: random.Random, families: list, trips_with_routes: list, 
         n += 1
     for body, pr in zip(PARTNER_REPLIES, partner_requests):
         p = partners[pr.partner_id]
-        mail(received_at=today - timedelta(hours=rng.randint(1, 30)), sender=p.email, subject=f"RE: Availability request TN-{pr.request_id.upper()}",
-             body=body.format(ref=f"TN-{pr.request_id.upper()}"), partner_id=p.id,
+        mail(received_at=today - timedelta(hours=rng.randint(1, 30)), sender=p.email, subject=f"RE: Availability request {tenant().reference(pr.request_id)}",
+             body=body.format(ref=tenant().reference(pr.request_id)), partner_id=p.id,
              truth={"set": "hard", "category": "partner_reply", "partner_request_id": pr.id})
         n += 1
     for body, urgent in COMPLAINTS:
@@ -134,3 +135,12 @@ def add_hard_mails(rng: random.Random, families: list, trips_with_routes: list, 
              subject=subject, body=body, truth={"set": "hard", "category": "invoice" if subject.startswith("Factuur") else "other"})
         n += 1
     return n
+
+
+# The synthetic texts speak to the tenant by name.
+NEW_REQUESTS = fill_company(NEW_REQUESTS)
+QUESTIONS = fill_company(QUESTIONS)
+CHANGES = fill_company(CHANGES)
+PARTNER_REPLIES = fill_company(PARTNER_REPLIES)
+COMPLAINTS = fill_company(COMPLAINTS)
+OTHER = fill_company(OTHER)

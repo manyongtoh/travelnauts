@@ -75,10 +75,10 @@ class FakeTravelSpirit:
                 "days": len(plan.get("days", []))}
 
 
-class RealTravelSpirit:  # pragma: no cover - needs API documentation and test access from Travelnauts
+class RealTravelSpirit:  # pragma: no cover - needs API documentation and test access from the client
     def __init__(self, base_url: str, token: str):
         raise NotImplementedError(
-            "Map the real TravelSpirit endpoints here once Travelnauts shares the API documentation and test access. "
+            "Map the real TravelSpirit endpoints here once the client shares the API documentation and test access. "
             "Keep the same method names and return shapes as FakeTravelSpirit."
         )
 

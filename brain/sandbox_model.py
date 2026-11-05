@@ -14,6 +14,7 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart, User
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from .synth.world import DESTINATIONS, WISHES
+from .tenant import tenant
 
 MONTHS = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober",
           "november", "december"]
@@ -50,7 +51,7 @@ def triage(ctx: dict) -> dict:
         cat = "other"
     elif re.search(r"\b(invoice|factuur)\b", low) and not re.search(r"@example\.org|freemail", m["from"].lower()):
         cat = "invoice"
-    elif re.search(r"tn-r\d{3,}", low) and not re.search(r"@example\.org|freemail", m["from"].lower()):
+    elif re.search(rf"{tenant().ref_re.lower()}-r\d{{3,}}", low) and not re.search(r"@example\.org|freemail", m["from"].lower()):
         cat = "partner_reply"
     elif any(w in low for w in ["teleurgesteld", "niet tevreden", "echt niet goed", "kwam niet opdagen", "klacht"]):
         cat = "complaint"
@@ -163,13 +164,13 @@ def partner_request(ctx: dict) -> dict:
     body = (f"Dear {p['name']} team,\n\nCould you please check availability and price for the following family "
             f"(reference {ctx['reference']}):\n\n- Travel month: {t['month']}\n- {nights}{t['adults']} {'adult' if t['adults'] == 1 else 'adults'}, children aged {kids}\n"
             f"- Rooms: {t['rooms']}\n- Request: {t['what']}\n\nPlease include your cancellation terms. Thank you in advance.\n\n"
-            f"Kind regards,\nTravelnauts back office")
+            f"Kind regards,\n{tenant().back_office_signature}")
     return {"subject": f"Availability request {ctx['reference']} ({t['month']})", "body": body}
 
 
 def partner_chase(ctx: dict) -> dict:
     body = (f"Dear {ctx['partner']['name']} team,\n\nA kind reminder about our request {ctx['reference']}, sent on "
-            f"{ctx['sent_at']}. Could you let us know within two working days?\n\nKind regards,\nTravelnauts back office")
+            f"{ctx['sent_at']}. Could you let us know within two working days?\n\nKind regards,\n{tenant().back_office_signature}")
     return {"subject": f"Reminder: {ctx['reference']}", "body": body}
 
 
@@ -184,7 +185,7 @@ def galileo(ctx: dict) -> dict:
             cmds.append({"cmd": f"N.{t['surname']}/{t['first']}CHD*C{t['age']:02d}", "explain": f"Naam kind ({t['age']} jaar)"})
         else:
             cmds.append({"cmd": f"N.{t['surname']}/{t['first']}MR", "explain": "Naam volwassene (titel controleren)"})
-    cmds += [{"cmd": "P.AMSB*TRAVELNAUTS", "explain": "Telefoon kantoor"},
+    cmds += [{"cmd": tenant().galileo_agency_remark, "explain": "Telefoon kantoor"},
              {"cmd": f"T.TAU/{f['ticket_by']}", "explain": "Uiterste ticketdatum"},
              {"cmd": "R.AGENT", "explain": "Ontvangen van"},
              {"cmd": "*R", "explain": "Boeking tonen ter controle"}]
@@ -322,7 +323,7 @@ def next_trip(ctx: dict) -> dict:
     lines = [f"Beste {_first(ctx)},", "", "Wat leuk dat jullie met ons op reis zijn geweest. Ik dacht al even mee over een volgende keer:", ""]
     for o, k in zip(ctx["suggestions"], ctx["knowledge"] + [""] * 2):
         lines.append(f"{o['name']}: met kinderen van {', '.join(str(a) for a in kids)} past er veel, de beste tijd is {o['best']}.")
-    lines += ["", "Geen haast hoor. Als jullie willen, maak ik een eerste idee.", "", "Hartelijke groet,", "Travelnauts"]
+    lines += ["", "Geen haast hoor. Als jullie willen, maak ik een eerste idee.", "", "Hartelijke groet,", tenant().short_name]
     return {"subject": "Een idee voor jullie volgende reis", "body": "\n".join(lines)}
 
 
@@ -357,7 +358,7 @@ def call_notes(ctx: dict) -> dict:
 def invoice_extract(ctx: dict) -> dict:
     t = ctx["mail"]["subject"] + "\n" + ctx["mail"]["body"] + "\n" + "\n".join(a["text"] for a in ctx["mail"].get("attachments", []))
     no = re.search(r"\bINV-[\w-]+", t) or re.search(r"(?:factuur|invoice)\s*(?:nr\.?|nummer|no\.?|number|#)?\s*([\d][\w-]+)", t, re.I)
-    ref = re.search(r"TN-R\d{2,}", t, re.I)
+    ref = re.search(rf"{tenant().ref_re}-R\d{{2,}}", t, re.I)
     amt = re.search(r"(?:EUR|€)\s?([\d.,]+)", t)
     days = re.search(r"within (\d+) days|binnen (\d+) dagen", t, re.I)
     from .money import parse_amount
