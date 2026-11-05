@@ -220,3 +220,11 @@ details.calc[open] summary{border-bottom:1px solid var(--sand-soft)}
 .aon{align-self:flex-end;background:var(--card);border:1px solid var(--sand);border-radius:999px;padding:5px 12px;font-size:12.5px;color:var(--muted)}
 .autoask{position:fixed;right:18px;bottom:18px;z-index:50;max-width:420px;background:var(--card);border:1px solid var(--ink);border-radius:var(--r-lg);padding:16px 18px;box-shadow:0 10px 32px rgba(0,0,0,.18)}
 .autoask p{margin:6px 0 12px;color:var(--muted)}.autoask .row-btns{display:flex;gap:8px;flex-wrap:wrap}
+.portalpanel{position:fixed;top:0;right:0;bottom:0;width:min(520px,100%);background:var(--card);border-left:1px solid var(--sand);box-shadow:-8px 0 32px rgba(0,0,0,.12);z-index:45;overflow:auto;padding:20px 22px}
+.pp-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}.pp-head h2{margin:2px 0}
+.pp-line{border:1px solid var(--sand);border-radius:var(--r-lg);padding:10px 12px;margin-bottom:10px;background:var(--white)}
+.pp-alt{margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--terra-tint);padding:6px 8px;border-radius:8px}
+.portalpanel .msgs{list-style:none;padding:0;margin:6px 0 0;display:flex;flex-direction:column;gap:5px}
+.portalpanel .msgs li{border:1px solid var(--sand);border-radius:10px;padding:6px 9px;font-size:13.5px;max-width:88%}
+.portalpanel .msgs li.them{background:#eef6f4;align-self:flex-start}.portalpanel .msgs li:not(.them){align-self:flex-end}
+.portalpanel .msgs small{display:block;color:var(--muted);font-size:11.5px}.portalpanel textarea{width:100%;box-sizing:border-box;min-height:70px;font:inherit;padding:8px;border:1px solid var(--sand);border-radius:8px}

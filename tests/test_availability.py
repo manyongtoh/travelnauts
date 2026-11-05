@@ -79,6 +79,6 @@ def test_the_specialist_sees_where_availability_stands(world, monkeypatch):
     tr, d, prs = setup(world)
     answer(world, prs[:2])
     r = c.get(f"/api/requests/{tr.id}", headers={"X-Brain-User": tr.specialist_id}).json()
-    assert r["availability"] == {"asked": len(prs), "confirmed": 2, "not_available": 0, "open": len(prs) - 2, "rule": "block"}
+    assert r["availability"] == {"asked": len(prs), "confirmed": 2, "not_available": 0, "open": len(prs) - 2, "expired": 0, "rule": "block"}
     a = c.post(f"/api/drafts/{d.id}/approve", json={}, headers={"X-Brain-User": tr.specialist_id})
     assert a.status_code == 422 and "partners confirm" in a.json()["detail"]

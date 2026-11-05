@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex"><meta name="referrer" content="no-referrer">
+<title>Travelnauts · Partner request</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/brain.css">
+<style>
+  body{background:var(--bg)}
+  .wrap{max-width:860px;margin:0 auto;padding:22px 16px 60px}
+  .head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+  .facts{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 0}
+  .line{background:var(--card);border:1px solid var(--sand);border-radius:var(--r-lg);padding:14px 16px;margin-bottom:12px}
+  .line.confirmed{border-color:#9cc9c2}.line.alternative,.line.not_available{border-color:#E5B39C}
+  .line h3{margin:0;font-size:16px}.line .ldetail{color:var(--muted);font-size:13.5px;margin:2px 0 10px}
+  .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  *{min-width:0}.line,.wrap{box-sizing:border-box;max-width:100%}
+  .grid label,.alt label{display:flex;flex-direction:column;font-size:12.5px;color:var(--muted);gap:3px}
+  input,select,textarea{width:100%;box-sizing:border-box;font:inherit;font-size:14px;padding:7px 9px;border:1px solid var(--sand);border-radius:8px;background:var(--white);color:var(--ink);min-width:0}
+  textarea{width:100%;box-sizing:border-box;min-height:60px}
+  .alt{display:none;grid-template-columns:2fr 1fr;gap:8px;margin-top:8px}.alt.on{display:grid}
+  .row-end{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .msgs{list-style:none;padding:0;margin:8px 0 0;display:flex;flex-direction:column;gap:6px}
+  .msgs li{background:var(--white);border:1px solid var(--sand);border-radius:10px;padding:8px 10px;font-size:13.5px;max-width:85%}
+  .msgs li.them{align-self:flex-end;background:#eef6f4}
+  .msgs small{display:block;color:var(--muted);font-size:11.5px}
+  .saved{color:var(--sea);font-size:13px}
+  @media (max-width:600px){.grid{grid-template-columns:1fr 1fr}.grid label:last-child{grid-column:1/-1}}
+</style></head>
+<body>
+<div class="banner">TRAVELNAUTS · PARTNER REQUEST</div>
+<main class="wrap" id="app"><p>Loading…</p></main>
+<script>
+const token = location.pathname.split("/").pop();
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const $ = s => document.querySelector(s);
+const STATUS = [["open", "Not started"], ["asking", "Asking the supplier"], ["confirmed", "Confirmed"], ["alternative", "Alternative offered"], ["not_available", "Not available"]];
+async function call(path, opts = {}) {
+  const r = await fetch(`/api/portal/${encodeURIComponent(token)}${path}`, {headers: {"Content-Type": opts.raw ? "application/pdf" : "application/json"},
+    method: opts.method || "GET", body: opts.raw || (opts.body ? JSON.stringify(opts.body) : undefined)});
+  if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch {} throw new Error(m); }
+  return r.json();
+}
+let V = null;
+async function load() {
+  try { V = await call(""); } catch (e) { $("#app").innerHTML = `<div class="line"><h3>Link not valid</h3><p>${esc(e.message)}</p></div>`; return; }
+  const t = V.trip, p = V.party;
+  const kids = p.children_ages.length ? `, children ${p.children_ages.join(", ")}` : "";
+  const done = V.lines.filter(l => l.status === "confirmed").length;
+  $("#app").innerHTML = `<div class="head"><div><span class="label">${esc(V.reference)} · for ${esc(V.partner)}</span>
+      <h1 style="margin:4px 0 0">${esc(t.destination)}, ${esc(t.month)}${t.depart_date ? ` (from ${esc(t.depart_date)})` : ""}</h1>
+      <div class="facts"><span class="pill">${p.adults} adults${esc(kids)}</span><span class="pill">${t.days} days</span>
+      ${V.answer_by ? `<span class="pill pill-concept">please answer by ${esc(V.answer_by)}</span>` : ""}<span class="pill">${done} of ${V.lines.length} confirmed</span></div></div></div>
+    <p class="sub">Answer each line when you know it: confirmed with a price, still asking your supplier, or an alternative. Save per line; we see it straight away. Questions go in the thread below.</p>
+    ${V.lines.map(lineHtml).join("")}
+    <div class="line"><h3>Thread</h3><ul class="msgs">${V.messages.filter(m => !m.line_id).map(msgHtml).join("") || `<li>No messages yet.</li>`}</ul>
+      <textarea id="msg" placeholder="A question or a note for Travelnauts" maxlength="2000"></textarea>
+      <div class="row-end"><label class="btn btn-outline btn-sm" style="cursor:pointer">Upload a PDF offer<input type="file" id="pdf" accept="application/pdf" hidden></label>
+        <button class="btn btn-primary btn-sm" id="send">Send message</button></div></div>
+    <p class="label" style="margin-top:18px">This link is personal to ${esc(V.partner)} and works until ${esc(V.link_valid_until)}. We never share the family's name or contact details here.</p>`;
+  V.lines.forEach(bindLine);
+  $("#send").onclick = async () => { const text = $("#msg").value.trim(); if (!text) return;
+    await call("/messages", {method: "POST", body: {text}}); load(); };
+  $("#pdf").onchange = async e => { const f = e.target.files[0]; if (!f) return;
+    try { await call("/files", {method: "POST", raw: await f.arrayBuffer()}); load(); } catch (err) { $("#msg").placeholder = err.message; } };
+}
+const msgHtml = m => `<li class="${m.author === "partner" ? "them" : ""}"><small>${esc(m.author === "partner" ? m.name : "Travelnauts · " + m.name)} · round ${m.round} · ${esc(m.at.slice(0, 16).replace("T", " "))}</small>${esc(m.text)}</li>`;
+function lineHtml(l) {
+  const alt = l.alternative || {};
+  const thread = V.messages.filter(m => m.line_id === l.id);
+  return `<div class="line ${l.status}" id="l${l.id}"><h3>${esc(l.label)}</h3><div class="ldetail">${esc(l.detail)}</div>
+    <div class="grid"><label>Status<select data-f="status">${STATUS.map(([k, n]) => `<option value="${k}" ${k === l.status ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+      <label>Price in euro (total)<input data-f="price" type="number" min="0" step="1" value="${l.price_eur ?? ""}"></label>
+      <label>Price valid until<input data-f="valid" type="date" value="${l.valid_until ?? ""}"></label></div>
+    <div class="alt ${l.status === "alternative" ? "on" : ""}"><label>Alternative<input data-f="alt" maxlength="300" value="${esc(alt.label || "")}" placeholder="for example: Kandy Hills Hotel, family room"></label>
+      <label>Its price in euro<input data-f="altprice" type="number" min="0" step="1" value="${alt.price_eur ?? ""}"></label></div>
+    <label style="display:block;margin-top:8px;font-size:12.5px;color:var(--muted)">Note<textarea data-f="note" maxlength="2000">${esc(l.note)}</textarea></label>
+    ${thread.length ? `<ul class="msgs">${thread.map(msgHtml).join("")}</ul>` : ""}
+    <div class="row-end"><span class="saved" data-f="saved">${l.updated_at ? "Saved " + esc(l.updated_at.slice(0, 16).replace("T", " ")) : ""}</span>
+      <button class="btn btn-primary btn-sm" data-f="save">Save this line</button></div></div>`;
+}
+function bindLine(l) {
+  const box = $(`#l${l.id}`), f = n => box.querySelector(`[data-f="${n}"]`);
+  f("status").onchange = () => box.querySelector(".alt").classList.toggle("on", f("status").value === "alternative");
+  f("save").onclick = async () => {
+    const status = f("status").value, num = v => v === "" ? null : Number(v);
+    const body = {status, price_eur: num(f("price").value), valid_until: f("valid").value || null, note: f("note").value,
+                  alternative: status === "alternative" ? {label: f("alt").value, price_eur: num(f("altprice").value)} : null};
+    try { await call(`/lines/${l.id}`, {method: "POST", body}); load(); }
+    catch (e) { f("saved").textContent = e.message; f("saved").style.color = "var(--terra-ink)"; }
+  };
+}
+load();
+</script>
+</body></html>

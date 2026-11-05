@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException
@@ -17,7 +17,7 @@ from .. import auditchain, autosend, db, jobs
 from ..agents import followup, galileo, knowledge_desk, partner_desk, proposal, triage
 from ..config import get_settings
 from ..db import (AgentRun, AuditEntry, Draft, Employee, Family, Job, KnowledgeItem, Mail, ModelCall, Setting, ToolCall,
-                  TripRequest, as_dict)
+                  PartnerRequest, TripRequest, as_dict)
 from ..identity import (ROLES, EntraConfig, Principal, auth_mode, from_employee, verify_entra_token)
 from ..knowledge.store import KnowledgeBase
 from ..router import daily_cap, spent_today
@@ -59,6 +59,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 MAX_BODY = 1_000_000
+PORTAL_FILE_MAX = 5_000_000  # a partner's PDF offer
 SECURITY_HEADERS = {
     # Screens use inline scripts, so 'unsafe-inline' is needed; everything else is locked to this site, the
     # Microsoft login and the font and MSAL CDNs. Output is always escaped in the screens (tested for XSS).
@@ -79,7 +80,8 @@ _buckets: dict = _dd(list)
 @app.middleware("http")
 async def limits(request: Request, call_next):
     size = int(request.headers.get("content-length") or 0)
-    if size > MAX_BODY:
+    limit = PORTAL_FILE_MAX if request.url.path.startswith("/api/portal/") and request.url.path.endswith("/files") else MAX_BODY
+    if size > limit:
         return JSONResponse({"detail": "Request too large"}, status_code=413)
     # NUL bytes have no business in a path, query or JSON body; Postgres refuses them, so stop them at the door
     if "\x00" in request.url.path or b"%00" in request.scope.get("query_string", b""):
@@ -840,6 +842,139 @@ def duplicates_apart(p: Pair, user: Principal = Depends(need("requests.reassign"
     with db.session() as s:
         duplicates.keep_apart(s, p.keep, p.drop, user.id)
         return {"ok": True}
+
+
+# Partner portal ------------------------------------------------------------------------------------------
+# The partner's side has no account: the token in the link is the key. Everything else stays behind sign-in.
+
+def _portal(s, token: str):
+    from .. import portal
+    link = portal.open_link(s, token)
+    if link is None:
+        raise HTTPException(404, "This link is not valid (any more). Reply to our mail and we send a new one.")
+    return link
+
+
+@app.get("/portal/{token}", include_in_schema=False)
+def portal_page(token: str):
+    from fastapi.responses import FileResponse
+    return FileResponse(Path(__file__).parent / "static" / "portal.html", headers={"Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex"})
+
+
+@app.get("/api/portal/{token}")
+def portal_view(token: str):
+    from .. import portal
+    with db.session() as s:
+        return portal.view(s, _portal(s, token))
+
+
+class PortalLineIn(BaseModel):
+    status: str
+    price_eur: float | None = None
+    valid_until: date | None = None
+    note: str = ""
+    alternative: dict | None = None
+
+
+@app.post("/api/portal/{token}/lines/{line_id}")
+def portal_line(token: str, line_id: int, body: PortalLineIn):
+    from .. import portal
+    with db.session() as s:
+        link = _portal(s, token)
+        try:
+            return portal.update_line(s, link, line_id, body.status, body.price_eur, body.valid_until, body.note, body.alternative)
+        except KeyError:
+            _404("line")
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+
+class PortalMsgIn(BaseModel):
+    text: str
+    line_id: int | None = None
+
+
+@app.post("/api/portal/{token}/messages")
+def portal_message(token: str, body: PortalMsgIn):
+    from .. import portal
+    with db.session() as s:
+        link = _portal(s, token)
+        try:
+            return portal.add_message(s, link.partner_request_id, "partner", "", body.text, body.line_id)
+        except KeyError:
+            _404("line")
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+
+@app.post("/api/portal/{token}/files")
+async def portal_file(token: str, request: Request):
+    """A PDF offer or voucher. Only real PDFs, at most 5 MB; read later as data, like a mail attachment."""
+    from .. import auditchain, portal
+    from ..files import files_dir
+    with db.session() as s:
+        link = _portal(s, token)  # the token first: nothing about the upload is looked at without it
+        data = await request.body()
+        if not data.startswith(b"%PDF-") or len(data) > PORTAL_FILE_MAX:
+            raise HTTPException(400, "Only PDF files up to 5 MB")
+        pr = s.get(PartnerRequest, link.partner_request_id)
+        name = f"portal-tn-{pr.request_id}-{pr.id}-{utcnow():%Y%m%d%H%M%S}.pdf"
+        path = files_dir() / "attachments" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+        portal.add_message(s, pr.id, "partner", "", f"Uploaded a PDF: {name}")
+        auditchain.append(s, f"partner:{pr.partner_id}", "portal_file", "partner_request", pr.id, ref=name)
+        s.commit()
+        return {"file": name}
+
+
+def _portal_staff(s, prid: int, user: Principal):
+    pr = s.get(PartnerRequest, prid) or _404("partner request")
+    if not user.can("backoffice.board"):
+        _visible_request(s, pr.request_id, user)  # the trip's specialist (or their team lead) may follow it too
+    return pr
+
+
+@app.get("/api/partner-requests/{prid}/portal")
+def portal_staff_view(prid: int, user: Principal = Depends(current_user)):
+    from .. import portal
+    with db.session() as s:
+        _portal_staff(s, prid, user)
+        return portal.thread_for_staff(s, prid)
+
+
+@app.post("/api/partner-requests/{prid}/messages")
+def portal_staff_message(prid: int, body: PortalMsgIn, user: Principal = Depends(current_user)):
+    from .. import portal
+    with db.session() as s:
+        _portal_staff(s, prid, user)
+        try:
+            return portal.add_message(s, prid, "travelnauts", user.name, body.text, body.line_id)
+        except (KeyError, ValueError) as e:
+            raise HTTPException(400, str(e))
+
+
+@app.post("/api/partner-requests/{prid}/lines/{line_id}/accept")
+def portal_accept(prid: int, line_id: int, user: Principal = Depends(current_user)):
+    from .. import portal
+    with db.session() as s:
+        _portal_staff(s, prid, user)
+        try:
+            return portal.accept_alternative(s, prid, line_id, user.id, user.name)
+        except ValueError as e:
+            raise HTTPException(409, str(e))
+
+
+@app.post("/api/partner-requests/{prid}/portal-link")
+def portal_new_link(prid: int, user: Principal = Depends(need("backoffice.board"))):
+    """A new link when the partner lost the mail; the old one stops working."""
+    from .. import portal
+    with db.session() as s:
+        pr = s.get(PartnerRequest, prid) or _404("partner request")
+        url = portal.issue_link(s, pr)
+        auditchain.append(s, user.id, "portal_link_issued", "partner_request", prid)
+        s.commit()
+        return {"url": url}
 
 
 @app.get("/api/backoffice")

@@ -179,7 +179,10 @@ const NL = {
   // partner portal (local agents see it in English; the specialist side follows this switch)
   "Partner portal": "Partnerportaal", "Portal link": "Portaallink", "Copy portal link": "Kopieer portaallink", "Portal link copied": "Portaallink gekopieerd",
   "Asking hotel": "Vraagt hotel", "Confirmed": "Bevestigd", "Alternative offered": "Alternatief aangeboden", "Accept alternative": "Alternatief accepteren", "Valid until": "Geldig tot",
-  "Line": "Regel", "Thread": "Gesprek", "Round #": "Ronde #", "Answered in the portal": "Beantwoord in het portaal",
+  "Line": "Regel", "Portal and thread": "Portaal en gesprek", "Accept alternative": "Alternatief accepteren", "Send to partner": "Versturen naar partner",
+  "New link for the partner": "Nieuwe link voor de partner", "Sent to the partner's portal": "Verstuurd naar het portaal van de partner", "Alternative accepted (logged)": "Alternatief geaccepteerd (gelogd)",
+  "No lines: this partner answers by mail.": "Geen regels: deze partner antwoordt per mail.", "Write to the partner (English)": "Schrijf aan de partner (Engels)", "Close": "Sluiten",
+  "Not started": "Nog niet begonnen", "Asking the supplier": "Vraagt de leverancier", "Alternative offered": "Alternatief aangeboden", "No portal link yet": "Nog geen portaallink", "Thread": "Gesprek", "Round #": "Ronde #", "Answered in the portal": "Beantwoord in het portaal",
   // duplicates
   "Duplicate records": "Dubbele records", "Duplicates": "Dubbelen", "Duplicate families": "Dubbele families", "# pairs": "# paren",
   "The same family twice: entered twice in TravelSpirit, or a first mail from the other parent's address. Nothing merges by itself: a wrong merge sends one family's mail to another. Merging here moves trips, mail and addresses; the TravelSpirit administrator merges there from the plan.":
@@ -205,6 +208,9 @@ const NL_RULES = [
   [/^Merged \(logged\): (\d+) trips, (\d+) mails moved$/, (m, a, b) => `Samengevoegd (gelogd): ${a} reizen, ${b} mails verplaatst`],
   [/^Keep · (.+)$/, (m, x) => "Houden · " + x.replace("in TravelSpirit", "in TravelSpirit").replace("new in the brain", "nieuw in het brein").replace(/(\d+) trips/, "$1 reizen")],
   [/^Merge into it · (.+)$/, (m, x) => "Samenvoegen hierin · " + x.replace("new in the brain", "nieuw in het brein").replace(/(\d+) trips/, "$1 reizen")],
+  [/^Portal · (\d+) of (\d+) confirmed(.*)$/, (m, a, b, r) => `Portaal · ${a} van ${b} bevestigd${r.replace(" · valid until ", " · geldig tot ")}`],
+  [/^Partner request (\d+) · (.+)$/, (m, a, b) => `Partneraanvraag ${a} · ${b}`],
+  [/^Link valid until (.+)$/, (m, x) => "Link geldig tot " + x.replace(" · partner last opened ", " · partner laatst geopend ").replace(" · not opened yet", " · nog niet geopend")],
   [/^Model: (.+)$/, (m, x) => "Model: " + x],
   [/^Minutes per (.+) today$/, (m, x) => `Minuten per ${(NL[x] || x).toLowerCase()} nu`],
 ];

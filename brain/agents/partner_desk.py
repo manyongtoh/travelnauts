@@ -92,8 +92,12 @@ def draft_request_mail(s: Session, partner_request_id: int) -> Draft:
                         "rooms": "one family room" if fam.adults + len(fam.child_ages) <= 4 else "two connecting rooms",
                         "what": pr.what}}
         out, _ = run_step(s, "partner_request", PartnerMail, REQUEST_INSTRUCTIONS, ctx)
-        d = Draft(kind="partner_request", request_id=tr.id, partner_request_id=pr.id, title=out.subject, body=out.body,
-                  data={"to": partner.email})
+        from ..portal import issue_link
+        url = issue_link(s, pr)  # added by the brain, never by the model: a link is not something to make up
+        body = (out.body.rstrip() + f"\n\nYou can answer line by line here (prices, status, alternatives, no login needed):\n{url}\n"
+                f"Reference {ctx['reference']}. Replying to this mail works too.")
+        d = Draft(kind="partner_request", request_id=tr.id, partner_request_id=pr.id, title=out.subject, body=body,
+                  data={"to": partner.email, "portal": True, "system_added": [url]})
         s.add(d)
         s.commit()
         box["output"] = out.subject
@@ -110,7 +114,10 @@ def mark_sent(s: Session, partner_request_id: int, when: datetime | None = None)
 def due_chases(s: Session, now: datetime | None = None) -> list[PartnerRequest]:
     now = now or utcnow()
     cutoff = now - timedelta(days=get_settings().chase_partner_after_days)
-    return list(s.scalars(select(PartnerRequest).where(PartnerRequest.status == "waiting", PartnerRequest.sent_at <= cutoff)).all())
+    due = s.scalars(select(PartnerRequest).where(PartnerRequest.status == "waiting", PartnerRequest.sent_at <= cutoff)).all()
+    # a partner busy in the portal (some lines answered, the rest 'asking the hotel') is working on it: no reminder
+    return [pr for pr in due if not ((pr.offer or {}).get("portal_activity_at")
+                                     and datetime.fromisoformat(pr.offer["portal_activity_at"]) > cutoff)]
 
 
 def draft_chase(s: Session, partner_request_id: int) -> Draft:

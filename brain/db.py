@@ -197,6 +197,49 @@ class PartnerRequest(Base):
     partner: Mapped[Partner] = relationship()
 
 
+class PortalLink(Base):
+    """A partner's own link to one request: no account, only a long random token (we keep its hash)."""
+    __tablename__ = "portal_links"
+    token_hash: Mapped[str] = mapped_column(String, primary_key=True)
+    partner_request_id: Mapped[int] = mapped_column(ForeignKey("partner_requests.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class PortalLine(Base):
+    """One thing we ask a partner for (a transfer, an excursion, a room), answered line by line."""
+    __tablename__ = "portal_lines"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    partner_request_id: Mapped[int] = mapped_column(ForeignKey("partner_requests.id"), index=True)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    label: Mapped[str] = mapped_column(String)
+    detail: Mapped[str] = mapped_column(String, default="")
+    # open | asking (the agent is asking the hotel or supplier) | confirmed | alternative | not_available
+    status: Mapped[str] = mapped_column(String, default="open")
+    price_eur: Mapped[float | None] = mapped_column(Float, nullable=True)
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    alternative: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # {label, price_eur, note}
+    note: Mapped[str] = mapped_column(Text, default="")
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_by: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class PortalMessage(Base):
+    """The back and forth, per line or for the whole request. Partner text is data, never instructions."""
+    __tablename__ = "portal_messages"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    partner_request_id: Mapped[int] = mapped_column(ForeignKey("partner_requests.id"), index=True)
+    line_id: Mapped[int | None] = mapped_column(ForeignKey("portal_lines.id"), nullable=True)
+    author: Mapped[str] = mapped_column(String)  # partner | travelnauts
+    author_name: Mapped[str] = mapped_column(String, default="")
+    text: Mapped[str] = mapped_column(Text)
+    round: Mapped[int] = mapped_column(Integer, default=1)
+    flagged: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
 class KnowledgeItem(Base):
     __tablename__ = "knowledge"
     id: Mapped[str] = mapped_column(String, primary_key=True)

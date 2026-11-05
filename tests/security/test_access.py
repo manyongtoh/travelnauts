@@ -31,11 +31,18 @@ def people(s):
 
 
 def test_every_api_route_needs_sign_in(client):
+    from brain.api import app as appmod
     from brain.api.app import app
     checked = 0
     for r in app.routes:
+        appmod._buckets.clear()  # this test calls every route from one address: not a flood
         path = getattr(r, "path", "")
         if not path.startswith("/api") or path in PUBLIC:
+            continue
+        if path.startswith("/api/portal/{token}"):  # the partner's side: no account, the token is the key
+            for method in r.methods - {"HEAD", "OPTIONS"}:
+                res = client.request(method, path.replace("{token}", "guessed-token").replace("{line_id}", "1"), json={})
+                assert res.status_code in (404, 422), (method, path, res.status_code)  # never data without the token
             continue
         url = path.replace("{rid}", "r001").replace("{did}", "1").replace("{kid}", "k-voice").replace("{mail_id}", "m0001") \
             .replace("{prid}", "1").replace("{kind}", "roadbooks").replace("{name}", "x.pdf").replace("{eid}", "x") \

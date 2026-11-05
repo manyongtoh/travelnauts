@@ -64,10 +64,13 @@ def availability(s: Session, request_id: str) -> dict:
     from .agents.partner_desk import current_requests
     prs = current_requests(s, request_id)
     no = [pr for pr in prs if pr.status == "declined" or (pr.status == "answered" and (pr.offer or {}).get("available") is False)]
-    ok = [pr for pr in prs if pr.status == "answered" and (pr.offer or {}).get("available") is True]
+    from .clock import today
+    expired = [pr for pr in prs if pr.status == "answered" and (pr.offer or {}).get("valid_until")
+               and (pr.offer or {})["valid_until"] < today().isoformat()]
+    ok = [pr for pr in prs if pr.status == "answered" and (pr.offer or {}).get("available") is True and pr not in expired]
     from .config import get_settings
     return {"asked": len(prs), "confirmed": len(ok), "not_available": len(no), "open": len(prs) - len(ok) - len(no),
-            "rule": get_settings().availability_rule}
+            "expired": len(expired), "rule": get_settings().availability_rule}
 
 
 def availability_check(s: Session, d: Draft, text: str) -> tuple[list[str], str]:
