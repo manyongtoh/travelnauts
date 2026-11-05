@@ -54,6 +54,21 @@ The same checks from a terminal: `brain verify` (row counts, audit chain, schema
 
 ## Incidents
 
+### A family on the road is waiting (alert "travelling_family")
+- **You see:** a critical alert: a family that is travelling wrote over 30 minutes ago and the reply is not sent.
+- **The system:** marked the mail urgent, linked it to the running trip, drafted a reply with the 24/7 number.
+- **You do (team lead):** open Complaints, call the family on the 24/7 line, approve or adjust the reply.
+
+### Automatic send went out wrong
+- **You see:** a specialist or the back office reports a mail that should not have gone automatically.
+- **The system:** every automatic send is in the audit chain as `auto:<person>`, with the same checks as a click.
+- **You do:** the person switches it off in the bar at the bottom right (Switch off), or Maintenance can do it
+  for them. Look at the draft in the audit log; if a check should have stopped it, file it as a bug with the text.
+
+### A partner portal link leaked or the partner lost the mail
+- **You do (back office):** open the request on the board, Portal and thread, New link for the partner. The old
+  link stops working at once. Links also stop by themselves at departure.
+
 Each incident lists what you see, what the system already does on its own, and what you do.
 
 ### The model provider is down or slow

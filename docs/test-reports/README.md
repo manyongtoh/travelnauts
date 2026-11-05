@@ -7,7 +7,7 @@ each change, so this report can be reproduced with the commands at the bottom.
 
 | Area | Result |
 |---|---|
-| Test suite on SQLite | 185 passed |
+| Test suite on SQLite | 199 passed (5 November) |
 | Test suite on Postgres 16 | 173 passed, 1 skipped (a SQLite-only schema test) |
 | Quality bench (`brain bench --gate`) | all 11 limits met |
 | Security tests | 17 passed (16 API tests, 1 browser test on 7 screens) |
@@ -16,13 +16,15 @@ each change, so this report can be reproduced with the commands at the bottom.
 | Two weeks of simulated operation on Postgres, with 6 incidents | 0 failed jobs, 0 lost or doubled mails, audit chain ok every day |
 | One family's whole journey, first mail to next trip | every hand-off happens without anyone remembering a step |
 | The back office day for one trip, with partner mail written like real mail | replies read and matched, chasing only the silent, invoices checked |
+| A specialist's day and a team lead's day (`scripts/journey_people.py`) | proposal, change, question, call notes, urgent message from the road, unknown address, sick leave and a leaver, all handed over without a gap |
+| Automatic send, partner portal, duplicate families, value page, Dutch screens | tested through the API and in the browser, on a phone width for the portal |
 | Alerts during the two weeks | the right alert on each incident that needs a person, none on incidents that heal themselves, none on quiet days |
 | Backup and restore drill | passed: counts and audit chain identical, newest migration runs on the restored data |
 | Load test, 8 workers | 1,613 mails, none handled twice, none left |
 
 ## What the tests found, and what was fixed
 
-Forty-eight problems surfaced. All are fixed and each now has a test, so they cannot come back unnoticed.
+Fifty-four problems surfaced. All are fixed and each now has a test, so they cannot come back unnoticed.
 
 | # | Found by | Problem | Fix |
 |---|---|---|---|
@@ -73,6 +75,12 @@ Forty-eight problems surfaced. All are fixed and each now has a test, so they ca
 | 46 | Efficiency | The 15-minute check re-read the whole audit log, growing without end. | It reads only new entries; the whole log is checked nightly, and a change to an old entry still raises the alert. |
 | 47 | Efficiency | Matching an unknown sender read every family in the database. | One indexed lookup. |
 | 48 | Efficiency | Routing a request read every sent proposal. | One counting query. |
+| 49 | Specialist and team lead day | A family stranded at the airport ("the transfer is not here!") was triaged as an ordinary question: no complaint, no priority, not linked to the trip they were on. | The dates decide: mail from a family on a running trip is urgent and linked to that trip; distress makes it a complaint with high severity that the team lead approves; an alert fires if the reply is still unsent after 30 minutes. |
+| 50 | Specialist and team lead day | "A night less in Bangkok and one more in Koh Lanta" was read as a question, so the family would get an answer instead of a new version. | Naming a stop of their own proposal together with a change makes it a change request, whatever the model said. |
+| 51 | Specialist and team lead day | A change request waited until the specialist clicked "apply the change". | The new version is drafted right after triage, like a first proposal. |
+| 52 | Specialist and team lead day | A family's question was not tied to their open trip, so it stayed with the old specialist when the trip was reassigned. | Tied to the trip; it moves with it. |
+| 53 | Specialist and team lead day | A route line without a hotel made the request screen fail. | Read safely. |
+| 54 | CI | New tests imported a shared helper that worked locally but not on the runner, so CI was red for four pushes. | pytest knows the project root. |
 | 10 | Backup drill | `brain migrate` failed on a database that was built without migrations. | It now adopts such a database only if it matches the code exactly, and otherwise stops without changing anything. |
 
 Two code scan warnings (a fixed temporary folder in the simulation, a table name in a query) were low risk in

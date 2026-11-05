@@ -86,7 +86,11 @@ Nothing it learns is used before a person approves it.
 | Anonymiser | `brain/anonymise.py` | Removes names, mail addresses, phone numbers, IBANs, BSNs, passport numbers, addresses and birth dates; keeps destinations, months, ages and budgets; a second check refuses the record if anything personal may be left |
 | Ingest | `brain/ingest.py`, `brain ingest export.jsonl` | Loads a TravelSpirit export through the anonymiser (anonymised stage only); refused records are reported by id, never by content |
 | Audit log | `agent_runs` table | Every run: agent, model, sources, result, time |
-| Screens | `brain/api/static/` | Specialist, team lead (team figures only, never per person), back office board |
+| Screens | `brain/api/static/` | Specialist, team lead (team figures only, never per person), back office board; Dutch or English per person (EN/NL in the top bar) |
+| Value page | `brain/value.py`, Team lead > Value | Time to first proposal against the baseline, share sent unchanged, work done unprompted, partner reply times, booked share, estimated hours saved. The baseline is editable and labelled an assumption until measured. CSV export. |
+| Automatic send | `brain/autosend.py` | After 10 unchanged approvals in a row of a low-risk kind (follow-ups, extras offers, partner requests and reminders) the brain asks whether it may send them itself. If yes, each one shows 10 seconds with a Stop button, then goes out with every check. Proposals, changes, answers, complaints and money stay manual. |
+| Partner portal | `brain/portal.py`, `/portal/<link>` | Local agents answer line by line without an account: status, price, valid-until date, alternatives, a thread and PDF upload. The back office accepts an alternative in one click. No family names. |
+| Duplicate families | `brain/duplicates.py`, Team lead > Duplicates | Likely doubles with the evidence; a person merges or keeps apart; a merge plan for the TravelSpirit administrator. |
 
 ## Safety rules built in
 
