@@ -5,6 +5,7 @@ from tests.security.test_xss_browser import server  # noqa: F401
 def test_countdown_and_stop_on_screen(server, tmp_path):  # noqa: F811
     from playwright.sync_api import sync_playwright
     from sqlalchemy import select
+
     from brain import autosend, db
     from brain.clock import utcnow
     from brain.db import Draft, Setting, TripRequest

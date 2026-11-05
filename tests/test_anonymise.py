@@ -50,7 +50,7 @@ def test_same_person_gets_the_same_tag_and_no_key_is_kept():
 
 
 def test_mail_keeps_only_the_sender_domain_for_businesses():
-    out, rep = anonymise_mail({"sender": "anouk@gmail.com", "subject": "Japan", "body": "Hallo,\n\nJapan in april?"})
+    out, _ = anonymise_mail({"sender": "anouk@gmail.com", "subject": "Japan", "body": "Hallo,\n\nJapan in april?"})
     assert out["sender_domain"] == "freemail" and "anouk" not in json.dumps(out)
     out, _ = anonymise_mail({"sender": "booking@hoi-an-garden-villas.example", "subject": "Offer", "body": "Dear team"})
     assert out["sender_domain"] == "hoi-an-garden-villas.example"

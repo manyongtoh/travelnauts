@@ -13,17 +13,27 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Any, Callable
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .db import CacheEntry, Family, Partner, PastProposal, ToolCall, TripRequest, as_dict, cache_put
+from .clock import utcnow
+from .db import (
+    CacheEntry,
+    Family,
+    Partner,
+    PastProposal,
+    ToolCall,
+    TripRequest,
+    as_dict,
+    cache_put,
+)
 from .identity import AGENTS, Principal
 from .trace import current_trace
-from .clock import utcnow
 
 
 @dataclass
@@ -100,7 +110,8 @@ server = ToolServer()
 
 # Failed or refused tool calls must stay in the log even when the work around them is undone (rolled back):
 # otherwise an outage or an attempt to use a forbidden tool leaves no trace.
-import contextvars as _cv  # noqa: E402
+import contextvars as _cv
+
 _failed_calls: _cv.ContextVar[list | None] = _cv.ContextVar("failed_tool_calls", default=None)
 
 
@@ -228,17 +239,18 @@ def prices_read(s: Session, destination: str | None = None) -> list[dict]:
     return [as_dict(p) | {"valid_until": p.valid_until.isoformat() if p.valid_until else None} for p in s.scalars(q).all()]
 
 
-def match_partner_request(s: Session, m) -> "PartnerRequest | None":  # noqa: F821  imported inside, avoids a cycle
+def match_partner_request(s: Session, m) -> PartnerRequest | None:  # noqa: F821  imported inside, avoids a cycle
     """Which of our requests does this partner mail answer? Only a sure match: a person picks otherwise.
     1. a person already chose (back office matched it); 2. our reference and this partner; 3. our reference and the
     only partner asked on that trip; 4. no reference, but this partner has exactly one open request with us."""
     import re as _re
+
     from .db import PartnerRequest
     chosen = (m.triage or {}).get("partner_request_id")
     if chosen:
         return s.get(PartnerRequest, chosen)
     from .tenant import tenant
-    ref = _re.search(rf"{tenant().ref_re}-?\s?(R\d{{3,}})", f"{m.subject} {m.body}", _re.I)
+    ref = _re.search(rf"{tenant().ref_re}-?\s?(R\d{{3,}})", f"{m.subject} {m.body}", _re.IGNORECASE)
     if ref:
         rows = s.scalars(select(PartnerRequest).where(PartnerRequest.request_id == ref.group(1).lower())).all()
         mine = [pr for pr in rows if pr.partner_id == m.partner_id] if m.partner_id else rows

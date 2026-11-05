@@ -113,6 +113,7 @@ def connect(s: Session, kind: str) -> SystemOfRecord | Channel:
         raise NotImplementedError("Only the fake TravelSpirit is available in the sandbox")
     inner = FakeTravelSpirit(s) if kind == "record" else FakeTravelSpiritMail(s)
     import os
+
     from ..db import Setting
     st = s.get(Setting, "ts_faults")
     if st and st.value and os.getenv("BRAIN_ENV", "test") == "test":

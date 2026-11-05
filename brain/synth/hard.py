@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import random
 from datetime import datetime, timedelta
+
 from ..tenant import fill_company, tenant
 
 # (body template, truth). {name} {first} {sig} are filled per family.

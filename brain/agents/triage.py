@@ -147,7 +147,7 @@ def triage_mail(s: Session, mail_id: str) -> dict:
             # take it; two or none stays empty, so routing never rests on a guess
             text = f"{mail['subject']} {mail['body']}"
             named = {k for k, d in DESTINATIONS.items()
-                     if re.search(rf"\b({re.escape(d['nl'])}|{re.escape(d['name'])})\b", text, re.I)}
+                     if re.search(rf"\b({re.escape(d['nl'])}|{re.escape(d['name'])})\b", text, re.IGNORECASE)}
             if len(named) == 1:
                 res.destination = named.pop()
             elif not named:
@@ -249,7 +249,7 @@ def triage_mail(s: Session, mail_id: str) -> dict:
 
 DISTRESS = re.compile(r"vliegveld|luchthaven|gestrand|niemand (neemt|is|komt)|is er niet|niet (opgehaald|gekomen|komen opdagen)|"
                       r"kwijt|gestolen|ziekenhuis|ongeluk|noodgeval|dringend|spoed|\bhelp\b|wat moeten we doen|!!|"
-                      r"airport|stranded|stuck|nobody|emergency|hospital|accident|urgent|stolen|lost our", re.I)
+                      r"airport|stranded|stuck|nobody|emergency|hospital|accident|urgent|stolen|lost our", re.IGNORECASE)
 
 
 def travelling_trip(s: Session, family_id: str, on) -> TripRequest | None:
@@ -262,7 +262,7 @@ def travelling_trip(s: Session, family_id: str, on) -> TripRequest | None:
 
 
 CHANGE_WORDS = re.compile(r"\b(nacht(en)?|dag(en)?|night|nights|days?)\s+(langer|korter|minder|extra|meer|erbij|longer|shorter|less|fewer|more)\b|"
-                          r"\b(overslaan|eruit|schrappen|in plaats van|ruilen|omwisselen|toevoegen|skip|instead of|swap)\b", re.I)
+                          r"\b(overslaan|eruit|schrappen|in plaats van|ruilen|omwisselen|toevoegen|skip|instead of|swap)\b", re.IGNORECASE)
 
 
 def asks_for_change(s: Session, family_id: str, text: str) -> bool:
@@ -294,14 +294,14 @@ def triage_inbox(s: Session, limit: int | None = None) -> list[dict]:
 # Rule: never a wrong name. A family named after our own specialist, or after "Team Marketing", is worse than none.
 
 REPLY_HEADER = re.compile(r"^\s*(>|_{8,}|op .{4,80} schreef|on .{4,80} wrote:|-{3,}\s*(oorspronkelijk|original|doorgestuurd|forwarded)"
-                          r"|(van|from|verzonden|sent|aan|to|onderwerp|subject):\s)", re.I)
-FOOTER = re.compile(r"^\s*(verstuurd (vanaf|met)|verzonden (vanaf|met)|sent from|get outlook|outlook voor)", re.I)
-DISCLAIMER = re.compile(r"^\s*(disclaimer|dit (e-?mail)?bericht is (vertrouwelijk|uitsluitend)|this (e-?mail|message) is confidential)", re.I)
+                          r"|(van|from|verzonden|sent|aan|to|onderwerp|subject):\s)", re.IGNORECASE)
+FOOTER = re.compile(r"^\s*(verstuurd (vanaf|met)|verzonden (vanaf|met)|sent from|get outlook|outlook voor)", re.IGNORECASE)
+DISCLAIMER = re.compile(r"^\s*(disclaimer|dit (e-?mail)?bericht is (vertrouwelijk|uitsluitend)|this (e-?mail|message) is confidential)", re.IGNORECASE)
 GREETING = re.compile(r"^\s*(?:(?:hoi|hallo|hi|hey)[!,.]*\s+)?(met\s+)?(vriendelijke|hartelijke|lieve|warme|beste|kind|best|warm|many)?\s*"
                       r"(groet(en|jes)?|regards|wishes|liefs|mvg|m\.v\.g\.?|gr\.?|best|cheers|thanks|thank you|bedankt|"
                       r"dank je wel|dank jullie wel|alvast bedankt|tot snel|tot gauw)\b"
                       r"(?:\s+(?:alvast|a lot|so much|van ons allemaal|van ons|uit \w+|vanuit \w+|en tot snel))?"
-                      r"(?:\s*/\s*kind regards)?[,!.]*\s*", re.I)
+                      r"(?:\s*/\s*kind regards)?[,!.]*\s*", re.IGNORECASE)
 PARTICLES = {"van", "de", "der", "den", "ter", "ten", "het", "'t", "in", "la", "le", "da", "di", "du", "el", "al", "op"}
 NOT_A_NAME = {"team", "marketing", "sales", "afdeling", "gezin", "hele", "ons", "onze", "wij", "we", "papa", "mama", "opa",
               "oma", "uit", "from", "the", "kids", "kinderen", "iedereen", "allemaal", "bv", "b.v.", "nv", "holding",
@@ -314,7 +314,7 @@ def _not_a_name() -> set[str]:
     return NOT_A_NAME | set(tenant().name_words)
 
 
-FAMILY = re.compile(r"^(?:de\s+|the\s+)?(?:familie|fam\.?|family)\s+(.+)$|^(?:the\s+)?(.+?)\s+family$", re.I)
+FAMILY = re.compile(r"^(?:de\s+|the\s+)?(?:familie|fam\.?|family)\s+(.+)$|^(?:the\s+)?(.+?)\s+family$", re.IGNORECASE)
 
 
 def _first_name(tok: str) -> bool:
@@ -388,7 +388,7 @@ def name_from_sign_off(body: str | None) -> tuple[str, str]:
         return "", ""
     cand = re.split(r"\s*[|,(]|\s+\+?\d[\d\s-]{6,}|\s+\S+@\S+|\s+(?:www\.|https?://)", cand)[0]
     cand = re.sub(r"[^\w\s'&.\u00c0-\u024f-]", "", cand).strip(" .!")
-    cand = re.sub(r"\s+(xx+|x)$", "", cand, flags=re.I)  # kisses after the name
+    cand = re.sub(r"\s+(xx+|x)$", "", cand, flags=re.IGNORECASE)  # kisses after the name
     fam = FAMILY.match(cand)
     if fam:
         sur = (fam.group(1) or fam.group(2) or "").strip()
@@ -422,7 +422,7 @@ def own_domains() -> set[str]:
     from ..tenant import tenant
     return set(tenant().own_domains)
 
-FWD_FROM = re.compile(r"^\s*(?:van|from)\s*:\s*(?:.*?<)?([\w.+'-]+@[\w-]+(?:\.[\w-]+)+)>?", re.I | re.M)
+FWD_FROM = re.compile(r"^\s*(?:van|from)\s*:\s*(?:.*?<)?([\w.+'-]+@[\w-]+(?:\.[\w-]+)+)>?", re.IGNORECASE | re.MULTILINE)
 
 
 def normalise_address(addr: str | None) -> str:
@@ -467,7 +467,7 @@ def suggest_families(s: Session, surname: str, subject: str, body: str) -> list[
     out: dict[str, dict] = {}
     from ..tenant import tenant
     pre = tenant().ref_re
-    for ref in re.findall(rf"\b{pre}-?R?(\d{{3,}})\b", f"{subject} {body}", re.I):
+    for ref in re.findall(rf"\b{pre}-?R?(\d{{3,}})\b", f"{subject} {body}", re.IGNORECASE):
         tr = s.get(TripRequest, f"r{int(ref):03d}")
         if tr:
             out.setdefault(tr.family_id, {"family_id": tr.family_id, "why": [], "request_id": tr.id})["why"].append(

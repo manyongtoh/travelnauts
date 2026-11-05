@@ -22,7 +22,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .clock import utcnow
-from .db import Family, Partner, PartnerRequest, PortalLine, PortalLink, PortalMessage, TripRequest
+from .db import (
+    Family,
+    Partner,
+    PartnerRequest,
+    PortalLine,
+    PortalLink,
+    PortalMessage,
+    TripRequest,
+)
 from .tenant import tenant
 
 TEAM = "team"  # a portal message written by our own people; "partner" for the partner

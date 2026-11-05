@@ -22,11 +22,11 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..clock import today as clock_today
+from ..clock import utcnow
 from ..config import ROOT
 from ..db import Employee, KnowledgeItem, Setting
 from .store import clear_semantic_cache
-from ..clock import utcnow
-from ..clock import today as clock_today
 
 ALL_STAFF = ["specialist", "back_office", "team_lead", "content"]
 MAX_WORDS = 300
@@ -110,10 +110,10 @@ def reindex(s: Session, root: Path | None = None) -> dict:
             vt = date.fromisoformat(meta["valid_to"]) if meta.get("valid_to") else None
             item = s.get(KnowledgeItem, cid)
             owner = meta.get("owner") if meta.get("owner") in owners else next(iter(owners))
-            fields = dict(title=title if sid else meta.get("title", title), body=text, destination=meta.get("destination"),
-                          topic=meta.get("topic", "general"), owner_id=owner, roles=meta.get("roles") or ALL_STAFF,
-                          review_by=date.fromisoformat(meta["review_by"]) if meta.get("review_by") else today,
-                          source=rel + (f"#{sid}" if sid else ""), content_hash=h, valid_from=vf, valid_to=vt)
+            fields = {"title": title if sid else meta.get("title", title), "body": text, "destination": meta.get("destination"),
+                          "topic": meta.get("topic", "general"), "owner_id": owner, "roles": meta.get("roles") or ALL_STAFF,
+                          "review_by": date.fromisoformat(meta["review_by"]) if meta.get("review_by") else today,
+                          "source": rel + (f"#{sid}" if sid else ""), "content_hash": h, "valid_from": vf, "valid_to": vt}
             if item is None:
                 s.add(KnowledgeItem(id=cid, status="proposed", synthetic=True, **fields))
                 s.flush()

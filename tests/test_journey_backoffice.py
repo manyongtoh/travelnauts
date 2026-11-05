@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 import pytest
+
 from brain.tenant import tenant
 
 
@@ -73,6 +74,7 @@ def test_a_misread_invoice_amount_is_sent_to_a_person(world, monkeypatch):
 
 def test_a_replaced_hotel_no_longer_blocks_the_trip(world):
     from sqlalchemy import select
+
     from brain.agents import partner_desk, proposal
     from brain.db import Draft, Partner, TripRequest
     from brain.workflow import availability

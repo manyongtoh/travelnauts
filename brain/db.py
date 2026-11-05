@@ -5,13 +5,33 @@ so real data cannot slip in by accident during the synthetic stage.
 """
 from __future__ import annotations
 
+import os
 from datetime import date, datetime
 from typing import Any
 
-import os
-
-from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, event, select
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker, with_loader_criteria
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    create_engine,
+    event,
+    select,
+)
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    Session,
+    mapped_column,
+    relationship,
+    sessionmaker,
+    with_loader_criteria,
+)
 
 from .config import get_settings
 from .tenant import current_tenant_id

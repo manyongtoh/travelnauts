@@ -20,14 +20,14 @@ from dataclasses import dataclass, field
 # --- Detectors ---------------------------------------------------------------------------------
 
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
-URL_WITH_PERSON = re.compile(r"https?://\S*(?:facebook|instagram|linkedin)\.\S+", re.I)
+URL_WITH_PERSON = re.compile(r"https?://\S*(?:facebook|instagram|linkedin)\.\S+", re.IGNORECASE)
 PHONE = re.compile(r"(?<![\w-])(?:(?:\+|00)\d{1,3}[\s.-]?)?(?:\(0\)[\s.-]?)?\d(?:[\s.-]?\d){7,11}(?!\d)")
 IBAN = re.compile(r"\b[A-Z]{2}\d{2}[\s]?(?:[A-Z0-9]{4}[\s]?){2,7}[A-Z0-9]{1,4}\b")
 POSTCODE = re.compile(r"\b[1-9]\d{3}\s?(?!SA|SD|SS)[A-Z]{2}\b")
 STREET = re.compile(r"\b[A-Z][a-zA-Z'.-]+(?:\s[A-Z][a-zA-Z'.-]+)?(?:straat|laan|weg|plein|gracht|kade|dijk|singel|steeg|hof|park|plantsoen|dreef)\s\d+[a-zA-Z]?\b")
-BIRTH = re.compile(r"\b(?:geboren(?:\sop)?|geboortedatum|geb\.|date of birth|dob|born(?:\son)?)[:\s]+\d{1,2}[-/.\s](?:\d{1,2}|[a-z]+)[-/.\s]\d{2,4}\b", re.I)
+BIRTH = re.compile(r"\b(?:geboren(?:\sop)?|geboortedatum|geb\.|date of birth|dob|born(?:\son)?)[:\s]+\d{1,2}[-/.\s](?:\d{1,2}|[a-z]+)[-/.\s]\d{2,4}\b", re.IGNORECASE)
 DATE_FULL = re.compile(r"\b\d{1,2}[-/.]\d{1,2}[-/.](?:19|20)\d{2}\b")
-PASSPORT_CTX = re.compile(r"\b(?:paspoort(?:nummer)?|passport(?:\snumber|\sno\.?)?|id[-\s]?kaart|documentnummer|identiteitskaart)[:\s#]*((?=[A-Za-z0-9]*\d)[A-Za-z0-9]{6,10})\b", re.I)
+PASSPORT_CTX = re.compile(r"\b(?:paspoort(?:nummer)?|passport(?:\snumber|\sno\.?)?|id[-\s]?kaart|documentnummer|identiteitskaart)[:\s#]*((?=[A-Za-z0-9]*\d)[A-Za-z0-9]{6,10})\b", re.IGNORECASE)
 PASSPORT_NL = re.compile(r"\b[A-NP-Z]{2}[A-NP-Z0-9]{6}\d\b")
 LONG_DIGITS = re.compile(r"\b\d{9}\b")
 
@@ -94,7 +94,7 @@ def suspicious(text: str, known_names: list[str] | None = None) -> list[Finding]
     """A second, cruder check on the scrubbed text. Anything here means: a person must look."""
     t = TAG.sub(" ", text)
     out = []
-    if "@" in t or re.search(r"\((?:at|apestaart)\)|\[at\]", t, re.I):
+    if "@" in t or re.search(r"\((?:at|apestaart)\)|\[at\]", t, re.IGNORECASE):
         out.append(Finding("EMAIL_LIKE", "@"))
     for m in re.finditer(r"\d(?:[\s./-]?\d){8,}", t):
         out.append(Finding("NUMBER_LIKE", m.group(0)))
@@ -102,7 +102,7 @@ def suspicious(text: str, known_names: list[str] | None = None) -> list[Finding]
         out.append(Finding("CODE_LIKE", m.group(0)))
     for n in known_names or []:
         for part in [n] + n.split():
-            if len(part) > 2 and part.lower() not in ("van", "der", "den") and re.search(rf"(?<!\w){re.escape(part)}(?!\w)", t, re.I):
+            if len(part) > 2 and part.lower() not in ("van", "der", "den") and re.search(rf"(?<!\w){re.escape(part)}(?!\w)", t, re.IGNORECASE):
                 out.append(Finding("NAME_LEFT", part))
     return out
 

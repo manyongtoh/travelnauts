@@ -7,12 +7,12 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
 from ..alerts import OPEN_REQUEST_STATUSES
+from ..clock import utcnow
 from ..db import Setting
 from ..identity import agent
 from ..synth.world import DESTINATIONS
 from ..toolserver import server
 from .common import audit
-from ..clock import utcnow
 
 
 def customer_insight(s: Session) -> dict:

@@ -6,12 +6,12 @@ from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
+from ..clock import today as clock_today
+from ..clock import utcnow
 from ..db import Setting
 from ..identity import agent
 from ..toolserver import server
 from .common import audit
-from ..clock import utcnow
-from ..clock import today as clock_today
 
 ME = agent("supplier_watcher")
 

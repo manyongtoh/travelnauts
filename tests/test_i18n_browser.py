@@ -1,10 +1,12 @@
 """Dutch and English: the switch translates the screens, never customer text, and is remembered per person."""
-from tests.security.test_xss_browser import server  # noqa: F401  (same seeded server, hostile text included)
+from tests.security.test_xss_browser import (
+    server,  # noqa: F401  (same seeded server, hostile text included)
+)
 
 
 def test_dutch_switch(server, tmp_path):  # noqa: F811
     from playwright.sync_api import sync_playwright
-    base, env = server
+    base, _ = server
     with sync_playwright() as pw:
         b = pw.chromium.launch()
         ctx = b.new_context()

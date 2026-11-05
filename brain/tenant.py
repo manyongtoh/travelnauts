@@ -16,13 +16,13 @@ import contextvars
 import os
 import re
 import tomllib
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from functools import lru_cache
+from functools import cache
 from importlib.metadata import entry_points
 from pathlib import Path
 from types import MappingProxyType
-from typing import Callable, Iterator, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -76,7 +76,7 @@ class TenantConfig(BaseModel):
         return out
 
     @model_validator(mode="after")
-    def _defaults(self) -> "TenantConfig":
+    def _defaults(self) -> TenantConfig:
         words = {w.lower() for w in self.name_words} | {w.lower() for w in re.findall(r"[\w-]+", self.name)}
         object.__setattr__(self, "name_words", sorted(words))
         if not self.back_office_signature:
@@ -129,7 +129,7 @@ def available() -> dict[str, Callable[[], TenantPack]]:
     return {ep.name: ep.load for ep in entry_points(group=GROUP)}
 
 
-@lru_cache(maxsize=None)
+@cache
 def load(name: str | None = None) -> TenantPack:
     found = available()
     if name is None:

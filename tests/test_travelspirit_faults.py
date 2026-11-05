@@ -108,7 +108,12 @@ def test_after_twelve_hours_a_waiting_job_fails_and_is_reported(world):
 
 
 def test_faults_can_only_be_switched_on_in_the_test_environment(world, monkeypatch):
-    from brain.connectors import Channel, SystemOfRecord, get_channel, get_system_of_record
+    from brain.connectors import (
+        Channel,
+        SystemOfRecord,
+        get_channel,
+        get_system_of_record,
+    )
     from brain.travelspirit.client import FakeTravelSpirit, FakeTravelSpiritMail
     faults(world, {"mode": "down"})
     monkeypatch.setenv("BRAIN_ENV", "pilot")

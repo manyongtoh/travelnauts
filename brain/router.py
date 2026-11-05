@@ -15,8 +15,8 @@ import os
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .db import ModelCall, Setting
 from .clock import utcnow
+from .db import ModelCall, Setting
 
 TASK_TIER = {
     "triage": "small", "followup": "small", "partner_request": "small", "partner_chase": "small",

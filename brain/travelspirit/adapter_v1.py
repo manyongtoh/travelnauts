@@ -21,7 +21,7 @@ def id_map(ts_id: str | int, kind: str) -> str:
 def to_mail(r: dict) -> dict:
     return {
         "id": id_map(r["MessageId"], "mail"),
-        "received_at": datetime.fromisoformat(r["ReceivedDateTime"].replace("Z", "+00:00")).replace(tzinfo=None).isoformat(),
+        "received_at": datetime.fromisoformat(r["ReceivedDateTime"]).replace(tzinfo=None).isoformat(),
         "sender": r["From"]["Address"],
         "subject": r.get("Subject") or "",
         "body": r.get("BodyText") or "",

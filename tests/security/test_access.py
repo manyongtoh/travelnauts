@@ -1,11 +1,11 @@
 """Security tests against the API: who can reach what, and what an attacker gets."""
-from brain.clock import utcnow
 import time
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from brain.clock import utcnow
 from brain.db import Draft, Employee, Mail, TripRequest
 from brain.tenant import tenant
 
@@ -212,6 +212,7 @@ class _JWKS:
 def test_entra_mode_rejects_forged_and_expired_tokens(world, monkeypatch):
     import jwt
     from cryptography.hazmat.primitives.asymmetric import rsa
+
     import brain.api.app as appmod
     from brain.identity import EntraConfig, verify_entra_token
     key, other = (rsa.generate_private_key(public_exponent=65537, key_size=2048) for _ in range(2))

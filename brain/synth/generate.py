@@ -8,11 +8,31 @@ from datetime import date, timedelta
 from sqlalchemy import select
 
 from .. import db
-from ..db import (Draft, Employee, Family, KnowledgeItem, Mail, Partner, PartnerRequest,
-                  PastProposal, PriceItem, Team, TripRequest)
-from .world import BACK_OFFICE, CITIES, DESTINATIONS, FIRST_NAMES, STAFF, SURNAMES, TEAMS, WISHES
 from ..clock import utcnow
+from ..db import (
+    Draft,
+    Employee,
+    Family,
+    KnowledgeItem,
+    Mail,
+    Partner,
+    PartnerRequest,
+    PastProposal,
+    PriceItem,
+    Team,
+    TripRequest,
+)
 from ..tenant import tenant
+from .world import (
+    BACK_OFFICE,
+    CITIES,
+    DESTINATIONS,
+    FIRST_NAMES,
+    STAFF,
+    SURNAMES,
+    TEAMS,
+    WISHES,
+)
 
 MONTHS = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober",
           "november", "december"]
@@ -445,8 +465,9 @@ def build(seed: int = 42, n_families: int = 200, hard: bool = True) -> dict:
             if item.roles is None:
                 item.roles = ["specialist", "back_office", "team_lead", "content"]
         s.commit()
-        from ..knowledge import vault
         import shutil
+
+        from ..knowledge import vault
         shutil.rmtree(vault.vault_dir(), ignore_errors=True)
         counts["vault_notes"] = vault.export_from_db(s)
         counts["reindex"] = vault.reindex(s)

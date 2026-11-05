@@ -3,8 +3,9 @@ from tests.security.test_xss_browser import server  # noqa: F401
 
 
 def test_remove_access_needs_a_second_click(server):  # noqa: F811
-    from playwright.sync_api import sync_playwright
     import sqlite3
+
+    from playwright.sync_api import sync_playwright
     base, env = server
     con = sqlite3.connect(env["BRAIN_DATABASE_URL"].removeprefix("sqlite:///"))
     with sync_playwright() as pw:

@@ -14,11 +14,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import Draft, Employee, PriceItem, TripRequest
-from ..tenant import tenant
 from ..guardrails import check_output, fix_dashes
 from ..identity import agent
 from ..synth.generate import route_for
 from ..synth.world import DESTINATIONS
+from ..tenant import tenant
 from ..toolserver import server
 from .common import audit, run_step
 
@@ -55,7 +55,7 @@ def avoid_weak_partners(s: Session, destination: str, route: list[dict]) -> list
     """Swap a hotel that measurably lets families down (complaints, or rarely answers) for another at the same stop."""
     from ..db import Partner
     from ..partner_scores import scores
-    weak = lambda p: p is not None and (sc := scores(p))["measured"] and (sc["complaints"] >= 2 or sc["reliability"] < 0.5)  # noqa: E731
+    weak = lambda p: p is not None and (sc := scores(p))["measured"] and (sc["complaints"] >= 2 or sc["reliability"] < 0.5)
     hotels = s.scalars(select(PriceItem).where(PriceItem.destination == destination, PriceItem.kind == "hotel")).all()
     for r in route:
         if weak(s.scalars(select(Partner).where(Partner.name == r["hotel"])).first()):

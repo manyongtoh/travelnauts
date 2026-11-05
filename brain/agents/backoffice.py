@@ -15,17 +15,16 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..clock import today as clock_today
+from ..clock import utcnow
 from ..db import Draft, InvoiceCheck, Mail, PartnerRequest, Setting, TripRequest
 from ..files import files_dir
 from ..identity import agent
 from ..synth.world import DESTINATIONS
+from ..tenant import tenant
 from ..toolserver import server
 from .change import latest_version
 from .common import audit, run_step
-from ..tenant import tenant
-from ..clock import utcnow
-from ..clock import today as clock_today
-
 
 # Invoices ------------------------------------------------------------------------------------
 
@@ -214,7 +213,7 @@ def booking_check(s: Session) -> dict:
                 missing.append("no proof of travel insurance")
             if not t["passports_checked"]:
                 missing.append("passport names not checked against the booking")
-            has = lambda kind: s.scalars(select(Draft).where(Draft.request_id == t["id"], Draft.kind == kind)).first()  # noqa: E731
+            has = lambda kind, t=t: s.scalars(select(Draft).where(Draft.request_id == t["id"], Draft.kind == kind)).first()
             to_go = (dd - clock_today()).days if dd else None
             from ..jobs import enqueue, pending
             # extras only while there is time to add them (more than three weeks out)

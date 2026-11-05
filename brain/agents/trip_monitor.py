@@ -9,13 +9,13 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..clock import utcnow
 from ..db import Draft, Employee
-from ..tenant import tenant
 from ..identity import agent
 from ..synth.world import DESTINATIONS
+from ..tenant import tenant
 from ..toolserver import server
 from .common import audit, run_step
-from ..clock import utcnow
 
 ME = agent("trip_monitor")
 
@@ -65,6 +65,6 @@ def run(s: Session, now: datetime | None = None) -> dict:
 
 def flight_fields(f: dict) -> dict:
     """TravelSpirit flight rows differ per export; take the usual names and never fail on a missing one."""
-    g = lambda *ks: next((f[k] for k in ks if f.get(k)), None)  # noqa: E731
+    g = lambda *ks: next((f[k] for k in ks if f.get(k)), None)
     return {"number": g("number", "flight", "flight_number", "FlightNumber"), "date": g("date", "depart_date", "Date"),
             "from": g("from", "origin", "From") or "?", "to": g("to", "destination", "To") or "?"}

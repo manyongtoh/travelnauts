@@ -31,6 +31,7 @@ def _time(fn, *a):
 
 def run(mails: int = 30, proposals: int = 4, complaints: int = 3, replies: int = 4, seed: int = 42) -> dict:
     import os
+
     from ..agents import partner_desk, proposal, sales, triage
     build(seed, n_families=80, hard=True)
     rng = random.Random(seed)
@@ -131,7 +132,7 @@ def where() -> str:
 
 
 def to_markdown(r: dict) -> str:
-    t = lambda k: r.get(k, {})  # noqa: E731
+    t = lambda k: r.get(k, {})
     lines = [f"# Model check: {r['model_small']} (small) / {r['model_large']} (large)", "",
              f"A sample of the bench ({where()}). Synthetic data. Compare with the stand-in in docs/test-reports.", "",
              "| Check | Result |", "|---|---|"]

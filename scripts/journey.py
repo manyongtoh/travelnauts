@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 from datetime import datetime, timedelta
 
 os.environ.setdefault("BRAIN_DATABASE_URL", "sqlite:////tmp/journey.db")
@@ -15,11 +16,11 @@ os.environ.setdefault("BRAIN_VAULT", "/tmp/journey-vault")
 os.environ.setdefault("BRAIN_FILES", "/tmp/journey-files")
 os.environ["PYDANTIC_AI_NO_BANNER"] = "1"
 
-from fastapi.testclient import TestClient  # noqa: E402
-from sqlalchemy import select  # noqa: E402
+from fastapi.testclient import TestClient
+from sqlalchemy import select
 
-from brain import clock, db, jobs  # noqa: E402
-from brain.db import Draft, Employee, Job, Mail, TripRequest  # noqa: E402
+from brain import clock, db, jobs
+from brain.db import Draft, Employee, Job, Mail, TripRequest
 
 T0 = datetime(2026, 11, 9, 8, 0)
 log: list[dict] = []
@@ -69,7 +70,6 @@ def main():
     with db.session() as s:
         es = s.scalars(select(Employee)).all()
         bo = next(e.id for e in es if e.role == "back_office")
-        admin = next(e.id for e in es if e.role == "admin")
         # a family we have never heard of, writing from their own address: no family id, like real mail
         for old in s.scalars(select(Mail).where(Mail.status == "new")).all():
             old.status = "triaged"  # an empty inbox, so this journey is the only work
@@ -213,7 +213,7 @@ def main():
     with db.session() as s:
         note("summary", "jobs failed", n=s.query(Job).filter(Job.status == "failed").count())
     if __name__ == "__main__":
-        json.dump(log, open("/tmp/journey.json", "w"), indent=1, default=str)
+        pathlib.Path("/tmp/journey.json").write_text(json.dumps(log, indent=1, default=str))
     clock.reset()
     return log
 

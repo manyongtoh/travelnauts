@@ -10,7 +10,12 @@ from __future__ import annotations
 import json
 import re
 
-from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart, UserPromptPart
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelResponse,
+    ToolCallPart,
+    UserPromptPart,
+)
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from .synth.world import DESTINATIONS, WISHES
@@ -287,7 +292,7 @@ def _first(ctx):
 
 
 def _eur(x):
-    return f"{int(round(x)):,}".replace(",", ".")
+    return f"{round(x):,}".replace(",", ".")
 
 
 def alternatives(ctx: dict) -> dict:
@@ -357,10 +362,10 @@ def call_notes(ctx: dict) -> dict:
 
 def invoice_extract(ctx: dict) -> dict:
     t = ctx["mail"]["subject"] + "\n" + ctx["mail"]["body"] + "\n" + "\n".join(a["text"] for a in ctx["mail"].get("attachments", []))
-    no = re.search(r"\bINV-[\w-]+", t) or re.search(r"(?:factuur|invoice)\s*(?:nr\.?|nummer|no\.?|number|#)?\s*([\d][\w-]+)", t, re.I)
-    ref = re.search(rf"{tenant().ref_re}-R\d{{2,}}", t, re.I)
+    no = re.search(r"\bINV-[\w-]+", t) or re.search(r"(?:factuur|invoice)\s*(?:nr\.?|nummer|no\.?|number|#)?\s*([\d][\w-]+)", t, re.IGNORECASE)
+    ref = re.search(rf"{tenant().ref_re}-R\d{{2,}}", t, re.IGNORECASE)
     amt = re.search(r"(?:EUR|€)\s?([\d.,]+)", t)
-    days = re.search(r"within (\d+) days|binnen (\d+) dagen", t, re.I)
+    days = re.search(r"within (\d+) days|binnen (\d+) dagen", t, re.IGNORECASE)
     from .money import parse_amount
     amount = parse_amount(amt.group(1)) if amt else None
     return {"invoice_no": (no.group(1) if no.re.groups else no.group(0)) if no else None, "reference": ref.group(0).upper() if ref else None, "amount_eur": amount,

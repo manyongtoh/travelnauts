@@ -28,21 +28,21 @@ def answer(world, prs, available=True):
 
 def test_warn_sends_with_a_caveat_while_partners_check(world, monkeypatch):
     monkeypatch.setenv("BRAIN_AVAILABILITY_RULE", "warn")
-    tr, d, prs = setup(world)
+    _, d, _ = setup(world)
     out = approve_draft(world, d.id, "test")
     assert out.status == "approved" and out.final_body.endswith(CAVEAT)
 
 
 def test_warn_adds_no_caveat_once_everything_is_confirmed(world, monkeypatch):
     monkeypatch.setenv("BRAIN_AVAILABILITY_RULE", "warn")
-    tr, d, prs = setup(world)
+    _, d, prs = setup(world)
     answer(world, prs)
     assert CAVEAT not in approve_draft(world, d.id, "test").final_body
 
 
 def test_block_waits_for_every_partner(world, monkeypatch):
     monkeypatch.setenv("BRAIN_AVAILABILITY_RULE", "block")
-    tr, d, prs = setup(world)
+    _, d, prs = setup(world)
     with pytest.raises(BlockedByCheck, match="Wait until all partners confirm"):
         approve_draft(world, d.id, "test")
     answer(world, prs[:-1])
@@ -63,7 +63,7 @@ def test_block_asks_to_check_availability_first(world, monkeypatch):
 @pytest.mark.parametrize("rule", ["warn", "block", "off"])
 def test_a_partner_that_said_no_always_stops_the_proposal(world, monkeypatch, rule):
     monkeypatch.setenv("BRAIN_AVAILABILITY_RULE", rule)
-    tr, d, prs = setup(world)
+    _, d, prs = setup(world)
     answer(world, prs)
     prs[0].offer = {"available": False}
     world.commit()

@@ -12,9 +12,18 @@ from sqlalchemy.orm import Session
 
 from .agents.followup import due_followups
 from .agents.partner_desk import due_chases, mark_sent
-from .db import AgentRun, Draft, KnowledgeItem, Mail, Partner, PartnerRequest, Team, TripRequest
-from .knowledge.store import KnowledgeBase
 from .clock import utcnow
+from .db import (
+    AgentRun,
+    Draft,
+    KnowledgeItem,
+    Mail,
+    Partner,
+    PartnerRequest,
+    Team,
+    TripRequest,
+)
+from .knowledge.store import KnowledgeBase
 
 HEAVY_REWRITE = 0.5  # more than half changed: the brain was missing something
 
@@ -30,7 +39,7 @@ class BlockedByCheck(ValueError):
 CUSTOMER_KINDS = {"followup", "extras", "next_trip", "complaint_reply", "trip_alert", "roadbook", "alternatives", "change_reply", "answer"}
 MONEY = ("terugbetal", "refund", "compensatie", "vergoed", "korting", "geld terug", "compensation", "discount", "gratis", "for free")
 BOOKED_CLAIM = re.compile(r"\b(boeking|reis)\s+(is\s+)?(nu\s+)?(definitief\s+)?bevestigd|\bbooking\s+(is\s+)?confirmed|"
-                          r"\bwe\s+hebben\s+(jullie\s+reis\s+|alles\s+)?geboekt", re.I)
+                          r"\bwe\s+hebben\s+(jullie\s+reis\s+|alles\s+)?geboekt", re.IGNORECASE)
 
 
 def promise_problems(s: Session, d: Draft, text: str, team_lead: bool = False) -> list[str]:

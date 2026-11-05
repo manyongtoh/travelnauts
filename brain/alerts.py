@@ -19,9 +19,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from . import auditchain
-from .tenant import tenant
 from .clock import utcnow
 from .db import AgentRun, Employee, Job, ModelCall, Setting, TripRequest
+from .tenant import tenant
 
 log = logging.getLogger("brain.alerts")
 

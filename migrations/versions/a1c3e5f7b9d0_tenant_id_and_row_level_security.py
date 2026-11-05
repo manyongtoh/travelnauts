@@ -12,9 +12,8 @@ Revision ID: a1c3e5f7b9d0
 Revises: cfc1df687704
 Create Date: 2026-11-05 17:20:00
 """
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = 'a1c3e5f7b9d0'
 down_revision = 'cfc1df687704'

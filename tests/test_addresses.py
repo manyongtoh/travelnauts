@@ -7,11 +7,11 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from brain.tenant import tenant
 from brain.agents import triage
 from brain.agents.triage import normalise_address, original_sender, resolve_family
 from brain.clock import utcnow
 from brain.db import AuditEntry, Employee, Family, FamilyAddress, Mail, TripRequest
+from brain.tenant import tenant
 
 NEW = SimpleNamespace(category="new_request", adults=2, child_ages=[7, 10])
 CHANGE = SimpleNamespace(category="change", adults=None, child_ages=[])
@@ -31,7 +31,7 @@ def test_the_same_address_written_differently_is_the_same_family(world):
 
 
 def test_the_other_parent_writing_from_their_own_address_is_not_linked_by_itself(world):
-    fam, tr = booked_family(world)
+    fam, _ = booked_family(world)
     body = f"We willen graag een nacht langer blijven.\n\nGroet,\nKoen {fam.surname}"
     got, notes = resolve_family(world, "koen.partner@gmail.example", CHANGE, body, "Wijziging reis")
     assert got is None

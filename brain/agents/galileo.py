@@ -13,10 +13,10 @@ from datetime import date
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from ..clock import today as clock_today
 from ..db import Draft, Family, TripRequest
 from ..synth.world import DESTINATIONS
 from .common import audit, run_step
-from ..clock import today as clock_today
 
 MONTHS_NL = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober",
              "november", "december"]

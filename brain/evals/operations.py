@@ -25,6 +25,7 @@ from collections import Counter
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
+
 from ..tenant import tenant
 
 
@@ -44,8 +45,20 @@ def _pg_restart(url: str) -> str:
 def run(days: int = 14, seed: int = 7, mails_per_day: int = 25) -> dict:
     from .. import auditchain, clock, db, jobs
     from ..agents import partner_desk, proposal
-    from ..db import (AgentRun, Draft, Employee, Family, Job, KnowledgeItem, Mail, ModelCall, PartnerRequest, Setting,
-                      ToolCall, TripRequest)
+    from ..db import (
+        AgentRun,
+        Draft,
+        Employee,
+        Family,
+        Job,
+        KnowledgeItem,
+        Mail,
+        ModelCall,
+        PartnerRequest,
+        Setting,
+        ToolCall,
+        TripRequest,
+    )
     from ..knowledge import vault
     from ..synth.generate import build
     from ..synth.world import DESTINATIONS
@@ -233,6 +246,7 @@ def run(days: int = 14, seed: int = 7, mails_per_day: int = 25) -> dict:
             events.append("database " + _pg_restart(url) + " at 11:00")
             clock.set_now(day.replace(hour=11))
             from fastapi.testclient import TestClient
+
             from ..api.app import app
             checks["ready_after_restart"] = TestClient(app).get("/readyz").status_code
         if n == 8:  # budget runs out
@@ -251,6 +265,7 @@ def run(days: int = 14, seed: int = 7, mails_per_day: int = 25) -> dict:
             with db.session() as s:
                 e = s.scalars(select(Employee).where(Employee.role == "specialist", Employee.team_id == "asia")).first()
             from fastapi.testclient import TestClient
+
             from ..api.app import app
             r = TestClient(app).post(f"/api/admin/users/{e.id}", json={"active": False}, headers={"X-Brain-User": "myt-beheer"}).json()
             checks["reassign_list_given_to_admin"] = len(r.get("open_requests_to_reassign", []))
@@ -260,8 +275,9 @@ def run(days: int = 14, seed: int = 7, mails_per_day: int = 25) -> dict:
             events.append(f"{e.name} left; access removed")
         if n == 11:  # the team lead reassigns the leaver's requests from Team lead > Insight
             from fastapi.testclient import TestClient
-            from ..api.app import app
+
             from ..alerts import OPEN_REQUEST_STATUSES
+            from ..api.app import app
             with db.session() as s:
                 gone = {e.id for e in s.scalars(select(Employee).where(Employee.active.is_(False))).all()}
                 todo = s.scalars(select(TripRequest).where(TripRequest.specialist_id.in_(gone),

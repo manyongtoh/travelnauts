@@ -16,12 +16,20 @@ os.environ.setdefault("BRAIN_VAULT", "/tmp/journey-bo-vault")
 os.environ.setdefault("BRAIN_FILES", "/tmp/journey-bo-files")
 os.environ["PYDANTIC_AI_NO_BANNER"] = "1"
 
-from fastapi.testclient import TestClient  # noqa: E402
-from sqlalchemy import select  # noqa: E402
+from fastapi.testclient import TestClient
+from sqlalchemy import select
 
+from brain import clock, db, jobs
+from brain.db import (
+    Draft,
+    Employee,
+    Job,
+    Mail,
+    Partner,
+    PartnerRequest,
+    TripRequest,
+)
 from brain.tenant import tenant
-from brain import clock, db, jobs  # noqa: E402
-from brain.db import Draft, Employee, Job, Mail, Partner, PartnerRequest, TripRequest  # noqa: E402
 
 T0 = datetime(2026, 11, 9, 8, 0)
 log: list[dict] = []
@@ -56,7 +64,7 @@ def main():
     build(seed=12, n_families=40, hard=False)
     from brain.api.app import app
     c = TestClient(app, raise_server_exceptions=False)
-    H = lambda uid: {"X-Brain-User": uid}  # noqa: E731
+    H = lambda uid: {"X-Brain-User": uid}
     with db.session() as s:
         for m in s.scalars(select(Mail).where(Mail.status == "new")).all():
             m.status = "done"  # a quiet inbox: only this journey's mail
@@ -95,8 +103,8 @@ def main():
     at(T0 + timedelta(days=1, hours=1))
     replies = []
     with db.session() as s:
-        (pa_id, pa), (pb_id, pb), (pc_id, pc) = parts[0], parts[1], parts[2]
-        dom = lambda p: p.email.split("@")[1]  # noqa: E731
+        (_, pa), (_, pb), (_, pc) = parts[0], parts[1], parts[2]
+        dom = lambda p: p.email.split("@")[1]
         replies = [
             ("bo-r1", f"reservations@{dom(pa)}", f"RE: Availability request {ref}",
              f"Dear {tenant().short_name},\n\nYes, we can confirm availability for {ref}. Total price EUR 1.240 for the family room.\n\nKind regards,\nReservations"),

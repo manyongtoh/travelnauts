@@ -11,10 +11,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import Draft, Employee, Family, Mail, TripRequest
-from ..tenant import tenant
 from ..identity import agent
-from ..toolserver import server
 from ..synth.world import DESTINATIONS
+from ..tenant import tenant
+from ..toolserver import server
 from .common import audit, run_step
 
 ME = agent("change")

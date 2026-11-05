@@ -10,9 +10,8 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .db import PriceItem
 from .clock import today as clock_today
-
+from .db import PriceItem
 
 
 def margin(kind: str) -> float:

@@ -19,15 +19,15 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..clock import today as clock_today
 from ..db import Draft, Employee, Mail, TripRequest
-from ..tenant import tenant
 from ..guardrails import check_output
 from ..identity import agent
 from ..synth.world import DESTINATIONS
+from ..tenant import tenant
 from ..toolserver import server
 from .change import latest_version
 from .common import audit, run_step
-from ..clock import today as clock_today
 
 
 class MailText(BaseModel):

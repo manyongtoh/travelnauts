@@ -5,6 +5,7 @@ from tests.security.test_xss_browser import server  # noqa: F401
 def test_portal_on_a_phone_and_the_panel(server, tmp_path):  # noqa: F811
     from playwright.sync_api import sync_playwright
     from sqlalchemy import select
+
     from brain import db, portal
     from brain.agents import proposal
     from brain.db import Partner, PartnerRequest, TripRequest

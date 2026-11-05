@@ -19,8 +19,8 @@ from pathlib import Path
 from . import db
 from .anonymise import Refused, anonymise_mail, anonymise_relation
 from .config import get_settings
-from .tenant import tenant
 from .db import Family, Mail
+from .tenant import tenant
 
 
 def ref_for(source_id: str) -> str:

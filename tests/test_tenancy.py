@@ -55,9 +55,8 @@ def test_new_rows_carry_the_current_tenant(world):
         world.add(Job(kind="noop"))
         world.commit()
     assert world.scalars(select(Job).where(Job.kind == "noop")).first() is None
-    with pytest.raises(ValueError):
-        with as_tenant("Not A Slug"):
-            pass
+    with pytest.raises(ValueError), as_tenant("Not A Slug"):
+        pass
 
 
 def test_every_task_starts_at_autonomy_level_one(world):

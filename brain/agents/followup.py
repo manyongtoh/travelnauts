@@ -7,14 +7,14 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..clock import utcnow
 from ..config import get_settings
-from ..tenant import tenant
 from ..db import Draft, Employee, Family, TripRequest
 from ..identity import agent
-from ..toolserver import server
 from ..synth.world import DESTINATIONS
+from ..tenant import tenant
+from ..toolserver import server
 from .common import audit, run_step
-from ..clock import utcnow
 
 ME = agent("follow_up")
 

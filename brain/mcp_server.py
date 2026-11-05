@@ -14,8 +14,8 @@ import os
 from mcp.server.mcpserver import MCPServer
 
 from . import db
-from .tenant import tenant
 from .identity import AGENTS, agent
+from .tenant import tenant
 from .toolserver import server as tools
 
 

@@ -9,12 +9,12 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..clock import utcnow
 from ..config import get_settings
 from ..db import Draft, Family, Partner, PartnerRequest, TripRequest
 from ..synth.world import DESTINATIONS
-from .common import audit, run_step
 from ..tenant import tenant
-from ..clock import utcnow
+from .common import audit, run_step
 
 
 class PartnerMail(BaseModel):
@@ -189,7 +189,7 @@ READ_INSTRUCTIONS = (
 def read_reply(s: Session, mail_id: str) -> dict:
     """A partner answered: record the offer on the right request so the back office can compare."""
     from ..db import Mail
-    from ..identity import agent  # noqa: F811
+    from ..identity import agent
     from ..toolserver import server
     me = agent("partner_desk")
     if s.get(Mail, mail_id).status == "done":

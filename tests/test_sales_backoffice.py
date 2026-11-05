@@ -1,4 +1,3 @@
-from brain.clock import utcnow
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -6,7 +5,16 @@ from sqlalchemy import select
 
 from brain import jobs
 from brain.agents import backoffice, proposal, sales, triage
-from brain.db import Draft, Family, InvoiceCheck, Mail, PartnerRequest, PriceItem, TripRequest
+from brain.clock import utcnow
+from brain.db import (
+    Draft,
+    Family,
+    InvoiceCheck,
+    Mail,
+    PartnerRequest,
+    PriceItem,
+    TripRequest,
+)
 from brain.files import pdf_text
 from brain.guardrails import _amounts
 from brain.tenant import tenant

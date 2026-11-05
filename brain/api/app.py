@@ -13,19 +13,46 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from ..tenant import tenant
 from .. import auditchain, autosend, db, jobs
 from ..agents import followup, galileo, knowledge_desk, partner_desk, proposal, triage
+from ..clock import utcnow
 from ..config import get_settings
-from ..db import (AgentRun, AuditEntry, Draft, Employee, Family, Job, KnowledgeItem, Mail, ModelCall, Setting, ToolCall,
-                  PartnerRequest, TripRequest, as_dict)
-from ..identity import (ROLES, EntraConfig, Principal, auth_mode, from_employee, verify_entra_token)
+from ..db import (
+    AgentRun,
+    AuditEntry,
+    Draft,
+    Employee,
+    Family,
+    Job,
+    KnowledgeItem,
+    Mail,
+    ModelCall,
+    PartnerRequest,
+    Setting,
+    ToolCall,
+    TripRequest,
+    as_dict,
+)
+from ..identity import (
+    ROLES,
+    EntraConfig,
+    Principal,
+    auth_mode,
+    from_employee,
+    verify_entra_token,
+)
 from ..knowledge.store import KnowledgeBase
 from ..router import daily_cap, spent_today
 from ..synth.world import DESTINATIONS
+from ..tenant import tenant
 from ..toolserver import server as toolserver
-from ..workflow import BlockedByCheck, approve_draft, backoffice_overview, reject_draft, teamlead_overview
-from ..clock import utcnow
+from ..workflow import (
+    BlockedByCheck,
+    approve_draft,
+    backoffice_overview,
+    reject_draft,
+    teamlead_overview,
+)
 
 STATIC = Path(__file__).parent / "static"
 CUSTOMER_DRAFTS = {"proposal", "change", "followup", "answer", "trip_alert", "galileo", "alternatives", "extras",
@@ -106,7 +133,7 @@ async def limits(request: Request, call_next):
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"  # customer data never sits in a browser or proxy cache
         return response
-    except Exception as e:  # noqa: BLE001  never show a stack trace to a user
+    except Exception as e:
         import logging
         logging.getLogger("brain").exception("unhandled")
         return JSONResponse({"detail": f"Something went wrong ({type(e).__name__}). It is logged; try again or ask the admin."},
@@ -427,6 +454,7 @@ def make_roadbook(rid: str, user: Principal = Depends(current_user)):
 def get_file(kind: str, name: str, user: Principal = Depends(current_user)):
     """Roadbooks, vouchers and attachments, only for people who may see the trip."""
     from fastapi.responses import FileResponse
+
     from ..files import files_dir
     if kind not in ("roadbooks", "vouchers", "attachments") or "/" in name or ".." in name:
         _404("file")
@@ -727,7 +755,7 @@ class Question(BaseModel):
 @app.post("/api/ask")
 def ask(q: Question, user: Principal = Depends(need("knowledge.search"))):
     with db.session() as s:
-        return knowledge_desk.ask(s, q.question, q.destination, q.team_id or user.team_id, role=sorted(user.roles)[0])
+        return knowledge_desk.ask(s, q.question, q.destination, q.team_id or user.team_id, role=min(user.roles))
 
 
 @app.get("/api/knowledge")

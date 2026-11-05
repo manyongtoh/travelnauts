@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import re
 
-AMOUNT = re.compile(r"(?:€|\beur(?:o|os)?\b)\s?(\d[\d.,]*\d|\d)(?:,-)?|(\d[\d.,]*\d|\d)(?:,-)?\s?(?:€|\beur(?:o|os)?\b)", re.I)
+AMOUNT = re.compile(r"(?:€|\beur(?:o|os)?\b)\s?(\d[\d.,]*\d|\d)(?:,-)?|(\d[\d.,]*\d|\d)(?:,-)?\s?(?:€|\beur(?:o|os)?\b)", re.IGNORECASE)
 
 
 def parse_amount(raw: str) -> float | None:

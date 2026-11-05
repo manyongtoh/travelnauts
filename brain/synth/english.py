@@ -8,10 +8,11 @@ injection rules, sign-off names and routing.
 ATTACKS are English injection attempts phrased differently from the ones the rules were written for.
 """
 from __future__ import annotations
-from ..tenant import fill_company
 
 import random
 from datetime import timedelta
+
+from ..tenant import fill_company
 
 FAMILY_MAILS = [
     # (category, subject, body, truth)

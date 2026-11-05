@@ -18,7 +18,7 @@ from sklearn.preprocessing import normalize
 class LocalEmbedder:
     name = "local-char-lsa"
 
-    def fit(self, docs: list[str]) -> "LocalEmbedder":
+    def fit(self, docs: list[str]) -> LocalEmbedder:
         self.vec = TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 5), sublinear_tf=True, lowercase=True)
         x = self.vec.fit_transform(docs)
         dims = max(2, min(96, x.shape[0] - 1, x.shape[1] - 1))
@@ -44,7 +44,7 @@ class AzureEmbedder:  # pragma: no cover - needs Azure
         r = self.client.embeddings.create(model=self.deployment, input=texts)
         return normalize(np.array([d.embedding for d in r.data]))
 
-    def fit(self, docs: list[str]) -> "AzureEmbedder":
+    def fit(self, docs: list[str]) -> AzureEmbedder:
         self.docs = self._embed(docs)
         return self
 
