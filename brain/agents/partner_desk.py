@@ -68,7 +68,7 @@ def current_requests(s: Session, request_id: str) -> list[PartnerRequest]:
     v = latest_version(s, request_id)
     if v is None:
         return prs
-    hotels = {r["hotel"] for r in v.data.get("route", [])}
+    hotels = {r.get("hotel") for r in v.data.get("route", []) if r.get("hotel")}
     out = []
     for pr in prs:
         p = s.get(Partner, pr.partner_id)

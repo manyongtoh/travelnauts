@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import re
+from datetime import timedelta
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -161,6 +162,25 @@ def triage_mail(s: Session, mail_id: str) -> dict:
                 out["new_relation"] = fam.id.startswith("f-new-")
             elif res.category in ("new_request", "change", "complaint", "question"):
                 out["unknown_sender"] = True  # a person links it to the right family, helped by the candidates
+        if m.family_id and res.category in ("question", "other", "complaint", "change"):
+            # A family on the road is never a normal question: whatever the model said, link the trip that is
+            # running now, mark it urgent, and treat distress as a complaint so the reply and the team lead come first.
+            now_trip = travelling_trip(s, m.family_id, m.received_at.date())
+            if now_trip is not None:
+                out.update(while_travelling=True, urgent=True, request_id=now_trip.id, team_id=now_trip.team_id,
+                           specialist_id=now_trip.specialist_id)
+                if res.category in ("question", "other") and DISTRESS.search(f"{mail['subject']} {mail['body']}"):
+                    out["category"] = res.category = "complaint"
+                    out["model_category"] = "question"
+            elif res.category in ("question", "other") and asks_for_change(s, m.family_id, f"{mail['subject']} {mail['body']}"):
+                # names a stop of their own proposal together with a change ("a night less in Bangkok"): that is a
+                # change request, whatever the model said; otherwise it would get an answer instead of a new version
+                out["model_category"] = res.category
+                out["category"] = res.category = "change"
+            elif res.category == "question" and not out.get("request_id"):
+                open_trip = latest_open_trip(s, m.family_id)  # so the answer moves with the trip when it is reassigned
+                if open_trip is not None:
+                    out.update(request_id=open_trip.id, specialist_id=open_trip.specialist_id)
         if res.category == "new_request" and m.family_id and res.child_ages:
             from ..db import Family as _F
             from ..family import set_ages
@@ -200,6 +220,8 @@ def triage_mail(s: Session, mail_id: str) -> dict:
             enqueue(s, "invoice", {"mail_id": m.id})
         if res.category == "question" and m.family_id:
             enqueue(s, "answer_question", {"mail_id": m.id})
+        if res.category == "change" and out.get("request_id") and not out.get("ambiguous_trip"):
+            enqueue(s, "change", {"mail_id": m.id})  # the new version is ready when the specialist looks
         if res.category == "complaint" and m.family_id:
             enqueue(s, "complaint", {"mail_id": m.id})
         if m.family_id and res.category not in ("partner_reply", "invoice"):
@@ -214,6 +236,44 @@ def triage_mail(s: Session, mail_id: str) -> dict:
             withdraw_stale_drafts(s)
         box["output"] = f"{res.category} {res.destination or ''} team={out['team_id']}{' escalated' if escalated else ''}"
     return out
+
+
+DISTRESS = re.compile(r"vliegveld|luchthaven|gestrand|niemand (neemt|is|komt)|is er niet|niet (opgehaald|gekomen|komen opdagen)|"
+                      r"kwijt|gestolen|ziekenhuis|ongeluk|noodgeval|dringend|spoed|\bhelp\b|wat moeten we doen|!!|"
+                      r"airport|stranded|stuck|nobody|emergency|hospital|accident|urgent|stolen|lost our", re.I)
+
+
+def travelling_trip(s: Session, family_id: str, on) -> TripRequest | None:
+    """The booked trip this family is on right now (departure up to the last day), if any."""
+    for t in s.scalars(select(TripRequest).where(TripRequest.family_id == family_id, TripRequest.status == "booked",
+                                                  TripRequest.depart_date.is_not(None))).all():
+        if t.depart_date <= on <= t.depart_date + timedelta(days=(t.days or 21) + 1):
+            return t
+    return None
+
+
+CHANGE_WORDS = re.compile(r"\b(nacht(en)?|dag(en)?|night|nights|days?)\s+(langer|korter|minder|extra|meer|erbij|longer|shorter|less|fewer|more)\b|"
+                          r"\b(overslaan|eruit|schrappen|in plaats van|ruilen|omwisselen|toevoegen|skip|instead of|swap)\b", re.I)
+
+
+def asks_for_change(s: Session, family_id: str, text: str) -> bool:
+    from .change import latest_version
+    if not CHANGE_WORDS.search(text):
+        return False
+    low = text.lower()
+    for t in s.scalars(select(TripRequest).where(TripRequest.family_id == family_id,
+                                                  TripRequest.status.in_(["proposal_sent", "change_requested"]))).all():
+        v = latest_version(s, t.id)
+        if v and any((r.get("stop") or "").lower() in low for r in (v.data or {}).get("route", []) if r.get("stop")):
+            return True
+    return False
+
+
+def latest_open_trip(s: Session, family_id: str) -> TripRequest | None:
+    order = {"change_requested": 0, "proposal_sent": 1, "proposal_draft": 2, "new": 3, "booked": 4}
+    trips = [t for t in s.scalars(select(TripRequest).where(TripRequest.family_id == family_id)).all() if t.status in order]
+    trips.sort(key=lambda t: (order[t.status], -t.created_at.timestamp()))
+    return trips[0] if trips else None
 
 
 def triage_inbox(s: Session, limit: int | None = None) -> list[dict]:

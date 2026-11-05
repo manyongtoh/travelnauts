@@ -51,6 +51,7 @@ SCHEDULE: dict[str, tuple[str, int | None]] = {
     "learning": ("maintenance", 24 * 60),
     "partner_scores": ("supplier_watcher", 24 * 60),
     "answer_question": ("knowledge_desk", None),
+    "change": ("change", None),
 }
 
 

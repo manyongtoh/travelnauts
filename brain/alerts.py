@@ -57,6 +57,16 @@ def checks(s: Session, now: datetime | None = None) -> list[Alert]:
                          f"Entry {chain['broken_at']} was changed or removed outside the application.",
                          "Do not repair. Export the database and tell the privacy contact today (runbook: audit chain)."))
 
+    from .db import Draft
+    on_road = [d for d in s.scalars(select(Draft).where(Draft.kind == "complaint_reply", Draft.status == "draft",
+                                                        Draft.created_at < now - timedelta(minutes=30))).all()
+               if (d.data or {}).get("while_travelling")]
+    if on_road:
+        out.append(Alert("travelling_family", CRITICAL, f"{len(on_road)} family message(s) from the road unanswered",
+                         "A family that is travelling now wrote over 30 minutes ago and the reply is not sent. Requests: "
+                         + ", ".join(sorted({d.request_id or "?" for d in on_road})),
+                         "Team lead: open Complaints, call the family on the 24/7 line, send the reply."))
+
     failed = s.scalar(select(func.count()).select_from(Job).where(Job.status == "failed")) or 0
     if failed:
         kinds = sorted({k for (k,) in s.execute(select(Job.kind).where(Job.status == "failed").limit(50))})

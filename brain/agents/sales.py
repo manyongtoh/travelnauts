@@ -116,7 +116,8 @@ def complaint(s: Session, mail_id: str) -> Draft:
     with audit(s, "complaints", mail_id, m.subject) as box:
         mail = server.call(s, me, "ts.read_mail", mail_id=mail_id)
         trips = server.call(s, me, "ts.list_trips", family_id=m.family_id) if m.family_id else []
-        trip = complained_trip(trips)
+        linked = (m.triage or {}).get("request_id")  # triage found the trip they are on right now
+        trip = next((t for t in trips if t["id"] == linked), None) or complained_trip(trips)
         fam = server.call(s, me, "ts.read_relation", family_id=m.family_id) if m.family_id else {"contact_name": ""}
         ctx = {"mail": {"subject": mail["subject"], "body": mail["body"]},
                "family": {"name": fam["contact_name"], "first_name": (fam["contact_name"] or "").split(" ")[0]},
@@ -124,13 +125,16 @@ def complaint(s: Session, mail_id: str) -> Draft:
                         "status": trip["status"]} if trip else None,
                "emergency_line": "+31 20 000 0000 (sandbox)", "specialist": _spec(s, trip) if trip else "Travelnauts"}
         out, _ = run_step(s, "complaint_reply", ComplaintAssessment, COMPLAINT_INSTRUCTIONS, ctx)
+        if (m.triage or {}).get("while_travelling"):  # the dates decide this, not the model: on the road is always high
+            out.while_travelling, out.severity = True, "high"
         promises = [w for w in MONEY if w in out.body.lower()]
         warnings = (["Antwoord belooft geld of korting: de teamleider beslist daarover"] if promises else [])
         if out.severity == "high":
             warnings.append("Hoge prioriteit: teamleider is op de hoogte gebracht")
         d = Draft(kind="complaint_reply", request_id=trip["id"] if trip else None, title=out.subject, body=out.body,
                   data={"mail_id": mail_id, "severity": out.severity, "while_travelling": out.while_travelling, "topics": out.topics,
-                        "actions": out.actions, "warnings": warnings, "team_id": (m.triage or {}).get("team_id")})
+                        "actions": out.actions, "warnings": warnings,
+                        "team_id": (s.get(TripRequest, trip["id"]).team_id if trip else None) or (m.triage or {}).get("team_id")})
         s.add(d)
         m.status = "done"
         s.commit()
