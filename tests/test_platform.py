@@ -28,7 +28,7 @@ def test_tool_server_enforces_least_privilege_and_logs(world):
 
 
 def test_customer_data_cache_is_per_caller(world):
-    a, b = agent("proposal_writer"), agent("galileo_helper")
+    a, b = agent("proposal_writer"), agent("gds_helper")
     server.call(world, a, "ts.read_relation", family_id="fam001")
     server.call(world, a, "ts.read_relation", family_id="fam001")
     server.call(world, b, "ts.read_relation", family_id="fam001")

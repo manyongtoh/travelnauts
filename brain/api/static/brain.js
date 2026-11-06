@@ -150,10 +150,10 @@ function sourcesList(sources) {
     <div><b>${esc(s.title)}</b><small>Owner ${esc(s.owner)} · review by ${esc(s.review_by)}${s.outdated ? " · past review date, check first" : ""}</small></div></li>`).join("")}</ul>`;
 }
 
-async function copyText(id) {
+async function copyText(id, msg) {
   const el = document.getElementById(id);
   const text = el.value !== undefined ? el.value : el.textContent;
-  try { await navigator.clipboard.writeText(text); toast("Copied. Paste it into TravelSpirit."); }
+  try { await navigator.clipboard.writeText(text); toast(msg || "Copied. Paste it into TravelSpirit."); }
   catch { el.select && el.select(); toast("Select and copy the text"); }
 }
 

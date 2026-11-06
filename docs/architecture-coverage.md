@@ -17,13 +17,13 @@ Every part of the tech architecture document, where it lives in the code, and it
 | Scheduled agents (nightly, hourly, daily) | `jobs.SCHEDULE` | Built |
 | Pydantic AI, fixed steps in code, typed output | `brain/agents/*` | Built |
 | Model gateway: routing by tier, fallback, budgets | `brain/router.py` (LiteLLM in Azure) | Stand-in |
-| Escalation to the large model (low confidence, complaint, failed check) | triage, proposal, Galileo | Built |
+| Escalation to the large model (low confidence, complaint, failed check) | triage, proposal, booking commands | Built |
 | Caching: prompt layers fixed, exact cache for lookups, semantic cache for internal questions only | `prompts/`, toolserver cache, `knowledge/store.py` | Built (provider prompt caching needs a real model) |
 | Calculation service with versioned price tables, traceable quotes | `brain/pricing.py` (`quote`, `price_version`) | Built |
 | TravelSpirit connector with our own contract, adapters per API version, one ID mapping | `travelspirit/client.py`, `adapter_v1.py` | Built on an assumed format; real mapping needs API docs |
 | Contract tests on recorded TravelSpirit responses | `tests/contract/` | Built (recordings are placeholders) |
 | Drafts only, switch to write into TravelSpirit per environment | `BRAIN_TRAVELSPIRIT_WRITE`, review screen with copy button | Built |
-| Galileo: commands only, never executed | `agents/galileo.py`, `galileo.write_commands` tool | Built (placeholder command formats) |
+| Booking commands only, never executed (Amadeus or Galileo) | `agents/gds.py`, `gds.write_commands` tool, Ready to book list | Built (placeholder command formats) |
 | Flight and train status, number and date only | `travel.flight_status` | Stand-in |
 
 ## Agents
@@ -37,7 +37,7 @@ Every part of the tech architecture document, where it lives in the code, and it
 | Knowledge desk | Built |
 | Customer insight | Built |
 | Follow-up | Built |
-| Galileo helper | Built |
+| Booking commands helper (Amadeus, Galileo) | Built |
 | Team insight | Built |
 | Trip monitor | Built (stand-in flight data) |
 | Change handling (not in the document, added) | Built |

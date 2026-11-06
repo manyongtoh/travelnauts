@@ -217,10 +217,10 @@ def partners_list(s: Session, destination: str | None = None) -> list[dict]:
     return [as_dict(p) for p in s.scalars(q).all()]
 
 
-@server.tool("galileo.write_commands", access="text", customer_data=False)
-def galileo_check(s: Session, commands: list[str]) -> dict:
-    """Check Galileo commands against the allowed formats. Text only: nothing is executed."""
-    from .agents.galileo import allowed
+@server.tool("gds.write_commands", access="text", customer_data=False)
+def gds_check(s: Session, commands: list[str]) -> dict:
+    """Check booking commands against the allowed formats of the client's booking system. Text only: nothing is executed."""
+    from .agents.gds import allowed
     bad = [c for c in commands if not any(p.match(c) for p in allowed())]
     return {"ok": not bad, "unknown_format": bad}
 

@@ -12,9 +12,9 @@ let reqs = [], current = null, AV = null;
 
 const app = shell({
   role: "Specialist dashboard",
-  nav: [["today", "Today"], ["trips", "All my trips"], ["ask", "Ask the brain"], ["log", "Log"]],
+  nav: [["today", "Today"], ["trips", "All my trips"], ["book", "Ready to book"], ["ask", "Ask the brain"], ["log", "Log"]],
   needs: "drafts.approve_customer",
-  onNav: v => ({today: viewToday, trips: viewTrips, ask: viewAsk, log: viewLog})[v](),
+  onNav: v => ({today: viewToday, trips: viewTrips, book: viewBook, ask: viewAsk, log: viewLog})[v](),
 });
 
 function init() {
@@ -28,6 +28,7 @@ const myName = () => ME.name;
 
 async function loadReqs() {
   reqs = await api(`/api/requests`);
+  api("/api/gds/ready").then(b => badge("book", b.items.length)).catch(() => {});
   const waiting = reqs.filter(r => ["new", "proposal_draft", "change_requested"].includes(r.status) || r.pending.length);
   const rank = r => ["trip_alert", "complaint_reply"].some(k => r.pending.includes(k)) ? 0 : r.pending.includes("answer") ? 1 : 2;
   waiting.sort((a, b) => rank(a) - rank(b));
@@ -104,10 +105,10 @@ function tags(q, f, triage) {
 function draftHtml(d) {
   const kindLabel = {alternatives: "Draft mail with alternatives", extras: "Draft mail with extras", complaint_reply: "Complaint: draft reply",
     roadbook: "Roadbook and vouchers (check before release)", next_trip: "Next-trip idea", call_notes: "Call notes",
-    proposal: "Draft travel proposal", change: "Draft reply with the changed proposal", trip_alert: "Trip alert: draft message for the family", followup: "Draft follow-up", galileo: "Galileo commands", answer: "Draft answer"}[d.kind] || d.kind;
+    proposal: "Draft travel proposal", change: "Draft reply with the changed proposal", trip_alert: "Trip alert: draft message for the family", followup: "Draft follow-up", gds: "Booking commands", answer: "Draft answer"}[d.kind] || d.kind;
   const price = d.data && d.data.price, route = d.data && d.data.route;
   const warns = [...((price && price.warnings) || []), ...((d.data && d.data.warnings) || [])];
-  const approveLabel = {galileo: "Checked, I will run these in Galileo", roadbook: "Checked, release to the family", call_notes: "Save"}[d.kind] || "Approve and send";
+  const approveLabel = {gds: "Checked, I will run these", roadbook: "Checked, release to the family", call_notes: "Save"}[d.kind] || "Approve and send";
   return `
     ${extraBlocks(d)}
     ${d.kind === "change" ? `<div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:18px 0 0">
@@ -124,8 +125,8 @@ function draftHtml(d) {
     <div class="concept">
       <div class="c-head"><div><div class="c-title">${esc(d.title)}</div><div class="c-to">${d.status === "draft" ? "Edit freely. Your changes are measured to improve the brain." : `${d.status === "approved" ? "Approved" : "Rejected"} by ${esc(d.decided_by)}${d.status === "approved" ? ` · ${Math.round((d.edit_share || 0) * 100)}% edited` : ""}`}</div></div>
         <span class="pchip ${d.status === "approved" ? "sea" : d.status === "rejected" ? "terra" : "gold"}">${esc(d.status)}</span></div>
-      ${d.status === "draft" ? `<textarea class="c-text ${d.kind === "galileo" ? "mono" : ""}" id="body-${d.id}" rows="14" aria-label="${esc(T(kindLabel))}">${esc(d.body)}</textarea>`
-                             : `<pre class="c-text ${d.kind === "galileo" ? "mono" : ""}">${esc(d.final_body || d.body)}</pre>`}
+      ${d.status === "draft" ? `<textarea class="c-text ${d.kind === "gds" ? "mono" : ""}" id="body-${d.id}" rows="14" aria-label="${esc(T(kindLabel))}">${esc(d.body)}</textarea>`
+                             : `<pre class="c-text ${d.kind === "gds" ? "mono" : ""}">${esc(d.final_body || d.body)}</pre>`}
       ${warns.length ? `<div class="check"><b>Check:</b> ${warns.map(esc).join(" · ")}</div>` : ""}
     </div>
     ${(d.sources || []).some(s => s.title) ? `<p class="label sect">Sources</p>${sourcesList(d.sources)}` : ""}
@@ -168,7 +169,7 @@ async function openReq(id) {
         ${latest ? `<button onclick="act('proposal')">New version</button>
         <button onclick="act('alternatives')">Quieter and cheaper versions</button>
         <button onclick="act('extras')">Suggest extras</button>` : ""}
-        <button onclick="act('galileo')">Galileo commands</button></div></details>
+        <button onclick="act('gds')">Booking commands</button></div></details>
     </div>
     <details style="margin-top:14px"><summary class="label" style="cursor:pointer">Call notes</summary>
       <textarea id="callnotes" aria-label="Call notes" class="c-text" style="min-height:110px;border:1px solid var(--sand);border-radius:8px;margin-top:8px" placeholder="Rough notes of the call: wishes, changes, questions, next steps"></textarea>
@@ -179,7 +180,7 @@ async function openReq(id) {
         <table class="itin">${r.partners.map(p => `<tr><td><b>${esc(p.partner)}</b><br><span style="color:var(--muted)">${esc(p.what)}</span></td>
         <td><span class="status ${p.status === "answered" ? "go" : p.status === "to_send" ? "me" : "wait"}">${esc(prStatus(p.status))}</span></td>
         <td>${p.available === false ? "Not available" : esc(p.note || "")}</td><td class="num">${p.price_eur ? eur(p.price_eur) : ""}</td></tr>`).join("")}</table></div></details>` : ""}
-      ${others.map(d => `<details><summary>${esc({galileo: "Galileo commands", followup: "Follow-up", proposal: "Earlier version", change: "Earlier change", answer: "Answer",
+      ${others.map(d => `<details><summary>${esc({gds: "Booking commands", followup: "Follow-up", proposal: "Earlier version", change: "Earlier change", answer: "Answer",
         alternatives: "Alternatives", extras: "Extras", roadbook: "Roadbook", call_notes: "Call note", complaint_reply: "Complaint", trip_alert: "Trip alert"}[d.kind] || d.kind)}
         <span class="hint">${esc(d.title)} · ${esc(d.status)}</span></summary><div class="inner">${draftHtml(d)}</div></details>`).join("")}
     </div></div>`;
@@ -206,6 +207,28 @@ async function approve(id) {
   loadReqs();
 }
 async function reject(id) { await post(`/api/drafts/${id}/reject`, {reason: "discarded"}); toast("Discarded. That is feedback for the brain too."); openReq(current); }
+
+async function viewBook() {
+  const b = await api("/api/gds/ready");
+  badge("book", b.items.length);
+  $("#view").innerHTML = `<div class="vhead"><span class="label">${esc(b.system)}</span><h1>Ready to book</h1>
+    <p>All booking commands you have not run yet. Log in to ${esc(b.system)} once and run them in one go, then mark each as done.
+    The brain never runs, ends or tickets a booking.</p></div>
+    ${b.items.length ? `<div style="margin-bottom:14px"><button class="btn" id="copyall">Copy all commands</button></div>
+      <pre id="allcmds" hidden>${esc(b.items.map(i => `# ${i.family} · ${i.destination_name}\n${i.body}`).join("\n\n"))}</pre>` : ""}
+    <div style="display:grid;gap:16px">${b.items.map(i => `<section class="detail" aria-labelledby="bk-${i.id}">
+      <h2 id="bk-${i.id}" class="fam">${esc(famName(i.family))} · ${esc(i.destination_name)}</h2><p class="label">${esc(i.title)}</p>
+      ${i.warnings.length ? `<div class="guard">${i.warnings.map(esc).join("<br>")}</div>` : ""}
+      <textarea class="c-text mono" style="max-width:none;width:100%;white-space:pre;overflow-x:auto" wrap="off" id="body-${i.id}" rows="${i.body.split("\n").length + 1}" aria-label="Commands for ${esc(famName(i.family))}">${esc(i.body)}</textarea>
+      <div class="acts"><button class="btn btn-primary" data-done="${i.id}">Done in ${esc(b.system)}</button>
+        <button class="btn" data-open="${i.request_id}">Open trip</button></div></section>`).join("")
+      || `<div class="detail empty"><b>Nothing to book</b>Booking commands you make on a trip appear here.</div>`}</div>`;
+  const all = $("#copyall"); if (all) all.onclick = () => copyText("allcmds", `Copied. Paste it next to ${b.system}.`);
+  $$("[data-done]").forEach(x => x.onclick = async () => {
+    try { await post(`/api/drafts/${x.dataset.done}/approve`, {final_body: $(`#body-${x.dataset.done}`).value}); toast("Marked as done"); viewBook(); }
+    catch (e) { toast(e.message); } });
+  $$("[data-open]").forEach(x => x.onclick = () => { app.go("trips"); setTimeout(() => openReq(x.dataset.open), 300); });
+}
 
 function viewAsk() {
   $("#view").innerHTML = `<div class="vhead"><span class="label">Knowledge desk</span><h1>Ask the brain</h1>

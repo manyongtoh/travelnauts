@@ -14,7 +14,7 @@ const NL = {
   "Pick who you are. In the pilot this is your Microsoft sign-in with a second factor (Entra ID); what you can see and do follows your role.":
     "Kies wie je bent. In de pilot is dit je Microsoft-login met een tweede factor (Entra ID); wat je ziet en mag hangt af van je rol.",
   "Sales specialists": "Reisspecialisten", "Own requests and drafts, knowledge, approve and send own drafts": "Eigen aanvragen en concepten, kennis, eigen concepten goedkeuren en versturen",
-  "Partner requests, offers, Galileo, supplier watch": "Partneraanvragen, offertes, Galileo, leveranciersbewaking", "Team leads": "Teamleiders",
+  "Partner requests, offers, booking commands, supplier watch": "Partneraanvragen, offertes, boekingscommando's, leveranciersbewaking", "Team leads": "Teamleiders",
   "Team view and metrics, reassign, approve knowledge and exceptions": "Teamoverzicht en cijfers, herverdelen, kennis en uitzonderingen goedkeuren",
   "Write and approve knowledge": "Kennis schrijven en goedkeuren", "Admin (Myt)": "Beheer (Myt)",
   "Maintenance, users, budgets; no customer content by default": "Beheer, gebruikers, budgetten; standaard geen klantinhoud",
@@ -36,7 +36,7 @@ const NL = {
   "Edit freely before sending": "Pas gerust aan voor verzenden", "draft": "concept", "Sources": "Bronnen", "Availability:": "Beschikbaarheid:",
   "Owner": "Eigenaar", "review by": "herzien voor", "past review date, check first": "herzieningsdatum verstreken, eerst controleren",
   "Approve and send": "Goedkeuren en versturen", "Copy for TravelSpirit": "Kopieer voor TravelSpirit", "Discard": "Weggooien", "New version": "Nieuwe versie",
-  "Quieter and cheaper versions": "Rustigere en voordeligere versies", "Suggest extras": "Extra's voorstellen", "Galileo commands": "Galileo-commando's",
+  "Quieter and cheaper versions": "Rustigere en voordeligere versies", "Suggest extras": "Extra's voorstellen", "Booking commands": "Boekingscommando's", "Ready to book": "Klaar om te boeken", "Copy all commands": "Alle commando's kopiëren", "Checked, I will run these": "Gecontroleerd, ik voer ze uit", "Nothing to book": "Niets te boeken", "Booking commands you make on a trip appear here.": "Boekingscommando's die je bij een reis maakt, verschijnen hier.", "Open trip": "Reis openen", "Marked as done": "Gemarkeerd als klaar",
   "Ask partners for availability": "Partners om beschikbaarheid vragen", "Call notes": "Belnotities", "Turn into a note": "Maak er een notitie van",
   "Agents prepare, you decide. Nothing goes to the family or a partner without your click.": "Agents bereiden voor, jij beslist. Niets gaat naar het gezin of een partner zonder jouw klik.",
   "Rough notes of the call: wishes, changes, questions, next steps": "Ruwe notities van het gesprek: wensen, wijzigingen, vragen, vervolgstappen",
@@ -198,6 +198,11 @@ const NL = {
 };
 // Whole-text patterns that carry names or dates.
 const NL_RULES = [
+  [/^Done in (.+)$/, (m, s) => `Klaar in ${s}`],
+  [/^Copied\. Paste it next to (.+)\.$/, (m, s) => `Gekopieerd. Plak het naast ${s}.`],
+  [/^All booking commands you have not run yet\. Log in to (.+) once and run them in one go, then mark each as done\. The brain never runs, ends or tickets a booking\.$/,
+   (m, s) => `Alle boekingscommando's die je nog niet hebt uitgevoerd. Log één keer in bij ${s}, voer ze in één keer uit en markeer ze daarna als klaar. Het brein voert zelf nooit een boeking uit, sluit er nooit een af en maakt nooit tickets aan.`],
+  [/^Commands for (.+)$/, (m, s) => `Commando's voor ${s}`],
   [/^Good (morning|afternoon|evening), (.+)$/, (m, p, n) => ({morning: "Goedemorgen", afternoon: "Goedemiddag", evening: "Goedenavond"})[p] + ", " + n],
   [/^Family (.+?)( · .+)?$/, (m, n, rest) => "Familie " + n + (rest || "")],
   [/^Owner (.+) · review by (.+)$/, (m, o, d) => `Eigenaar ${o} · herzien voor ${d}`],

@@ -179,21 +179,38 @@ def partner_chase(ctx: dict) -> dict:
     return {"subject": f"Reminder: {ctx['reference']}", "body": body}
 
 
-def galileo(ctx: dict) -> dict:
+def gds(ctx: dict) -> dict:
     f = ctx["flight"]
-    cmds = [{"cmd": f"A{f['out']}{f['from']}{f['to']}", "explain": "Beschikbaarheid heenreis"},
-            {"cmd": f"0{f['seats']}{f['class']}1", "explain": f"{f['seats']} stoelen boeken op regel 1 (na controle)"},
-            {"cmd": f"A{f['back']}{f['to']}{f['from']}", "explain": "Beschikbaarheid terugreis"},
-            {"cmd": f"0{f['seats']}{f['class']}1", "explain": f"{f['seats']} stoelen boeken op regel 1 (na controle)"}]
-    for t in f["travellers"]:
-        if t["type"] == "child":
-            cmds.append({"cmd": f"N.{t['surname']}/{t['first']}CHD*C{t['age']:02d}", "explain": f"Naam kind ({t['age']} jaar)"})
-        else:
-            cmds.append({"cmd": f"N.{t['surname']}/{t['first']}MR", "explain": "Naam volwassene (titel controleren)"})
-    cmds += [{"cmd": tenant().galileo_agency_remark, "explain": "Telefoon kantoor"},
-             {"cmd": f"T.TAU/{f['ticket_by']}", "explain": "Uiterste ticketdatum"},
-             {"cmd": "R.AGENT", "explain": "Ontvangen van"},
-             {"cmd": "*R", "explain": "Boeking tonen ter controle"}]
+    phone = tenant().gds_agency_phone
+    if ctx.get("system") == "galileo":
+        cmds = [{"cmd": f"A{f['out']}{f['from']}{f['to']}", "explain": "Beschikbaarheid heenreis"},
+                {"cmd": f"0{f['seats']}{f['class']}1", "explain": f"{f['seats']} stoelen boeken op regel 1 (na controle)"},
+                {"cmd": f"A{f['back']}{f['to']}{f['from']}", "explain": "Beschikbaarheid terugreis"},
+                {"cmd": f"0{f['seats']}{f['class']}1", "explain": f"{f['seats']} stoelen boeken op regel 1 (na controle)"}]
+        for t in f["travellers"]:
+            if t["type"] == "child":
+                cmds.append({"cmd": f"N.{t['surname']}/{t['first']}CHD*C{t['age']:02d}", "explain": f"Naam kind ({t['age']} jaar)"})
+            else:
+                cmds.append({"cmd": f"N.{t['surname']}/{t['first']}MR", "explain": "Naam volwassene (titel controleren)"})
+        cmds += [{"cmd": phone, "explain": "Telefoon kantoor"},
+                 {"cmd": f"T.TAU/{f['ticket_by']}", "explain": "Uiterste ticketdatum"},
+                 {"cmd": "R.AGENT", "explain": "Ontvangen van"},
+                 {"cmd": "*R", "explain": "Boeking tonen ter controle"}]
+    else:
+        cmds = [{"cmd": f"AN{f['out']}{f['from']}{f['to']}", "explain": "Beschikbaarheid heenreis"},
+                {"cmd": f"SS{f['seats']}{f['class']}1", "explain": f"{f['seats']} stoelen boeken op regel 1 (na controle)"},
+                {"cmd": f"AN{f['back']}{f['to']}{f['from']}", "explain": "Beschikbaarheid terugreis"},
+                {"cmd": f"SS{f['seats']}{f['class']}1", "explain": f"{f['seats']} stoelen boeken op regel 1 (na controle)"}]
+        for t in f["travellers"]:
+            if t["type"] == "child":
+                cmds.append({"cmd": f"NM1{t['surname']}/{t['first']}(CHD)",
+                             "explain": f"Naam kind ({t['age']} jaar): geboortedatum toevoegen als (CHD/DDMMMJJ)"})
+            else:
+                cmds.append({"cmd": f"NM1{t['surname']}/{t['first']} MR", "explain": "Naam volwassene (titel controleren)"})
+        cmds += [{"cmd": phone, "explain": "Telefoon kantoor"},
+                 {"cmd": f"TKTL{f['ticket_by']}", "explain": "Uiterste ticketdatum"},
+                 {"cmd": "RF AGENT", "explain": "Ontvangen van"},
+                 {"cmd": "RT", "explain": "Boeking tonen ter controle"}]
     return {"commands": cmds, "notes": ["Voornamen van partner en kinderen zijn placeholders: aanvullen uit het paspoort"]}
 
 
@@ -384,7 +401,7 @@ def roadbook_intro(ctx: dict) -> dict:
 
 HANDLERS = {"partner_reply": partner_reply, "alternatives": alternatives, "complaint_reply": complaint_reply, "next_trip": next_trip,
             "extras": extras, "call_notes": call_notes, "invoice_extract": invoice_extract, "roadbook_intro": roadbook_intro, "trip_alert": trip_alert, "change_plan": change_plan, "change_reply": change_reply, "triage": triage, "proposal": proposal, "followup": followup, "partner_request": partner_request,
-            "partner_chase": partner_chase, "galileo": galileo, "answer": answer}
+            "partner_chase": partner_chase, "gds": gds, "answer": answer}
 
 
 def _respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:

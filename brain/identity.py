@@ -61,7 +61,7 @@ AGENTS: dict[str, set[str]] = {
     "agent:change": {"ts.read_mail", "ts.read_relation", "ts.read_trip", "calc.quote"},
     "agent:follow_up": {"ts.read_relation", "ts.read_trip", "knowledge.search"},
     "agent:partner_desk": {"ts.read_trip", "ts.read_relation", "partners.list", "partners.read_reply"},
-    "agent:galileo_helper": {"ts.read_relation", "ts.read_trip", "galileo.write_commands"},
+    "agent:gds_helper": {"ts.read_relation", "ts.read_trip", "gds.write_commands"},
     "agent:knowledge_desk": {"knowledge.search"},
     "agent:supplier_watcher": {"partners.list", "prices.read"},
     "agent:customer_insight": {"stats.requests"},

@@ -23,6 +23,7 @@ from functools import cache
 from importlib.metadata import entry_points
 from pathlib import Path
 from types import MappingProxyType
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -61,8 +62,9 @@ class TenantConfig(BaseModel):
     back_office_signature: str = ""
     emergency_line: str = Field(min_length=6)
     reference_prefix: str = Field(pattern=r"^[A-Z]{2,4}$", description="booking references read <prefix>-R012")
-    galileo_agency_remark: str = Field(pattern=r"^P\.[A-Z]{4}\*[A-Z0-9]+$",
-                                       description="the agency phone remark in Galileo, for example P.AMSB*NAME")
+    gds: Literal["amadeus", "galileo"] = Field(description="the booking system the specialists run commands in")
+    gds_agency_phone: str = Field(description="the agency phone entry in that system: AP AMS 020 0000000-A in Amadeus, "
+                                              "P.AMSB*NAME in Galileo")
     autonomy_max: int = Field(2, ge=1, le=3, description="highest autonomy level any agent may reach here")
     pricing: PricingTemplate
 
@@ -74,6 +76,25 @@ class TenantConfig(BaseModel):
         if bad:
             raise ValueError(f"not a mail domain: {bad}")
         return out
+
+    @model_validator(mode="before")
+    @classmethod
+    def _old_galileo_key(cls, v: Any) -> Any:
+        """Packs written before Amadeus support say galileo_agency_remark; read them as Galileo."""
+        if isinstance(v, dict) and "galileo_agency_remark" in v:
+            v = dict(v)
+            v.setdefault("gds", "galileo")
+            v.setdefault("gds_agency_phone", v.pop("galileo_agency_remark"))
+        return v
+
+    @model_validator(mode="after")
+    def _phone_fits_system(self) -> TenantConfig:
+        from .agents.gds import DIALECTS
+        d = DIALECTS[self.gds]
+        if not re.fullmatch(d.phone_pattern, self.gds_agency_phone):
+            raise ValueError(f"gds_agency_phone {self.gds_agency_phone!r} does not fit {d.label}, "
+                             f"for example {d.phone_example}")
+        return self
 
     @model_validator(mode="after")
     def _defaults(self) -> TenantConfig:

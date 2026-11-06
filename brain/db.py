@@ -210,7 +210,7 @@ class Draft(Base):
     """Anything an agent writes. Nothing leaves the building until a person approves it."""
     __tablename__ = "drafts"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    kind: Mapped[str] = mapped_column(String, index=True)  # proposal | followup | partner_request | partner_chase | galileo | answer
+    kind: Mapped[str] = mapped_column(String, index=True)  # proposal | followup | partner_request | partner_chase | gds | answer
     request_id: Mapped[str | None] = mapped_column(ForeignKey("requests.id"), nullable=True, index=True)
     partner_request_id: Mapped[int | None] = mapped_column(ForeignKey("partner_requests.id"), nullable=True)
     title: Mapped[str] = mapped_column(String)

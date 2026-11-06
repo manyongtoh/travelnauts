@@ -3,7 +3,8 @@ tenant_id = "wolkenwaai"
 name = "Wolkenwaai Reizen"
 own_domains = ["wolkenwaai.example"]
 emergency_line = "+31 20 000 0000 (sandbox)"
-galileo_agency_remark = "P.AMSB*WOLKENWAAI"
+gds = "amadeus"
+gds_agency_phone = "AP AMS 020 0000000-A"
 reference_prefix = "WW"
 autonomy_max = 2
 

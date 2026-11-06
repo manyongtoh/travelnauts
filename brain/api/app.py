@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
 from .. import auditchain, autosend, db, jobs
-from ..agents import followup, galileo, knowledge_desk, partner_desk, proposal, triage
+from ..agents import followup, gds, knowledge_desk, partner_desk, proposal, triage
 from ..clock import utcnow
 from ..config import get_settings
 from ..db import (
@@ -55,7 +55,7 @@ from ..workflow import (
 )
 
 STATIC = Path(__file__).parent / "static"
-CUSTOMER_DRAFTS = {"proposal", "change", "followup", "answer", "trip_alert", "galileo", "alternatives", "extras",
+CUSTOMER_DRAFTS = {"proposal", "change", "followup", "answer", "trip_alert", "gds", "alternatives", "extras",
                    "complaint_reply", "next_trip", "call_notes", "roadbook"}
 MONEY_WORDS = ("terugbetal", "refund", "compensatie", "vergoed", "korting", "geld terug", "compensation", "discount")
 PARTNER_DRAFTS = {"partner_request", "partner_chase"}
@@ -388,11 +388,28 @@ def apply_change(mail_id: str, user: Principal = Depends(current_user)):
             raise HTTPException(400, str(e))
 
 
-@app.post("/api/requests/{rid}/galileo")
-def make_galileo(rid: str, user: Principal = Depends(current_user)):
+@app.post("/api/requests/{rid}/gds")
+def make_gds_commands(rid: str, user: Principal = Depends(current_user)):
     with db.session() as s:
         _visible_request(s, rid, user)
-        return as_dict(galileo.write_commands(s, rid))
+        return as_dict(gds.write_commands(s, rid))
+
+
+@app.get("/api/gds/ready")
+def gds_ready(user: Principal = Depends(current_user)):
+    """Every set of booking commands checked by nobody yet, for the trips this person may see: run them in one
+    sitting, so the booking system's login (Amadeus asks for the authenticator after 10 idle minutes) is needed once."""
+    with db.session() as s:
+        items = []
+        for d in s.scalars(select(Draft).where(Draft.kind == "gds", Draft.status == "draft").order_by(Draft.id)).all():
+            r = s.get(TripRequest, d.request_id)
+            if r is None or not _request_visible(user, r):
+                continue
+            f = s.get(Family, r.family_id)
+            items.append({"id": d.id, "request_id": r.id, "title": d.title, "body": d.body,
+                          "warnings": (d.data or {}).get("warnings", []), "family": f.surname,
+                          "destination_name": DESTINATIONS[r.destination]["name"]})
+        return {"system": gds.dialect().label, "items": items}
 
 
 @app.post("/api/requests/{rid}/partners")
@@ -1073,7 +1090,7 @@ def trace(trace_id: str, user: Principal = Depends(need("audit.read"))):
 
 # Maintenance and user management -----------------------------------------------------------------
 
-AGENT_NAMES = ["triage", "proposal_writer", "change", "follow_up", "partner_desk", "galileo_helper", "knowledge_desk",
+AGENT_NAMES = ["triage", "proposal_writer", "change", "follow_up", "partner_desk", "gds_helper", "knowledge_desk",
                "supplier_watcher", "customer_insight", "team_insight", "trip_monitor", "alternatives", "complaints",
                "next_trip", "extras", "call_notes", "invoice_matcher", "roadbook", "booking_check"]
 

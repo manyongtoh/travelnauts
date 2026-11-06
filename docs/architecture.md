@@ -5,7 +5,7 @@
    (fake for now)        │                            │    ▲                      │
                          │                            │    │ approved knowledge   ├─► VTB draft reisplan
                          ▼                            ▼    │ price list           ├─► Partner desk ──► partner mails (back office approves)
-                   Knowledge desk ──► answer with   Galileo helper ──► commands    └─► edit share ──► gap list if heavily rewritten
+                   Knowledge desk ──► answer with   Booking cmds  ──► commands    └─► edit share ──► gap list if heavily rewritten
                                      sources, or gap                (specialist runs them)
 ```
 

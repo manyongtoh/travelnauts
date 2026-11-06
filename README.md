@@ -21,7 +21,7 @@ Agents only ever write drafts; a person approves every mail before it goes out.
 ## Tenants
 
 A tenant pack is a client's own repo: `tenant.toml` (validated at start-up: domains, booking reference prefix,
-Galileo remark, autonomy ceiling, margins), `house.md` (the first prompt layer) and optional agent prompt
+booking system and agency phone entry, autonomy ceiling, margins), `house.md` (the first prompt layer) and optional agent prompt
 overrides. It registers itself under the `brain.tenants` entry point; `BRAIN_TENANT` picks one when several are
 installed. The core's own sample is `brain/sample_tenant/` (Wolkenwaai Reizen, invented).
 
@@ -97,7 +97,7 @@ Nothing it learns is used before a person approves it.
 | Proposal writer | `brain/agents/proposal.py` | Route from similar past proposals, age safe activities, prices, approved facts, house voice, draft reisplan |
 | Follow-up | `brain/agents/followup.py` | Friendly reminder when a proposal has had no reply for 5 days |
 | Partner desk | `brain/agents/partner_desk.py` | Availability requests to the local agent and every hotel, reminders after 3 days, offer comparison |
-| Galileo helper | `brain/agents/galileo.py` | Writes the Galileo commands with an explanation; never runs, ends or tickets |
+| Booking commands helper | `brain/agents/gds.py` | Writes Amadeus or Galileo commands (set by `gds` in tenant.toml) with an explanation; never runs, ends or tickets. The specialist runs all of them in one login from Ready to book |
 | Knowledge desk | `brain/agents/knowledge_desk.py` | Answers with sources, or says it does not know and records a gap |
 | Change agent | `brain/agents/change.py` | Links a change request to the right trip, applies what it safely can (nights, skipping a stop), recalculates, drafts the reply; dates, transport and anything unclear go to the specialist |
 | Anonymiser | `brain/anonymise.py` | Removes names, mail addresses, phone numbers, IBANs, BSNs, passport numbers, addresses and birth dates; keeps destinations, months, ages and budgets; a second check refuses the record if anything personal may be left |
@@ -132,7 +132,7 @@ tests and the bench on every push and shows the report on the run page.
 | Knowledge desk: answered with the right source | 8 of 8 | 0 of 3 |
 | Knowledge desk: unknown questions became gaps | 6 of 6 | 2 of 2 |
 | Proposals: approved source, route fits, no unsafe activities | 72 of 72 | |
-| Galileo: commands outside the allowed formats | 0 of 115 | |
+| Booking commands outside the allowed formats | 0 of 115 | |
 
 The stand-in model's rules were written against the regular mails, so those scores show that the plumbing
 and the safety rules work. The hard mails (English, numbers in words, "meivakantie", "15k", Bali instead of
@@ -143,7 +143,7 @@ still keyword based; search by meaning is the next step there.
 ## What is a placeholder until a client provides it
 
 Each client repo lists what it still has to provide. In short: TravelSpirit API documentation and test access,
-anonymised example proposals and partner mails, the Excel calculation template, the Galileo command
+anonymised example proposals and partner mails, the Excel calculation template, the booking system command
 list, and the real booking terms. Everything that stands in for these is marked as a placeholder.
 
 ## Ownership

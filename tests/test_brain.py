@@ -6,7 +6,7 @@ from sqlalchemy import select
 from brain import db
 from brain.agents import (
     followup,
-    galileo,
+    gds,
     knowledge_desk,
     partner_desk,
     proposal,
@@ -119,10 +119,10 @@ def test_partner_desk_flow(world):
     assert partner_desk.plan_partner_requests(world, req.id) == []  # no duplicates
 
 
-def test_galileo_commands_pass_the_format_check(world):
+def test_booking_commands_pass_the_format_check(world):
     triage.triage_inbox(world)
     req = world.scalars(select(TripRequest).where(TripRequest.mail_id.is_not(None))).first()
-    g = galileo.write_commands(world, req.id)
+    g = gds.write_commands(world, req.id)
     assert g.data["commands"] and not [w for w in g.data["warnings"] if "onbekend formaat" in w]
     assert not any(c["cmd"] in ("E", "ER", "TKP") for c in g.data["commands"])  # never ends or tickets
 

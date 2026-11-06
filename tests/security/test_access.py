@@ -71,7 +71,7 @@ def test_specialists_cannot_reach_each_others_trips(client, world):
     other = next(x for x in p["spec"][tr.team_id] if x != tr.specialist_id)
     d = proposal.write_proposal(world, tr.id)
     for method, url, body in [("get", f"/api/requests/{tr.id}", None), ("post", f"/api/requests/{tr.id}/proposal", {}),
-                              ("post", f"/api/requests/{tr.id}/galileo", {}), ("post", f"/api/requests/{tr.id}/alternatives", {}),
+                              ("post", f"/api/requests/{tr.id}/gds", {}), ("post", f"/api/requests/{tr.id}/alternatives", {}),
                               ("post", f"/api/requests/{tr.id}/extras", {}), ("post", f"/api/requests/{tr.id}/call-notes", {"notes": "x"}),
                               ("post", f"/api/requests/{tr.id}/partners", {}), ("post", f"/api/drafts/{d.id}/approve", {}),
                               ("post", f"/api/drafts/{d.id}/reject", {})]:

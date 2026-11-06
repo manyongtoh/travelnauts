@@ -172,8 +172,8 @@ def main():
     at(T0 + timedelta(hours=3))
     r = c.post(f"/api/requests/{rid_new}/alternatives", headers=H(who_new)) if rid_new else None
     note("specialist", "asks for quieter and cheaper versions", status=r.status_code if r else None)
-    r = c.post(f"/api/requests/{rid_new}/galileo", headers=H(who_new)) if rid_new else None
-    note("specialist", "asks for Galileo commands", status=r.status_code if r else None)
+    r = c.post(f"/api/requests/{rid_new}/gds", headers=H(who_new)) if rid_new else None
+    note("specialist", "asks for booking commands", status=r.status_code if r else None)
 
     # ------------------------------------------------------------------ the team lead's day
     at(T0 + timedelta(hours=2))

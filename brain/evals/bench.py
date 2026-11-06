@@ -17,7 +17,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from .. import db
-from ..agents import change, galileo, knowledge_desk, partner_desk, proposal, triage
+from ..agents import change, gds, knowledge_desk, partner_desk, proposal, triage
 from ..anonymise import Refused, anonymise_mail
 from ..config import ROOT, get_settings
 from ..db import Draft, Family, KnowledgeGap, Mail, PriceItem, TripRequest
@@ -232,18 +232,18 @@ def run(seed: int | None = None, out_dir: Path | None = None) -> dict:
                          "confident_but_should_not_be": wrong_confident}
         rep["knowledge_hard"]["open_gaps_total"] = s.query(KnowledgeGap).filter(KnowledgeGap.status == "open").count()
 
-        # Partner desk and Galileo on a sample -----------------------------------------------
+        # Partner desk and booking commands on a sample -----------------------------------------------
         sample = [r for r in reqs if r.days >= 10][:10]
         pr_ok = g_warn = g_cmds = 0
         for r in sample:
             d = s.scalars(select(Draft).where(Draft.request_id == r.id, Draft.kind == "proposal")).first()
             created = partner_desk.plan_partner_requests(s, r.id)
             pr_ok += len(created) == 1 + len(d.data["route"])
-            g = galileo.write_commands(s, r.id)
+            g = gds.write_commands(s, r.id)
             g_cmds += len(g.data["commands"])
             g_warn += sum("onbekend formaat" in w for w in g.data["warnings"])
         rep["partner_desk"] = {"sampled": len(sample), "right_number_of_requests_pct": pct(pr_ok, len(sample))}
-        rep["galileo"] = {"sampled": len(sample), "commands": g_cmds, "format_warnings": g_warn}
+        rep["gds"] = {"sampled": len(sample), "commands": g_cmds, "format_warnings": g_warn}
 
     rep["gates"] = gates(rep)
     out_dir = out_dir or ROOT / "data" / "bench"
