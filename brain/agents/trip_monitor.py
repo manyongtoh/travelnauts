@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..clock import utcnow
+from ..clock import nl_date, utcnow
 from ..db import Draft, Employee
 from ..identity import agent
 from ..synth.world import DESTINATIONS
@@ -27,7 +27,7 @@ class TripAlert(BaseModel):
 
 INSTRUCTIONS = (
     "Write a short, calm message in Dutch to CONTEXT.family about CONTEXT.flight and its CONTEXT.status. Say what we "
-    "already know, that the specialist is looking at options, and give the 24/7 number from CONTEXT.emergency_line. "
+    "already know (write the date as CONTEXT.flight.date_text, never as 2026-11-10), that the specialist is looking at options, and give the 24/7 number from CONTEXT.emergency_line. "
     "Do not promise a rebooking or a refund."
 )
 
@@ -51,7 +51,7 @@ def run(s: Session, now: datetime | None = None) -> dict:
                     continue
                 spec = s.get(Employee, t["specialist_id"]) if t["specialist_id"] else None
                 out, _ = run_step(s, "trip_alert", TripAlert, INSTRUCTIONS, {
-                    "family": {"name": fam["contact_name"]}, "flight": f, "status": st,
+                    "family": {"name": fam["contact_name"]}, "flight": f | {"date_text": nl_date(f["date"])}, "status": st,
                     "trip": {"destination": DESTINATIONS[t["destination"]]["nl"]},
                     "specialist": spec.name if spec else tenant().short_name, "emergency_line": tenant().emergency_line})
                 s.add(Draft(kind="trip_alert", request_id=t["id"], title=out.subject, body=out.body,

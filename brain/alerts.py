@@ -30,6 +30,11 @@ CRITICAL, WARNING = "critical", "warning"
 OPEN_REQUEST_STATUSES = ("new", "proposal_draft", "proposal_sent", "change_requested")  # as in team insight
 
 
+def _n(count: int, one: str, many: str) -> str:
+    """3 failed jobs, 1 failed job: no '(s)' in what people read."""
+    return f"{count} {one if count == 1 else many}"
+
+
 @dataclass
 class Alert:
     key: str          # stable id, so the same problem is reported once
@@ -63,7 +68,7 @@ def checks(s: Session, now: datetime | None = None) -> list[Alert]:
                                                         Draft.created_at < now - timedelta(minutes=30))).all()
                if (d.data or {}).get("while_travelling")]
     if on_road:
-        out.append(Alert("travelling_family", CRITICAL, f"{len(on_road)} family message(s) from the road unanswered",
+        out.append(Alert("travelling_family", CRITICAL, f"{_n(len(on_road), 'family message', 'family messages')} from the road unanswered",
                          "A family that is travelling now wrote over 30 minutes ago and the reply is not sent. Requests: "
                          + ", ".join(sorted({d.request_id or "?" for d in on_road})),
                          "Team lead: open Complaints, call the family on the 24/7 line, send the reply."))
@@ -71,7 +76,7 @@ def checks(s: Session, now: datetime | None = None) -> list[Alert]:
     failed = s.scalar(select(func.count()).select_from(Job).where(Job.status == "failed")) or 0
     if failed:
         kinds = sorted({k for (k,) in s.execute(select(Job.kind).where(Job.status == "failed").limit(50))})
-        out.append(Alert("failed_jobs", CRITICAL if failed >= 5 else WARNING, f"{failed} failed job(s)",
+        out.append(Alert("failed_jobs", CRITICAL if failed >= 5 else WARNING, _n(failed, "failed job", "failed jobs"),
                          "Kinds: " + ", ".join(kinds), "Find the cause in the job error, then Retry all failed in Maintenance."))
 
     waiting_ts = s.scalars(select(Job).where(Job.status == "queued", Job.error.like("waiting for TravelSpirit%"))).all()
@@ -79,12 +84,12 @@ def checks(s: Session, now: datetime | None = None) -> list[Alert]:
         oldest = min(j.created_at for j in waiting_ts)
         level = CRITICAL if now - oldest > timedelta(hours=1) else WARNING
         out.append(Alert("travelspirit", level, "TravelSpirit is not answering",
-                         f"{len(waiting_ts)} job(s) waiting since {oldest:%H:%M} UTC; they retry by themselves.",
+                         f"{_n(len(waiting_ts), 'job', 'jobs')} waiting since {oldest:%H:%M} UTC; they retry by themselves.",
                          "Check with the TravelSpirit administrator (runbook: TravelSpirit is unreachable)."))
     stuck = s.scalar(select(func.count()).select_from(Job).where(
         Job.status == "queued", Job.run_after < now - timedelta(minutes=30))) or 0
     if stuck:
-        out.append(Alert("queue_behind", WARNING if stuck < 50 else CRITICAL, f"{stuck} job(s) waiting over 30 minutes",
+        out.append(Alert("queue_behind", WARNING if stuck < 50 else CRITICAL, f"{_n(stuck, 'job', 'jobs')} waiting over 30 minutes",
                          "Workers are not keeping up, are stopped, or an agent is paused.",
                          "Check that workers run and no agent is paused by mistake (runbook: worker stops)."))
 
@@ -127,7 +132,7 @@ def checks(s: Session, now: datetime | None = None) -> list[Alert]:
     ownerless = s.scalar(select(func.count()).select_from(TripRequest).join(Employee, TripRequest.specialist_id == Employee.id)
                          .where(Employee.active.is_(False), TripRequest.status.in_(OPEN_REQUEST_STATUSES))) or 0
     if ownerless:
-        out.append(Alert("ownerless", WARNING, f"{ownerless} open request(s) without an owner",
+        out.append(Alert("ownerless", WARNING, f"{_n(ownerless, 'open request', 'open requests')} without an owner",
                          "Their specialist is no longer active.", "Reassign them in Team lead > Insight."))
     return out
 

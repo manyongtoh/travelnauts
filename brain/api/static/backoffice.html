@@ -100,7 +100,7 @@ function cardHtml(c) {
     <div class="what">${esc(c.what)} · ${esc(c.request_id)}</div>
     ${c.offer ? `<div>${c.offer.available === true ? eur(c.offer.price_eur) : c.offer.available === false ? "Not available" : "Not clear yet"}<br><span style="color:var(--muted)">${esc(c.offer.note)}</span></div>` : ""}
     ${c.offer && c.offer.source === "portal" ? `<div class="label" style="margin-top:4px">Portal · ${c.offer.lines_confirmed} of ${c.offer.lines_total} confirmed${c.offer.valid_until ? " · valid until " + esc(c.offer.valid_until) : ""}</div>` : ""}
-    <span class="ch">Email · English${c.status !== "to_send" ? ` · <button class="btn-link" data-portal="${c.id}">Portal and thread</button>` : ""}</span>${next}</div>`;
+    <span class="ch">Email, English</span>${c.status !== "to_send" ? ` <button class="btn-link ch" data-portal="${c.id}">Portal and thread</button>` : ""}${next}</div>`;
 }
 const LINE_STATUS = {open: ["Not started", ""], asking: ["Asking the supplier", "wait"], confirmed: ["Confirmed", "go"], alternative: ["Alternative offered", "me"], not_available: ["Not available", "me"]};
 async function openPortal(prid) {

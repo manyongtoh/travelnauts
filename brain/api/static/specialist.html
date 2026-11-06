@@ -64,10 +64,10 @@ async function viewToday() {
       </div></div>
     <div class="today">
       <div><p class="label list-label">Waiting for you</p>
-        <ul class="dlist">${waiting.map(itemHtml).join("") || `<li class="empty"><b>Nothing waiting</b>Process new mail to fill your list.</li>`}</ul>
+        <ul class="dlist">${waiting.map(itemHtml).join("") || `<li class="empty"><b>Nothing waiting</b>New requests appear here after triage.</li>`}</ul>
         ${ideas.length ? `<p class="label list-label" style="margin-top:22px">Next-trip ideas</p><ul class="dlist">${ideas.map(d => `<li><button class="ditem" data-idea="${d.id}">
           <span class="label ok">Former guests</span><span class="fam">${esc(d.data.suggestions.map(o => o.name).join(" or "))}</span><span class="why">${esc(d.title)}</span></button></li>`).join("")}</ul>` : ""}</div>
-      <div id="detail">${waiting.length ? "" : `<div class="detail empty"><b>All done</b>New requests appear here after triage.</div>`}</div>
+      <div id="detail">${waiting.length ? "" : `<div class="detail empty"><b>All done for now</b>Open a trip from All my trips, or ask the brain a question.</div>`}</div>
     </div>`;
   $("#triage").onclick = async () => {
     $("#triage").disabled = true; const r = await post("/api/triage"); toast(`${r.length} mails triaged and routed`); viewToday();

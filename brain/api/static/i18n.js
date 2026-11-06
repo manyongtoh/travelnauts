@@ -198,6 +198,10 @@ const NL = {
 };
 // Whole-text patterns that carry names or dates.
 const NL_RULES = [
+  [/^(\d+) open requests? without an owner$/, (m, n) => `${n} open ${n === "1" ? "aanvraag" : "aanvragen"} zonder eigenaar`],
+  [/^(\d+) failed jobs?$/, (m, n) => `${n} mislukte ${n === "1" ? "taak" : "taken"}`],
+  [/^(\d+) jobs? waiting over 30 minutes$/, (m, n) => `${n} ${n === "1" ? "taak wacht" : "taken wachten"} langer dan 30 minuten`],
+  [/^(\d+) family messages? from the road unanswered$/, (m, n) => `${n} ${n === "1" ? "bericht" : "berichten"} van onderweg onbeantwoord`],
   [/^Done in (.+)$/, (m, s) => `Klaar in ${s}`],
   [/^Copied\. Paste it next to (.+)\.$/, (m, s) => `Gekopieerd. Plak het naast ${s}.`],
   [/^All booking commands you have not run yet\. Log in to (.+) once and run them in one go, then mark each as done\. The brain never runs, ends or tickets a booking\.$/,

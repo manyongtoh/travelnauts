@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException
@@ -139,6 +139,15 @@ async def limits(request: Request, call_next):
         return JSONResponse({"detail": f"Something went wrong ({type(e).__name__}). It is logged; try again or ask the admin."},
                             status_code=500)
 
+
+
+def _when(iso: str) -> str:
+    """2026-11-10T07:00 as people read it: 10 Nov 07:00 (or "never")."""
+    try:
+        d = datetime.fromisoformat(iso)
+    except (TypeError, ValueError):
+        return "never"
+    return f"{d.day} {d:%b %H:%M}"
 
 @app.get("/healthz", include_in_schema=False)
 def healthz():
@@ -1123,7 +1132,7 @@ def health(user: Principal = Depends(need("maintenance"))):
                  "detail": f"{len(mc)} calls, {sum(not m.ok for m in mc)} failed, {sum(m.escalated for m in mc)} escalated, "
                            f"{sum(m.fallback_from is not None for m in mc)} fallbacks"},
                 {"name": "Knowledge index", "mode": "vault", "ok": True,
-                 "detail": f"last reindex {(s.get(Setting, 'last_reindex') or Setting(key='', value='never')).value}"},
+                 "detail": "last reindex " + _when((s.get(Setting, "last_reindex") or Setting(key="", value="")).value)},
                 {"name": "Flight data", "mode": "stand-in", "ok": True, "detail": "flight number and date only"},
             ],
             "agents": per_agent,

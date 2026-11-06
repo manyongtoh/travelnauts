@@ -24,3 +24,16 @@ def set_now(when: datetime) -> None:
 def reset() -> None:
     global _offset
     _offset = timedelta(0)
+
+
+DAYS_NL = ["maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag"]
+MONTHS_NL = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober",
+             "november", "december"]
+
+
+def nl_date(d) -> str:
+    """A date the way a family reads it in a Dutch mail: dinsdag 10 november (the year only when it is not this year)."""
+    if isinstance(d, str):
+        d = date.fromisoformat(d[:10])
+    s = f"{DAYS_NL[d.weekday()]} {d.day} {MONTHS_NL[d.month - 1]}"
+    return s if d.year == today().year else f"{s} {d.year}"

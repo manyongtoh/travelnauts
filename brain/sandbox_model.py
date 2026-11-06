@@ -298,7 +298,7 @@ def trip_alert(ctx: dict) -> dict:
     f, st = ctx["flight"], ctx["status"]
     first = first_name(ctx["family"]["name"])
     what = "is geannuleerd" if st["status"] == "cancelled" else f"heeft ongeveer {st['delay_minutes']} minuten vertraging"
-    body = (f"Beste {first},\n\nJullie vlucht {f['number']} op {f['date']} {what}. We kijken nu naar de mogelijkheden "
+    body = (f"Beste {first},\n\nJullie vlucht {f['number']} op {f.get('date_text', f['date'])} {what}. We kijken nu naar de mogelijkheden "
             f"en laten zo snel mogelijk weten wat dat voor de transfer en het eerste hotel betekent.\n\n"
             f"Is het dringend? Bel dan onze 24/7 lijn: {ctx['emergency_line']}.\n\nHartelijke groet,\n{ctx['specialist']}")
     return {"subject": f"Jullie vlucht {f['number']}", "body": body}
