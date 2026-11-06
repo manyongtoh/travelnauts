@@ -2,93 +2,231 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex"><meta name="referrer" content="no-referrer">
 <title>Partner request</title>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/brain.css">
 <style>
-  body{background:var(--bg)}
-  .wrap{max-width:860px;margin:0 auto;padding:22px 16px 60px}
-  .head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:18px}
-  .facts{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 0}
-  .line{background:var(--card);border:1px solid var(--sand);border-radius:var(--r-lg);padding:14px 16px;margin-bottom:12px}
-  .line.confirmed{border-color:#9cc9c2}.line.alternative,.line.not_available{border-color:#E5B39C}
-  .line h2{margin:0;font-size:16px}.line .ldetail{color:var(--muted);font-size:13.5px;margin:2px 0 10px}
-  .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-  *{min-width:0}.line,.wrap{box-sizing:border-box;max-width:100%}
-  .grid label,.alt label{display:flex;flex-direction:column;font-size:12.5px;color:var(--muted);gap:3px}
-  input,select,textarea{width:100%;box-sizing:border-box;font:inherit;font-size:14px;padding:7px 9px;border:1px solid var(--sand);border-radius:8px;background:var(--white);color:var(--ink);min-width:0}
-  textarea{width:100%;box-sizing:border-box;min-height:60px}
-  .alt{display:none;grid-template-columns:2fr 1fr;gap:8px;margin-top:8px}.alt.on{display:grid}
-  .row-end{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
-  .msgs{list-style:none;padding:0;margin:8px 0 0;display:flex;flex-direction:column;gap:6px}
-  .msgs li{background:var(--white);border:1px solid var(--sand);border-radius:10px;padding:8px 10px;font-size:13.5px;max-width:85%}
-  .msgs li.them{align-self:flex-end;background:#eef6f4}
-  .msgs small{display:block;color:var(--muted);font-size:11.5px}
-  .saved{color:var(--sea-ink);font-size:13px}
-  input,select{min-height:44px} .btn{min-height:44px}  /* comfortable to tap on a phone */
-  @media (max-width:600px){.grid{grid-template-columns:1fr 1fr}.grid label:last-child{grid-column:1/-1}}
+  /* Partner portal: a local agent answers a request line by line, usually on a phone. The route strip is the
+     one bold element; everything else stays quiet so the four status choices are what the eye finds. */
+  :root{--ok:var(--sea);--ok-ink:var(--sea-ink);--ok-tint:var(--sea-tint);
+        --wait:var(--gold);--wait-ink:var(--gold-ink);--wait-tint:var(--gold-tint);
+        --alt:var(--terra);--alt-ink:var(--terra-ink);--alt-tint:var(--terra-tint);
+        --none:#8A8579;--todo:var(--sand)}
+  body{background:var(--paper)}
+  .wrap{max-width:680px;margin:0 auto;padding:20px 16px 72px}
+  .from{font-size:14px;color:var(--muted);margin:0}
+  .from b{color:var(--ink);font-weight:600}
+  h1{font-size:clamp(26px,6.4vw,34px);line-height:1.12;letter-spacing:-.015em;margin:6px 0 10px;font-weight:700}
+  .facts{margin:0;font-size:15.5px;line-height:1.55}
+  .due{margin:10px 0 0;font-size:15px}
+  .due b{color:var(--alt-ink)}
+
+  /* Route strip: one segment per line, in trip order */
+  .route{margin:22px 0 6px}
+  .strip{display:flex;gap:3px;list-style:none;padding:0;margin:0}
+  .strip li{flex:1 1 0;display:block;margin:0}
+  .strip a{display:block;height:14px;border-radius:3px;background:var(--todo)}
+  .strip a:hover{filter:brightness(.92)}
+  .strip .confirmed{background:var(--ok)} .strip .asking{background:var(--wait)}
+  .strip .alternative{background:var(--alt)} .strip .not_available{background:repeating-linear-gradient(135deg,var(--none) 0 4px,#B6B0A4 4px 7px)}
+  .tally{display:flex;flex-wrap:wrap;gap:4px 14px;margin:9px 0 0;padding:0;list-style:none;font-size:13.5px;color:var(--muted)}
+  .tally b{color:var(--ink);font-weight:600}
+  .how{font-size:14.5px;color:var(--muted);margin:18px 0 8px;max-width:60ch}
+
+  /* Lines */
+  .lines{list-style:none;padding:0;margin:0;border-top:1px solid var(--sand)}
+  .line{border-bottom:1px solid var(--sand);padding:16px 2px 16px 14px;position:relative;scroll-margin-top:12px}
+  .line::before{content:"";position:absolute;left:0;top:16px;bottom:16px;width:4px;border-radius:2px;background:var(--todo)}
+  .line.confirmed::before{background:var(--ok)} .line.asking::before{background:var(--wait)}
+  .line.alternative::before{background:var(--alt)} .line.not_available::before{background:var(--none)}
+  .line.dirty{background:var(--card)}
+  .when{font-size:13px;color:var(--muted);margin:0}
+  .line h2{font-size:17px;line-height:1.3;margin:1px 0 10px;font-weight:600}
+  fieldset{border:0;margin:0;padding:0;min-width:0}
+  .choices{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+  .choices label{position:relative}
+  .choices input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+  .choices span{display:flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:6px 8px;border:1px solid var(--sand);border-radius:var(--r-sm);
+                background:var(--white);font-size:14px;font-weight:500;text-align:center;line-height:1.2}
+  .choices span::before{content:"";width:9px;height:9px;border-radius:50%;flex:none;border:1.5px solid currentColor}
+  .choices input:hover + span{border-color:var(--muted)}
+  .choices input:focus-visible + span{outline:2px solid var(--ink);outline-offset:2px}
+  .choices input:checked + span{font-weight:600}
+  .choices input:checked + span::before{background:currentColor}
+  .c-confirmed input:checked + span{background:var(--ok-tint);border-color:var(--ok);color:var(--ok-ink)}
+  .c-asking input:checked + span{background:var(--wait-tint);border-color:var(--wait);color:var(--wait-ink)}
+  .c-alternative input:checked + span{background:var(--alt-tint);border-color:var(--alt);color:var(--alt-ink)}
+  .c-not_available input:checked + span{background:#EDEAE3;border-color:var(--none);color:#4F4B43}
+  .fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+  .fields .wide{grid-column:1/-1}
+  .fields label{display:flex;flex-direction:column;gap:4px;font-size:13.5px;font-weight:500}
+  .fields small{font-weight:400;color:var(--muted)}
+  input[type=number],input[type=date],input[type=text],textarea{width:100%;font:inherit;font-size:16px;padding:9px 11px;border:1px solid var(--sand);
+        border-radius:var(--r-sm);background:var(--white);color:var(--ink);min-height:44px}
+  textarea{min-height:64px;resize:vertical}
+  .money{position:relative}.money input{padding-left:26px}
+  .money::before{content:"€";position:absolute;left:11px;bottom:11px;color:var(--muted);font-size:16px}
+  .line .foot.idle{display:none}
+  .foot{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-top:12px;min-height:44px;flex-wrap:wrap}
+  .status-msg{font-size:13.5px;color:var(--muted);margin-right:auto}
+  .status-msg.err{color:var(--alt-ink);font-weight:600}
+  .save{min-height:44px;padding:0 20px;border-radius:var(--r-sm);border:0;background:var(--ink);color:#fff;font-weight:600;font-size:15px}
+  .save[disabled]{display:none}
+  .chat{list-style:none;padding:0;margin:10px 0 0;display:flex;flex-direction:column;gap:8px}
+  .chat li{max-width:88%;padding:8px 12px;border-radius:12px;font-size:14.5px;background:var(--white);border:1px solid var(--sand)}
+  .chat li.mine{align-self:flex-end;background:var(--ok-tint);border-color:#BFD9D5}
+  .chat small{display:block;color:var(--muted);font-size:12.5px;margin-bottom:1px}
+
+  /* Thread */
+  .thread{margin-top:34px}
+  .thread h2{font-size:19px;margin:0 0 2px}
+  .thread > p{margin:0;color:var(--muted);font-size:14.5px}
+  .compose{margin-top:12px}
+  .compose .foot{justify-content:space-between}
+  .upload{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border:1px solid var(--ink);border-radius:var(--r-sm);font-weight:600;font-size:15px;cursor:pointer;background:transparent}
+  .upload:focus-within{outline:2px solid var(--ink);outline-offset:2px}
+  .upload input{position:absolute;width:1px;height:1px;opacity:0}
+  .privacy{margin-top:34px;font-size:13.5px;color:var(--muted);max-width:60ch}
+  .empty{padding:40px 0}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  @media (max-width:520px){
+    .choices{grid-template-columns:1fr 1fr}
+    .line{padding-left:12px}
+  }
+  @media (prefers-reduced-motion:no-preference){ .line{transition:background-color .2s} html{scroll-behavior:smooth} }
 </style></head>
 <body>
-<header><div class="banner" id="banner">PARTNER REQUEST</div></header>
-<main class="wrap" id="app"><p>Loading…</p></main>
+<main class="wrap" id="app" aria-live="polite"><p>Loading your request…</p></main>
 <script>
 const token = location.pathname.split("/").pop();
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
-const $ = s => document.querySelector(s);
-const STATUS = [["open", "Not started"], ["asking", "Asking the supplier"], ["confirmed", "Confirmed"], ["alternative", "Alternative offered"], ["not_available", "Not available"]];
+const $ = (s, el = document) => el.querySelector(s);
+const STATUS = [["confirmed", "Confirmed"], ["asking", "Still asking"], ["alternative", "Alternative"], ["not_available", "Not available"]];
+const TALLY = {confirmed: "confirmed", asking: "still asking", alternative: "alternative", not_available: "not available", open: "to answer"};
+const day = iso => iso ? new Date(iso + "T12:00:00").toLocaleDateString("en-GB", {weekday: "short", day: "numeric", month: "long"}) : "";
+const dayYear = iso => iso ? new Date(iso + "T12:00:00").toLocaleDateString("en-GB", {day: "numeric", month: "long", year: "numeric"}) : "";
+const stamp = iso => { const d = new Date(iso); return d.toLocaleDateString("en-GB", {day: "numeric", month: "short"}) + " " + d.toLocaleTimeString("en-GB", {hour: "2-digit", minute: "2-digit"}); };
+const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
+
 async function call(path, opts = {}) {
   const r = await fetch(`/api/portal/${encodeURIComponent(token)}${path}`, {headers: {"Content-Type": opts.raw ? "application/pdf" : "application/json"},
     method: opts.method || "GET", body: opts.raw || (opts.body ? JSON.stringify(opts.body) : undefined)});
   if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch {} throw new Error(m); }
   return r.json();
 }
+
 let V = null;
 async function load() {
-  try { V = await call(""); } catch (e) { $("#app").innerHTML = `<div class="line"><h2>Link not valid</h2><p>${esc(e.message)}</p></div>`; return; }
-  $("#banner").textContent = `${V.company} · PARTNER REQUEST`.toUpperCase(); document.title = `${V.company} · Partner request`;
-  const t = V.trip, p = V.party;
-  const kids = p.children_ages.length ? `, children ${p.children_ages.join(", ")}` : "";
-  const done = V.lines.filter(l => l.status === "confirmed").length;
-  $("#app").innerHTML = `<div class="head"><div><span class="label">${esc(V.reference)} · for ${esc(V.partner)}</span>
-      <h1 style="margin:4px 0 0">${esc(t.destination)}, ${esc(t.month)}${t.depart_date ? ` (from ${esc(t.depart_date)})` : ""}</h1>
-      <div class="facts"><span class="pill">${p.adults} adults${esc(kids)}</span><span class="pill">${t.days} days</span>
-      ${V.answer_by ? `<span class="pill pill-concept">please answer by ${esc(V.answer_by)}</span>` : ""}<span class="pill">${done} of ${V.lines.length} confirmed</span></div></div></div>
-    <p class="sub">Answer each line when you know it: confirmed with a price, still asking your supplier, or an alternative. Save per line; we see it straight away. Questions go in the thread below.</p>
-    ${V.lines.map(lineHtml).join("")}
-    <div class="line"><h2>Thread</h2><ul class="msgs">${V.messages.filter(m => !m.line_id).map(msgHtml).join("") || `<li>No messages yet.</li>`}</ul>
-      <textarea id="msg" placeholder="A question or a note for the team" maxlength="2000"></textarea>
-      <div class="row-end"><label class="btn btn-outline btn-sm" style="cursor:pointer">Upload a PDF offer<input type="file" id="pdf" accept="application/pdf" hidden></label>
-        <button class="btn btn-primary btn-sm" id="send">Send message</button></div></div>
-    <p class="label" style="margin-top:18px">This link is personal to ${esc(V.partner)} and works until ${esc(V.link_valid_until)}. We never share the family's name or contact details here.</p>`;
+  try { V = await call(""); }
+  catch (e) {
+    document.title = "Link not valid";
+    $("#app").innerHTML = `<div class="empty"><h1>This link does not work any more</h1><p>${esc(e.message)}. Ask your contact for a new link; answers you already saved are kept.</p></div>`;
+    return;
+  }
+  document.title = `${V.company} request ${V.reference}`;
+  const t = V.trip, p = V.party, n = p.children_ages.length;
+  const party = `${p.adults} adult${p.adults === 1 ? "" : "s"}` + (n ? ` and ${n} child${n === 1 ? "" : "ren"} (${p.children_ages.join(" and ").replace(/ and (?=.* and )/g, ", ")})` : "");
+  $("#app").innerHTML = `
+    <p class="from"><b>${esc(V.company)}</b> request ${esc(V.reference)} for ${esc(V.partner)}</p>
+    <h1>${esc(t.destination)}, ${t.days} days ${t.depart_date ? `from ${esc(day(t.depart_date))}` : `in ${esc(t.month)}`}</h1>
+    <p class="facts">${esc(party)}. ${esc(V.what || "")}</p>
+    ${V.answer_by ? `<p class="due">Please answer by <b>${esc(day(V.answer_by))}</b>, even if some lines are still open.</p>` : ""}
+    <section class="route" aria-label="Your answers so far"><ol class="strip" id="strip"></ol><ul class="tally" id="tally"></ul></section>
+    <p class="how">Pick a status for each line and save it. We see every saved line straight away, so you can answer part now and the rest later.</p>
+    <ol class="lines">${V.lines.map(lineHtml).join("")}</ol>
+    <section class="thread" aria-labelledby="th"><h2 id="th">Questions and notes</h2><p>For anything that is not about one line.</p>
+      <ul class="chat" id="chat"></ul>
+      <div class="compose"><label for="msg" class="sr">Your message</label>
+        <textarea id="msg" placeholder="Write to the ${esc(V.company)} team" maxlength="2000"></textarea>
+        <div class="foot"><label class="upload">Upload a PDF offer<input type="file" id="pdf" accept="application/pdf"></label>
+          <span class="status-msg" id="msgstate" role="status"></span><button class="save" id="send">Send</button></div></div></section>
+    <p class="privacy">This link is only for ${esc(V.partner)} and works until ${esc(dayYear(V.link_valid_until))}. It never shows the family's name or contact details.</p>`;
   V.lines.forEach(bindLine);
-  $("#send").onclick = async () => { const text = $("#msg").value.trim(); if (!text) return;
-    await call("/messages", {method: "POST", body: {text}}); load(); };
-  $("#pdf").onchange = async e => { const f = e.target.files[0]; if (!f) return;
-    try { await call("/files", {method: "POST", raw: await f.arrayBuffer()}); load(); } catch (err) { $("#msg").placeholder = err.message; } };
+  drawProgress(); drawChat();
+  $("#send").onclick = async () => {
+    const text = $("#msg").value.trim(); if (!text) { $("#msg").focus(); return; }
+    $("#send").disabled = true;
+    try { await call("/messages", {method: "POST", body: {text}}); $("#msg").value = ""; await refresh(); $("#msgstate").textContent = "Sent"; }
+    catch (e) { say($("#msgstate"), e.message, true); }
+    finally { $("#send").disabled = false; }
+  };
+  $("#pdf").onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    say($("#msgstate"), "Uploading…");
+    try { await call("/files", {method: "POST", raw: await f.arrayBuffer()}); await refresh(); say($("#msgstate"), `Uploaded ${f.name}`); }
+    catch (err) { say($("#msgstate"), err.message, true); }
+    e.target.value = "";
+  };
 }
-const msgHtml = m => `<li class="${m.author === "partner" ? "them" : ""}"><small>${esc(m.author === "partner" ? m.name : V.company + " · " + m.name)} · round ${m.round} · ${esc(m.at.slice(0, 16).replace("T", " "))}</small>${esc(m.text)}</li>`;
-function lineHtml(l) {
+
+async function refresh() { V = await call(""); drawProgress(); drawChat(); }
+function say(el, text, err = false) { el.textContent = text; el.classList.toggle("err", err); }
+
+function drawProgress() {
+  $("#strip").innerHTML = V.lines.map((l, i) => `<li><a href="#l${l.id}" class="${l.status}" aria-label="Line ${i + 1}, ${esc(l.label)}: ${TALLY[l.status] || TALLY.open}"></a></li>`).join("");
+  const count = {}; V.lines.forEach(l => count[l.status] = (count[l.status] || 0) + 1);
+  $("#tally").innerHTML = ["confirmed", "asking", "alternative", "not_available", "open"].filter(k => count[k])
+    .map(k => `<li><b>${count[k]}</b> ${TALLY[k]}</li>`).join("");
+}
+
+const bubble = m => { const mine = m.author === "partner";
+  return `<li class="${mine ? "mine" : ""}"><small>${mine ? "You" : esc(`${m.name}, ${V.company}`)}, ${esc(stamp(m.at))}</small>${esc(m.text)}</li>`; };
+function drawChat() {
+  const general = V.messages.filter(m => !m.line_id);
+  $("#chat").innerHTML = general.map(bubble).join("");
+  V.lines.forEach(l => { const box = $(`#chat-${l.id}`); if (box) box.innerHTML = V.messages.filter(m => m.line_id === l.id).map(bubble).join(""); });
+}
+
+function fieldsHtml(l, status) {
   const alt = l.alternative || {};
-  const thread = V.messages.filter(m => m.line_id === l.id);
-  return `<div class="line ${l.status}" id="l${l.id}"><h2>${esc(l.label)}</h2><div class="ldetail">${esc(l.detail)}</div>
-    <div class="grid"><label>Status<select data-f="status">${STATUS.map(([k, n]) => `<option value="${k}" ${k === l.status ? "selected" : ""}>${n}</option>`).join("")}</select></label>
-      <label>Price in euro (total)<input data-f="price" type="number" min="0" step="1" value="${l.price_eur ?? ""}"></label>
-      <label>Price valid until<input data-f="valid" type="date" value="${l.valid_until ?? ""}"></label></div>
-    <div class="alt ${l.status === "alternative" ? "on" : ""}"><label>Alternative<input data-f="alt" maxlength="300" value="${esc(alt.label || "")}" placeholder="for example: Kandy Hills Hotel, family room"></label>
-      <label>Its price in euro<input data-f="altprice" type="number" min="0" step="1" value="${alt.price_eur ?? ""}"></label></div>
-    <label style="display:block;margin-top:8px;font-size:12.5px;color:var(--muted)">Note<textarea data-f="note" maxlength="2000">${esc(l.note)}</textarea></label>
-    ${thread.length ? `<ul class="msgs">${thread.map(msgHtml).join("")}</ul>` : ""}
-    <div class="row-end"><span class="saved" data-f="saved">${l.updated_at ? "Saved " + esc(l.updated_at.slice(0, 16).replace("T", " ")) : ""}</span>
-      <button class="btn btn-primary btn-sm" data-f="save">Save this line</button></div></div>`;
+  const note = (label, hint) => `<label class="wide"><span>${label}${hint ? ` <small>${hint}</small>` : ""}</span><textarea data-f="note" maxlength="2000">${esc(l.note)}</textarea></label>`;
+  if (status === "confirmed") return `
+    <label class="money"><span>Total price</span><input data-f="price" type="number" inputmode="numeric" min="0" step="1" value="${l.price_eur ?? ""}"></label>
+    <label><span>Price valid until</span><input data-f="valid" type="date" value="${l.valid_until ?? ""}"></label>
+    ${note("Note", "optional, for example pick-up time")}`;
+  if (status === "alternative") return `
+    <label class="wide"><span>What you can offer instead</span><input data-f="alt" type="text" maxlength="300" value="${esc(alt.label || "")}" placeholder="For example: private car instead of the train"></label>
+    <label class="money"><span>Its total price</span><input data-f="altprice" type="number" inputmode="numeric" min="0" step="1" value="${alt.price_eur ?? ""}"></label>
+    <label><span>Price valid until</span><input data-f="valid" type="date" value="${l.valid_until ?? ""}"></label>
+    ${note("Why", "optional")}`;
+  if (status === "asking") return note("What you are waiting for", "optional, for example: the boat owner answers tomorrow");
+  if (status === "not_available") return note("Reason", "optional");
+  return "";
 }
+
+function lineHtml(l) {
+  const saved = l.updated_at ? `Saved ${stamp(l.updated_at)}` : "";
+  return `<li class="line ${l.status}" id="l${l.id}"><fieldset>
+    <legend><p class="when">${esc(cap(l.detail))}</p><h2>${esc(l.label)}</h2></legend>
+    <div class="choices">${STATUS.map(([k, n]) => `<label class="c-${k}"><input type="radio" name="s${l.id}" value="${k}" ${k === l.status ? "checked" : ""}><span>${n}</span></label>`).join("")}</div>
+    <div class="fields" data-f="fields">${fieldsHtml(l, l.status)}</div></fieldset>
+    <ul class="chat" id="chat-${l.id}"></ul>
+    <div class="foot ${saved ? "" : "idle"}" data-f="foot"><span class="status-msg" data-f="saved" role="status">${esc(saved)}</span><button class="save" data-f="save" disabled>Save</button></div></li>`;
+}
+
 function bindLine(l) {
-  const box = $(`#l${l.id}`), f = n => box.querySelector(`[data-f="${n}"]`);
-  f("status").onchange = () => box.querySelector(".alt").classList.toggle("on", f("status").value === "alternative");
+  const box = $(`#l${l.id}`), f = n => $(`[data-f="${n}"]`, box);
+  const status = () => ($("input[type=radio]:checked", box) || {}).value || l.status;
+  const dirty = () => { f("foot").classList.remove("idle"); box.classList.add("dirty"); f("save").disabled = false; say(f("saved"), "Not saved yet"); };
+  box.querySelectorAll("input[type=radio]").forEach(r => r.onchange = () => {
+    const keep = {};  // keep what was typed when switching between statuses
+    box.querySelectorAll("[data-f]").forEach(x => { if ("value" in x && x.type !== "submit") keep[x.dataset.f] = x.value; });
+    f("fields").innerHTML = fieldsHtml(l, r.value);
+    Object.entries(keep).forEach(([k, v]) => { const x = f(k); if (x && v !== "" && "value" in x) x.value = v; });
+    box.className = `line ${r.value}`; dirty();
+  });
+  box.addEventListener("input", e => { if (e.target.matches("[data-f]")) dirty(); });
   f("save").onclick = async () => {
-    const status = f("status").value, num = v => v === "" ? null : Number(v);
-    const body = {status, price_eur: num(f("price").value), valid_until: f("valid").value || null, note: f("note").value,
-                  alternative: status === "alternative" ? {label: f("alt").value, price_eur: num(f("altprice").value)} : null};
-    try { await call(`/lines/${l.id}`, {method: "POST", body}); load(); }
-    catch (e) { f("saved").textContent = e.message; f("saved").style.color = "var(--terra-ink)"; }
+    const s = status(), num = v => v === "" || v == null ? null : Number(v), val = n => (f(n) || {}).value;
+    const body = {status: s, price_eur: num(val("price")), valid_until: val("valid") || null, note: val("note") || "",
+                  alternative: s === "alternative" ? {label: val("alt") || "", price_eur: num(val("altprice"))} : null};
+    if (s === "alternative" && !body.alternative.label.trim()) { say(f("saved"), "Describe the alternative first", true); f("alt").focus(); return; }
+    f("save").disabled = true; say(f("saved"), "Saving…");
+    try {
+      const fresh = await call(`/lines/${l.id}`, {method: "POST", body});
+      Object.assign(l, fresh); box.classList.remove("dirty");
+      say(f("saved"), `Saved ${stamp(fresh.updated_at || new Date().toISOString())}`);
+      await refresh();  // progress strip and threads only: other lines keep what is typed in them
+    } catch (e) { f("save").disabled = false; say(f("saved"), e.message, true); }
   };
 }
 load();

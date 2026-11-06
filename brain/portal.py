@@ -116,11 +116,16 @@ def view(s: Session, link: PortalLink) -> dict:
     lines = s.scalars(select(PortalLine).where(PortalLine.partner_request_id == pr.id).order_by(PortalLine.position)).all()
     msgs = s.scalars(select(PortalMessage).where(PortalMessage.partner_request_id == pr.id).order_by(PortalMessage.id)).all()
     s.commit()
+    # A known departure date wins over the wished month, and we never ask for an answer after the family leaves.
+    month = list(MONTHS_EN.values())[tr.depart_date.month - 1] if tr.depart_date else MONTHS_EN.get(tr.depart_month, tr.depart_month)
+    answer_by = (pr.sent_at + timedelta(days=get_settings().chase_partner_after_days)).date() if pr.sent_at else None
+    if answer_by and tr.depart_date and answer_by >= tr.depart_date:
+        answer_by = max(tr.depart_date - timedelta(days=1), utcnow().date())
     return {"reference": tenant().reference(tr.id), "company": tenant().short_name, "partner": p.name, "what": pr.what,
-            "trip": {"destination": DESTINATIONS[tr.destination]["name"], "month": MONTHS_EN.get(tr.depart_month, tr.depart_month), "days": tr.days,
+            "trip": {"destination": DESTINATIONS[tr.destination]["name"], "month": month, "days": tr.days,
                      "depart_date": tr.depart_date.isoformat() if tr.depart_date else None},
             "party": {"adults": fam.adults, "children_ages": list(fam.child_ages or [])},
-            "answer_by": (pr.sent_at + timedelta(days=get_settings().chase_partner_after_days)).date().isoformat() if pr.sent_at else None,
+            "answer_by": answer_by.isoformat() if answer_by else None,
             "link_valid_until": link.expires_at.date().isoformat(),
             "lines": [line_dict(x) for x in lines],
             "messages": [{"id": m.id, "line_id": m.line_id, "author": m.author, "name": m.author_name if m.author == TEAM else p.name,

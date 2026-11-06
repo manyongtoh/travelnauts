@@ -28,15 +28,19 @@ def test_portal_on_a_phone_and_the_panel(server, tmp_path):  # noqa: F811
         errors = []
         pg.on("pageerror", lambda e: errors.append(str(e)))
         pg.goto(f"{base}/portal/{token}")
-        pg.wait_for_selector(".line select")
-        first = pg.query_selector(".line")
-        first.query_selector('[data-f="status"]').select_option("confirmed")
+        pg.wait_for_selector(".line .choices")
+        first, second = pg.query_selector_all(".line")[:2]
+        second.query_selector(".c-asking").click()
+        second.query_selector('[data-f="note"]').fill("typed, not saved yet")
+        first.query_selector(".c-confirmed").click()
         first.query_selector('[data-f="price"]').fill("95")
         first.query_selector('[data-f="save"]').click()
         pg.wait_for_timeout(800)
-        assert "Saved" in pg.inner_text(".line")
-        second = pg.query_selector_all(".line")[1]
-        second.query_selector('[data-f="status"]').select_option("alternative")
+        assert "Saved" in first.inner_text()
+        assert second.query_selector('[data-f="note"]').input_value() == "typed, not saved yet"  # saving one line keeps the others
+        assert "1 confirmed" in pg.inner_text("#tally")
+        second.query_selector(".c-alternative").click()
+        assert second.query_selector('[data-f="note"]').input_value() == "typed, not saved yet"  # switching status keeps the text
         second.query_selector('[data-f="alt"]').fill('<img src=x onerror="window.__xss=9"> Riverside Lodge')
         second.query_selector('[data-f="altprice"]').fill("200")
         second.query_selector('[data-f="save"]').click()
