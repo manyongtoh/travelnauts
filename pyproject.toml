@@ -17,6 +17,7 @@ dependencies = [
   "alembic>=1.13",
   "reportlab>=4",
   "pypdf>=6.21.4",  # reads partner PDFs (untrusted): keep current, checked by pip-audit in CI
+  "openpyxl>=3.1",  # supplier rate sheets in, dossier calculations out
 ]
 
 [project.optional-dependencies]
