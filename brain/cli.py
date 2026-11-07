@@ -41,6 +41,10 @@ def main(argv: list[str] | None = None) -> None:
     lt.add_argument("--workers", type=int, default=4)
     ak = sub.add_parser("ask", help="ask the brain a question")
     ak.add_argument("question")
+    cc = sub.add_parser("calc", help="a first calculation from a supplier rate sheet, as a dossier spreadsheet")
+    cc.add_argument("trip", help="the trip as JSON (see brain/calc/trip.py)")
+    cc.add_argument("--rates", default=None, help="the supplier rate sheet (default: BRAIN_RATES)")
+    cc.add_argument("--out", default=None, help="where to write the spreadsheet (default: next to the trip)")
     a = p.parse_args(argv)
 
     from .config import get_settings
@@ -60,6 +64,25 @@ def main(argv: list[str] | None = None) -> None:
         if a.gate and not rep["gates"]["passed"]:
             print("GATES FAILED:", [k for k, g in rep["gates"]["checks"].items() if not g["ok"]])
             sys.exit(1)
+    elif a.cmd == "calc":
+        import os
+        import sys
+        from pathlib import Path
+
+        from .calc import excel, trip
+        from .calc.calculate import calculate
+        from .calc.rates import open_sheet
+        rates = a.rates or os.environ.get("BRAIN_RATES")
+        if not rates:
+            sys.exit("Give --rates or set BRAIN_RATES to the supplier rate sheet.")
+        t = trip.load(a.trip)
+        calc = calculate(open_sheet(rates), t["party"], t["start"], t["stops"], t["items"], t["flights"], t["settings"])
+        out = a.out or str(Path(a.trip).with_suffix(".xlsx"))
+        excel.write(calc, out, t["title"])
+        pa, pc = calc.price_per_person()
+        print(f"{out}: inkoop EUR {calc.purchase_eur:,.0f}, voorstel p.p. volw. EUR {pa:,.0f}, kind EUR {pc:,.0f}")
+        for c in calc.checks:
+            print(" -", c)
     elif a.cmd == "triage":
         from . import db
         from .agents.triage import triage_inbox

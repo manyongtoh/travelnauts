@@ -13,3 +13,6 @@ data/files/
 data/*.dump
 data/*.db-wal
 data/*.db-shm
+
+# supplier rate sheets: commercial data, never in the repository
+data/rates/
